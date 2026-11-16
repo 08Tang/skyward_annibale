@@ -93,6 +93,11 @@ pub struct DeviceConfig {
 pub struct Stock {
     /// The build's version, such as OS4.0.4.0.XPACNXM.
     pub version: String,
+    /// The build's version as the package names it, when it differs from
+    /// [`Stock::version`], such as a regional suffix added to the system's
+    /// own version.
+    #[serde(default)]
+    pub package_version: Option<String>,
     /// Where the package is downloaded from, over HTTPS.
     pub package: String,
     /// The recovery partition's SHA-256, in lowercase hex.
@@ -575,12 +580,18 @@ impl DeviceConfig {
             }
         }
         if let Some(stock) = &cfg.stock {
-            let name = stock.package.rsplit('/').next().unwrap_or_default();
+            let path = stock.package.split(['?', '#']).next().unwrap_or_default();
+            let name = path.rsplit('/').next().unwrap_or_default();
+            let package_version = stock.package_version.as_deref().unwrap_or(&stock.version);
             ensure!(
-                stock.package.starts_with("https://") && name.ends_with(".zip") && name.contains(&stock.version) && !stock.version.is_empty(),
+                stock.package.starts_with("https://")
+                    && name.ends_with(".zip")
+                    && !package_version.is_empty()
+                    && name.contains(package_version)
+                    && !stock.version.is_empty(),
                 "[stock] package: {} is not an HTTPS address of the full package of {}",
                 stock.package,
-                stock.version
+                package_version
             );
             ensure!(
                 stock.recovery.len() == 64 && stock.recovery.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
@@ -804,12 +815,14 @@ mod tests {
             (include_str!("../../../devices/byron.toml"), "OS3.0.310.0.WAFCNXM"),
             (include_str!("../../../devices/zorn.toml"), "OS3.0.309.0.WOKCNXM"),
             (include_str!("../../../devices/miro.toml"), "OS3.0.305.0.WOMCNXM"),
-            (include_str!("../../../devices/annibale.toml"), "OS3.0.307.0.WPKCNXM"),
+            (include_str!("../../../devices/annibale.toml"), "OS4.0.6.0.WPKCNXM.D02"),
             (include_str!("../../../devices/warsaw.toml"), "OS3.0.309.0.WHPCNXM"),
         ] {
             let stock = DeviceConfig::parse(text).unwrap().stock.expect("a stock build to build on");
             assert_eq!(stock.version, version);
-            assert!(stock.package.ends_with(".zip") && stock.package.contains(&format!("/{version}/")), "{}", stock.package);
+            let package_version = stock.package_version.as_deref().unwrap_or(&stock.version);
+            let path = stock.package.split(['?', '#']).next().unwrap_or_default();
+            assert!(path.ends_with(".zip") && path.contains(&format!("/{package_version}/")), "{}", stock.package);
         }
     }
 
@@ -824,6 +837,10 @@ mod tests {
         assert!(DeviceConfig::parse(&format!("{plain}recovery = \"{hash}\"\n")).is_err(), "over plain HTTP");
         let other = ok.replace("version = \"OS1.0.1.0", "version = \"OS1.0.2.0");
         assert!(DeviceConfig::parse(&format!("{other}recovery = \"{hash}\"\n")).is_err(), "the package of another build");
+        let signed = format!("{ok}recovery = \"{hash}\"\n").replace(".zip\"", ".zip?signature=abc\"");
+        assert!(DeviceConfig::parse(&signed).is_ok(), "a signed URL");
+        let aliased = format!("{ok}package_version = \"OS1.0.1.0.XXXCNXM\"\nrecovery = \"{hash}\"\n");
+        assert!(DeviceConfig::parse(&aliased).is_ok(), "the package's own version");
         assert_eq!(DeviceConfig::parse("[device]\ncodename = \"x\"\n").unwrap().stock, None);
     }
 

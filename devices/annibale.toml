@@ -81,12 +81,15 @@ probe = "http://connect.rom.miui.com/generate_204"
 server = "https://update.miui.com/updates/miotaV3.php"
 
 # The stock build the recovery is made on: the Chinese system's
-# OS3.0.307.0, whose full update package on the phone maker's own download
+# OS4.0.6.0, whose full update package on the phone maker's own download
 # server holds the recovery partition the recovery is built on top of.
 [stock]
-version = "OS3.0.307.0.WPKCNXM"
-package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS3.0.307.0.WPKCNXM/annibale-ota_full-OS3.0.307.0.WPKCNXM-user-16.0-94dcf5f934.zip"
-recovery = "a14d83b627ab4786881b0e88999f2800f33d251a9a174320954897c29ebc0ebe"
+version = "OS4.0.6.0.WPKCNXM.D02"
+# The package is named for OS4.0.6.0.XPKCNXM; the D02 release is the
+# WPKCNXM build of it.
+package_version = "OS4.0.6.0.XPKCNXM"
+package = "https://ultimateota.d.miui.com/OS4.0.6.0.XPKCNXM/annibale-ota_full-OS4.0.6.0.XPKCNXM-user-17.0-0207c91df5.zip?t=1794832034&s=b6647e8fcf74b78a68ab6c789f97dd1c"
+recovery = "2ee942234acfde1bb0e6abfdc87eb34439966008052ff68f4ee65484519b926a"
 
 # qcom-hv-haptics (qcom,hv-haptics in its dtbo), whose driver says the
 # motor's resonant frequency as the 17 Ultra's does; the click is made from
