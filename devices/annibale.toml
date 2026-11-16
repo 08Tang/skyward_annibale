@@ -88,7 +88,7 @@ version = "OS4.0.6.0.WPKCNXM.D02"
 # The package is named for OS4.0.6.0.XPKCNXM; the D02 release is the
 # WPKCNXM build of it.
 package_version = "OS4.0.6.0.XPKCNXM"
-package = "https://ultimateota.d.miui.com/OS4.0.6.0.XPKCNXM/annibale-ota_full-OS4.0.6.0.XPKCNXM-user-17.0-0207c91df5.zip?t=1794832034&s=b6647e8fcf74b78a68ab6c789f97dd1c"
+package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS4.0.6.0.XPKCNXM/annibale-ota_full-OS4.0.6.0.XPKCNXM-user-17.0-0207c91df5.zip"
 recovery = "2ee942234acfde1bb0e6abfdc87eb34439966008052ff68f4ee65484519b926a"
 
 # qcom-hv-haptics (qcom,hv-haptics in its dtbo), whose driver says the
