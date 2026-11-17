@@ -52,4 +52,4 @@ fastboot reboot recovery
 
 ---
 
-© 2026 TKexig & Kirk Lin
+© 2026 Kirk Lin &TKexig
