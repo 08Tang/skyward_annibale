@@ -179,6 +179,11 @@ pub struct State {
     pub skyward_check: SkywardCheck,
     /// Updating Skyward, or how that last ended.
     pub skyward_job: Option<SkywardJob>,
+    /// The running slot's AVB state, as the runtime last read it, or why
+    /// it could not.
+    pub avb: Option<Result<AvbInfo, String>>,
+    /// How an AVB change or backup ended.
+    pub avb_notice: Option<String>,
     /// How fast data went over the network joined in the last second.
     pub traffic: Traffic,
 }
@@ -238,7 +243,10 @@ impl Default for State {
             usb_drive: None,
             drive: Folder::new(""),
             file: None,
-            fastboot: Fastboot { running: false, link: UsbLink::Unplugged },
+            fastboot: Fastboot {
+                running: false,
+                link: UsbLink::Unplugged,
+            },
             erase: Erase::default(),
             asked: Asked::default(),
             clip: None,
@@ -265,6 +273,8 @@ impl Default for State {
             download: None,
             skyward_check: SkywardCheck::Idle,
             skyward_job: None,
+            avb: None,
+            avb_notice: None,
             traffic: Traffic::default(),
         }
     }
@@ -336,7 +346,9 @@ impl State {
 
     /// Whether Skyward is being updated.
     pub fn updating_skyward(&self) -> bool {
-        self.skyward_job.as_ref().is_some_and(|j| j.outcome.is_none())
+        self.skyward_job
+            .as_ref()
+            .is_some_and(|j| j.outcome.is_none())
     }
 
     /// Whether the phone has the page `screen`: the WLAN page where the

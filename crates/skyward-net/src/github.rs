@@ -1,7 +1,7 @@
 //! Skyward's own releases on GitHub: which is the newest, and the zip in
 //! it for one phone, as the release workflow names each phone's.
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use serde::Deserialize;
 
 /// Where GitHub answers which release of Skyward is the newest.
@@ -17,6 +17,8 @@ pub struct Newest {
     pub version: String,
     /// It is newer than the build that asked.
     pub newer: bool,
+    /// Up to four points from the release's own wording.
+    pub notes: Vec<String>,
     /// Its zip for the phone; none when it has none.
     pub build: Option<Build>,
 }
@@ -38,17 +40,39 @@ pub struct Build {
 }
 
 impl Build {
+    /// Mirrors of github.com that hand the same release file on, in the
+    /// order they are tried when none has been timed yet.
+    const MIRRORS: [&'static str; 8] = [
+        "https://ghfast.top/",
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/",
+        "https://gh.llkk.cc/",
+        "https://gh.zwy.one/",
+        "https://github.moeyy.xyz/",
+        "https://ghproxy.homeboyc.cn/",
+        "https://cdn.crashmc.com/",
+    ];
+
     /// Where to download the zip from, in the order to try: the file's own
-    /// short-lived address, where GitHub's API gave one, then the release's
-    /// link on github.com, which some networks do not reach.
+    /// short-lived address, where GitHub's API gave one, the release's link
+    /// on github.com, then the mirrors of it.
     pub fn sources(&self, located: Option<String>) -> Vec<String> {
-        located.into_iter().chain([self.link.clone()]).collect()
+        let mut sources: Vec<String> = located.into_iter().chain([self.link.clone()]).collect();
+        sources.extend(
+            Self::MIRRORS
+                .iter()
+                .map(|mirror| format!("{mirror}{}", self.link)),
+        );
+        sources.dedup();
+        sources
     }
 }
 
 #[derive(Deserialize)]
 struct Release {
     tag_name: String,
+    #[serde(default)]
+    body: String,
     assets: Vec<Asset>,
 }
 
@@ -75,21 +99,104 @@ struct Message {
 pub fn newest(answer: &str, codename: &str, running: &str) -> Result<Newest> {
     let release: Release = serde_json::from_str(answer).context("read GitHub's answer")?;
     let tag = release.tag_name;
-    let version = tag.strip_prefix('v').with_context(|| format!("the newest release is tagged {tag}, which is not v and a version"))?;
-    let newest = semver::Version::parse(version).with_context(|| format!("the newest release is tagged {tag}"))?;
-    let this = semver::Version::parse(running).with_context(|| format!("this build's version is {running}"))?;
+    let version = tag.strip_prefix('v').with_context(|| {
+        format!("the newest release is tagged {tag}, which is not v and a version")
+    })?;
+    let newest = semver::Version::parse(version)
+        .with_context(|| format!("the newest release is tagged {tag}"))?;
+    let this = semver::Version::parse(running)
+        .with_context(|| format!("this build's version is {running}"))?;
     // Each zip is named skyward-, the tag, the phone's codename, and the
     // stock build the image is made on.
     let start = format!("skyward-{tag}-{codename}-");
-    let build = match release.assets.into_iter().find(|a| a.name.starts_with(&start) && a.name.ends_with(".zip")) {
+    let build = match release
+        .assets
+        .into_iter()
+        .find(|a| a.name.starts_with(&start) && a.name.ends_with(".zip"))
+    {
         None => None,
         Some(a) => {
-            let sha256 = a.digest.as_deref().and_then(|d| d.strip_prefix("sha256:")).with_context(|| format!("GitHub gives no SHA-256 of {}", a.name))?;
-            ensure!(sha256.len() == 64 && sha256.bytes().all(|b| b.is_ascii_hexdigit()), "GitHub gives {} the SHA-256 {sha256}", a.name);
-            Some(Build { sha256: sha256.to_lowercase(), name: a.name, url: a.url, link: a.browser_download_url, size: a.size })
+            let sha256 = a
+                .digest
+                .as_deref()
+                .and_then(|d| d.strip_prefix("sha256:"))
+                .with_context(|| format!("GitHub gives no SHA-256 of {}", a.name))?;
+            ensure!(
+                sha256.len() == 64 && sha256.bytes().all(|b| b.is_ascii_hexdigit()),
+                "GitHub gives {} the SHA-256 {sha256}",
+                a.name
+            );
+            Some(Build {
+                sha256: sha256.to_lowercase(),
+                name: a.name,
+                url: a.url,
+                link: a.browser_download_url,
+                size: a.size,
+            })
         }
     };
-    Ok(Newest { version: version.to_string(), newer: newest > this, build })
+    Ok(Newest {
+        version: version.to_string(),
+        newer: newest > this,
+        notes: points(&release.body),
+        build,
+    })
+}
+
+/// Up to four plain lines from a release's opening summary, one line each,
+/// with Markdown's markers taken out and each kept near a screen's width.
+fn points(body: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("##") {
+            continue;
+        }
+        if line.chars().all(|c| matches!(c, '-' | '*' | '_' | ' ')) {
+            continue;
+        }
+        let line = line.trim_start_matches(['#', '-', '*', ' ', '>']).trim();
+        let line = plain_words(line);
+        if line.is_empty() {
+            continue;
+        }
+        out.push(line.chars().take(64).collect());
+        if out.len() == 4 {
+            break;
+        }
+    }
+    out
+}
+
+/// The words of `line` without Markdown's emphasis, code ticks, headings, or
+/// link addresses.
+fn plain_words(line: &str) -> String {
+    let line = line.replace(['*', '`', '#'], "");
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '[' {
+            let mut word = String::new();
+            while let Some(&next) = chars.peek() {
+                chars.next();
+                if next == ']' {
+                    break;
+                }
+                word.push(next);
+            }
+            if chars.next_if_eq(&'(').is_some() {
+                for next in chars.by_ref() {
+                    if next == ')' {
+                        break;
+                    }
+                }
+            }
+            out.push_str(&word);
+        } else {
+            out.push(ch);
+        }
+    }
+    out.trim().to_string()
 }
 
 /// Ask GitHub for Skyward's newest release, and its zip for the phone
@@ -103,7 +210,10 @@ pub fn ask(agent: &ureq::Agent, codename: &str, running: &str) -> Result<Newest>
         .call()
         .with_context(|| format!("ask {LATEST}"))?;
     let status = response.status();
-    let body = response.body_mut().read_to_string().with_context(|| format!("read the answer of {LATEST}"))?;
+    let body = response
+        .body_mut()
+        .read_to_string()
+        .with_context(|| format!("read the answer of {LATEST}"))?;
     if !status.is_success() {
         bail!(refusal(status, &body));
     }
@@ -126,11 +236,23 @@ pub fn locate(agent: &ureq::Agent, url: &str, running: &str) -> Result<String> {
         .with_context(|| format!("ask {url}"))?;
     let status = response.status();
     if status.is_redirection() {
-        let location = response.headers().get(ureq::http::header::LOCATION).with_context(|| format!("GitHub answered {status}, and names no address"))?;
-        return Ok(location.to_str().context("GitHub names an address that is not text")?.to_string());
+        let location = response
+            .headers()
+            .get(ureq::http::header::LOCATION)
+            .with_context(|| format!("GitHub answered {status}, and names no address"))?;
+        return Ok(location
+            .to_str()
+            .context("GitHub names an address that is not text")?
+            .to_string());
     }
-    ensure!(!status.is_success(), "GitHub sends the file itself in its answer, at no address of its own");
-    let body = response.body_mut().read_to_string().with_context(|| format!("read the answer of {url}"))?;
+    ensure!(
+        !status.is_success(),
+        "GitHub sends the file itself in its answer, at no address of its own"
+    );
+    let body = response
+        .body_mut()
+        .read_to_string()
+        .with_context(|| format!("read the answer of {url}"))?;
     bail!(refusal(status, &body))
 }
 
@@ -166,15 +288,48 @@ mod tests {
                 sha256: "62b66f7d13a0eb6c9af3359b5ec6f9c223fd9a86b1f8abab3e9d2646cb2ce534".into(),
             })
         );
-        assert_eq!(newest(ANSWERED_013, "nezha", "0.1.2").unwrap().build.unwrap().size, 43145196);
+        assert_eq!(
+            newest(ANSWERED_013, "nezha", "0.1.2")
+                .unwrap()
+                .build
+                .unwrap()
+                .size,
+            43145196
+        );
     }
 
     #[test]
     fn a_zip_is_downloaded_from_where_github_sends_it_then_from_its_link() {
-        let build = newest(ANSWERED_013, "ishtar", "0.1.2").unwrap().build.unwrap();
+        let build = newest(ANSWERED_013, "ishtar", "0.1.2")
+            .unwrap()
+            .build
+            .unwrap();
         let link = "https://github.com/kirklin/skyward/releases/download/v0.1.3/skyward-v0.1.3-ishtar-OS3.0.308.0.WMACNXM.zip";
-        assert_eq!(build.sources(Some("https://release-assets.githubusercontent.com/a?sig=1".into())), ["https://release-assets.githubusercontent.com/a?sig=1", link]);
-        assert_eq!(build.sources(None), [link], "where GitHub's API gave no address");
+        let located = "https://release-assets.githubusercontent.com/a?sig=1";
+        let sources = build.sources(Some(located.into()));
+        assert_eq!(sources[0], located);
+        assert_eq!(sources[1], link);
+        assert!(sources[2..].iter().all(|source| source.ends_with(link)));
+        let without = build.sources(None);
+        assert_eq!(without[0], link, "where GitHub's API gave no address");
+        assert!(without[1..].iter().all(|source| source.ends_with(link)));
+    }
+
+    #[test]
+    fn release_notes_are_up_to_four_plain_short_lines() {
+        let answered = ANSWERED_013.replace(
+            r#""tag_name":"v0.1.3""#,
+            "\"tag_name\":\"v0.1.3\",\"body\":\"## Changes\\n\\n- Faster **downloads** and [mirrors](https://example.com)\\n* AVB tools\\n`Crash` logs\\n- Fourth point\\n- Fifth point\"",
+        );
+        assert_eq!(
+            newest(&answered, "ishtar", "0.1.2").unwrap().notes,
+            [
+                "Faster downloads and mirrors",
+                "AVB tools",
+                "Crash logs",
+                "Fourth point"
+            ]
+        );
     }
 
     /// A server on this computer that answers one request with `answer`,
@@ -182,7 +337,10 @@ mod tests {
     fn server(answer: String) -> (String, std::thread::JoinHandle<String>) {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}/repos/kirklin/skyward/releases/assets/719751598", listener.local_addr().unwrap());
+        let url = format!(
+            "http://{}/repos/kirklin/skyward/releases/assets/719751598",
+            listener.local_addr().unwrap()
+        );
         let held = std::thread::spawn(move || {
             let (mut s, _) = listener.accept().unwrap();
             let mut request = Vec::new();
@@ -202,38 +360,86 @@ mod tests {
         let agent = crate::http::agent(Default::default());
         let sent_on = "HTTP/1.1 302 Found\r\nLocation: https://release-assets.githubusercontent.com/a?sig=1\r\nContent-Length: 0\r\n\r\n";
         let (url, held) = server(sent_on.into());
-        assert_eq!(locate(&agent, &url, "0.1.2").unwrap(), "https://release-assets.githubusercontent.com/a?sig=1", "the address, not followed");
+        assert_eq!(
+            locate(&agent, &url, "0.1.2").unwrap(),
+            "https://release-assets.githubusercontent.com/a?sig=1",
+            "the address, not followed"
+        );
         let request = held.join().unwrap().to_lowercase();
-        assert!(request.contains("accept: application/octet-stream\r\n"), "asked for the file itself: {request}");
-        assert!(request.contains("user-agent: skyward/0.1.2\r\n"), "{request}");
+        assert!(
+            request.contains("accept: application/octet-stream\r\n"),
+            "asked for the file itself: {request}"
+        );
+        assert!(
+            request.contains("user-agent: skyward/0.1.2\r\n"),
+            "{request}"
+        );
         let why = r#"{"message":"API rate limit exceeded for 203.0.113.7"}"#;
-        let (url, _) = server(format!("HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{why}", why.len()));
-        assert_eq!(locate(&agent, &url, "0.1.2").unwrap_err().to_string(), "GitHub answered 403 Forbidden: API rate limit exceeded for 203.0.113.7");
+        let (url, _) = server(format!(
+            "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{why}",
+            why.len()
+        ));
+        assert_eq!(
+            locate(&agent, &url, "0.1.2").unwrap_err().to_string(),
+            "GitHub answered 403 Forbidden: API rate limit exceeded for 203.0.113.7"
+        );
         let (url, _) = server("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nPK".into());
-        assert!(locate(&agent, &url, "0.1.2").is_err(), "the file itself, with no address to download it from again");
+        assert!(
+            locate(&agent, &url, "0.1.2").is_err(),
+            "the file itself, with no address to download it from again"
+        );
     }
 
     #[test]
     fn a_release_is_newer_only_than_an_older_build() {
-        assert!(!newest(ANSWERED_013, "ishtar", "0.1.3").unwrap().newer, "the same version");
-        assert!(!newest(ANSWERED_013, "ishtar", "0.2.0").unwrap().newer, "a build ahead of every release");
-        assert!(newest(ANSWERED_013, "ishtar", "0.1.3-rc.1").unwrap().newer, "a build before the release it led to");
-        assert!(newest(ANSWERED_013, "ishtar", "0.1").is_err(), "a version this build cannot have");
+        assert!(
+            !newest(ANSWERED_013, "ishtar", "0.1.3").unwrap().newer,
+            "the same version"
+        );
+        assert!(
+            !newest(ANSWERED_013, "ishtar", "0.2.0").unwrap().newer,
+            "a build ahead of every release"
+        );
+        assert!(
+            newest(ANSWERED_013, "ishtar", "0.1.3-rc.1").unwrap().newer,
+            "a build before the release it led to"
+        );
+        assert!(
+            newest(ANSWERED_013, "ishtar", "0.1").is_err(),
+            "a version this build cannot have"
+        );
     }
 
     #[test]
     fn a_phone_is_found_by_its_whole_codename() {
-        assert_eq!(newest(ANSWERED_013, "fuxi", "0.1.2").unwrap().build, None, "a phone the release has no zip for");
-        assert_eq!(newest(ANSWERED_013, "ish", "0.1.2").unwrap().build, None, "the start of another phone's codename");
-        assert_eq!(newest(ANSWERED_013, "SHA256SUMS", "0.1.2").unwrap().build, None);
+        assert_eq!(
+            newest(ANSWERED_013, "fuxi", "0.1.2").unwrap().build,
+            None,
+            "a phone the release has no zip for"
+        );
+        assert_eq!(
+            newest(ANSWERED_013, "ish", "0.1.2").unwrap().build,
+            None,
+            "the start of another phone's codename"
+        );
+        assert_eq!(
+            newest(ANSWERED_013, "SHA256SUMS", "0.1.2").unwrap().build,
+            None
+        );
     }
 
     #[test]
     fn a_zip_needs_its_sha256_and_a_release_its_version() {
         let unsummed = ANSWERED_013.replace("\"digest\":\"sha256:62b66f7d13a0eb6c9af3359b5ec6f9c223fd9a86b1f8abab3e9d2646cb2ce534\"", "\"digest\":null");
         let e = newest(&unsummed, "ishtar", "0.1.2").unwrap_err();
-        assert_eq!(e.to_string(), "GitHub gives no SHA-256 of skyward-v0.1.3-ishtar-OS3.0.308.0.WMACNXM.zip");
-        assert!(newest(&unsummed, "nezha", "0.1.2").is_ok(), "another phone's zip has its own");
+        assert_eq!(
+            e.to_string(),
+            "GitHub gives no SHA-256 of skyward-v0.1.3-ishtar-OS3.0.308.0.WMACNXM.zip"
+        );
+        assert!(
+            newest(&unsummed, "nezha", "0.1.2").is_ok(),
+            "another phone's zip has its own"
+        );
         let untagged = ANSWERED_013.replace("\"tag_name\":\"v0.1.3\"", "\"tag_name\":\"nightly\"");
         assert!(newest(&untagged, "ishtar", "0.1.2").is_err());
         assert!(newest("{}", "ishtar", "0.1.2").is_err());
