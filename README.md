@@ -52,17 +52,6 @@ fastboot reboot recovery
 
 本项目继续遵循 [GPL-3.0-or-later](LICENSE) 许可证。
 
-## English Summary
-
-This is an unofficial Skyward Recovery port for the **REDMI K90 (`annibale`)**,
-based on [Kirk Lin's Skyward](https://github.com/kirklin/skyward). It targets
-`OS4.0.6.0.XPKCNXM` and provides tested data decryption, Wi-Fi, and touch recovery
-after screen wake. GitHub Actions builds the recovery for `annibale` only.
-
-This repository is not the upstream Skyward project and must not be used on other
-devices. Unlock the bootloader, verify the system version, and back up important
-data before flashing. The project is licensed under GPL-3.0-or-later.
-
 ---
 
-© 2026 TKexig By Kirk Lin
+© 2026 TKexig & Kirk Lin
