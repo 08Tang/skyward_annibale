@@ -14,8 +14,6 @@
 - Wi-Fi 驱动、固件加载和连接
 - 屏幕休眠唤醒后的触摸恢复
 - 基于 `OS4.0.6.0` 原厂 recovery 构建卡刷镜像
-- GitHub Actions 仅构建 `annibale`
-- Recovery 在线更新指向本仓库的 Release
 
 功能和日志已在 REDMI K90、`OS4.0.6.0.XPKCNXM` 上验证。Recovery 仍有风险，
 刷入前请确认机型与系统版本一致，并备份重要数据。
