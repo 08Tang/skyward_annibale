@@ -146,12 +146,7 @@ pub fn collect(cfg: &DeviceConfig) -> Result<DeviceInfo> {
 /// cannot be read, as the pages do when they come up.
 pub fn collect_with(cfg: &DeviceConfig, battery: Option<Battery>) -> Result<DeviceInfo> {
     let d = &cfg.display;
-    let unlocked = match skyward_block::boot_param("androidboot.vbmeta.device_state")?.as_deref() {
-        None => None,
-        Some("locked") => Some(false),
-        Some("unlocked") => Some(true),
-        Some(other) => bail!("androidboot.vbmeta.device_state {other:?}"),
-    };
+    let unlocked = bootloader_unlocked()?;
     let system = SystemProps::current()?;
     Ok(DeviceInfo {
         // The system names the exact edition; the configured model covers a
@@ -173,6 +168,42 @@ pub fn collect_with(cfg: &DeviceConfig, battery: Option<Battery>) -> Result<Devi
         slot: skyward_vab::current_slot()?,
         snapshot: skyward_vab::snapshot_state()?,
         boot: Boot { unlocked, verified: skyward_block::boot_param("androidboot.verifiedbootstate")? },
+    })
+}
+
+/// Whether the bootloader is unlocked, from the first boot parameter this
+/// device provides.
+pub fn bootloader_unlocked() -> Result<Option<bool>> {
+    unlock_state(
+        skyward_block::boot_param("androidboot.flash.locked")?.as_deref(),
+        skyward_block::boot_param("androidboot.vbmeta.device_state")?.as_deref(),
+        skyward_block::boot_param("androidboot.verifiedbootstate")?.as_deref(),
+    )
+}
+
+fn unlock_state(
+    flash_locked: Option<&str>,
+    device_state: Option<&str>,
+    verified: Option<&str>,
+) -> Result<Option<bool>> {
+    if let Some(locked) = flash_locked {
+        return match locked {
+            "0" => Ok(Some(true)),
+            "1" => Ok(Some(false)),
+            other => bail!("androidboot.flash.locked {other:?}"),
+        };
+    }
+    if let Some(state) = device_state {
+        return match state {
+            "unlocked" => Ok(Some(true)),
+            "locked" => Ok(Some(false)),
+            other => bail!("androidboot.vbmeta.device_state {other:?}"),
+        };
+    }
+    Ok(match verified {
+        Some("orange") => Some(true),
+        Some("green" | "yellow") => Some(false),
+        _ => None,
     })
 }
 
@@ -453,6 +484,20 @@ mod tests {
         assert!("2026-13-01".parse::<PatchLevel>().is_err());
         assert!("2026-10".parse::<PatchLevel>().is_err());
         assert!("October 2026".parse::<PatchLevel>().is_err());
+    }
+
+    #[test]
+    fn bootloader_unlock_state_prefers_complete_parameters() {
+        assert_eq!(unlock_state(Some("0"), Some("locked"), None).unwrap(), Some(true));
+        assert_eq!(unlock_state(Some("1"), Some("unlocked"), None).unwrap(), Some(false));
+        assert_eq!(unlock_state(None, Some("unlocked"), Some("green")).unwrap(), Some(true));
+        assert_eq!(unlock_state(None, Some("locked"), Some("orange")).unwrap(), Some(false));
+        assert_eq!(unlock_state(None, None, Some("orange")).unwrap(), Some(true));
+        assert_eq!(unlock_state(None, None, Some("yellow")).unwrap(), Some(false));
+        assert_eq!(unlock_state(None, None, Some("red")).unwrap(), None);
+        assert_eq!(unlock_state(None, None, None).unwrap(), None);
+        assert!(unlock_state(Some("unknown"), None, None).is_err());
+        assert!(unlock_state(None, Some("unknown"), None).is_err());
     }
 
     #[test]

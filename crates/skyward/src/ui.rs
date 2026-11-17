@@ -1263,7 +1263,7 @@ fn installed(cfg: &DeviceConfig, info: &skyward_info::DeviceInfo) -> Result<Inst
         device: prop("ro.product.mod_device")?,
         version: prop(&cfg.device.os_version_prop)?,
         android: prop("ro.build.version.release")?,
-        unlocked: skyward_block::boot_param("androidboot.flash.locked")?.as_deref() == Some("0"),
+        unlocked: info.boot.unlocked.unwrap_or(false),
     })
 }
 

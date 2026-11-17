@@ -60,7 +60,7 @@ fn running() -> Result<Avb> {
 }
 
 fn unlocked() -> Result<Option<bool>> {
-    Ok(skyward_block::boot_param("androidboot.flash.locked")?.map(|locked| locked == "0"))
+    skyward_info::bootloader_unlocked()
 }
 
 fn ensure_unlocked() -> Result<()> {
