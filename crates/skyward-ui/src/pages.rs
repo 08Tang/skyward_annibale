@@ -2497,7 +2497,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
 /// the same way — each with the switch that turns it on or off.
 pub fn modules(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-    let mut c = page(cx);
+    let mut c = long_page(cx);
     let top = t.m.content_top;
     let mut rows: Vec<Row> = Vec::new();
     let mut acts: Vec<Action> = Vec::new();
@@ -2528,7 +2528,7 @@ pub fn modules(cx: &Ctx) -> Frame {
         }
     }
     // 角落里那颗「仓库」：去取模块清单。放在返回箭头右边，免得压住它。
-    let mut out = hits(&Vec::new(), &Vec::<Action>::new());
+    let mut out = Vec::new();
     let pill_h = t.m.dp(widgets::PILL_DP);
     let pill_x = t.m.back_x + t.m.back_w + t.m.dp(14.0);
     let pill_y = t.m.back_cy - pill_h / 2.0;
@@ -2539,14 +2539,16 @@ pub fn modules(cx: &Ctx) -> Frame {
     let listed = widgets::list(&mut c, t, f, top, &rows);
     let rows_hits = hits(&listed.rows, &acts);
     out.extend(rows_hits);
-    Frame::new(t, c, out, l.pick(MODULES), top)
+    // 装得再多也能滚到，页脚不贴着最后一行。
+    let bottom = widgets::footnote(&mut c, t, f, listed.bottom, l.pick(["点一个模块看它是什么，或者把它关掉", "點一個模組看它是什麼，或者把它關掉", "Open a module to see what it is, or turn it off here"]));
+    Frame::new(t, fit(c, t, bottom), out, l.pick(MODULES), top)
 }
 
 /// One module: what it says of itself, and the two things that can be done
 /// with it — switched off or on, and taken away at the next start.
 pub fn module_info(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-    let mut c = page(cx);
+    let mut c = long_page(cx);
     let top = t.m.content_top;
     let at = s.module_at.unwrap_or(0);
     let picked = match &s.modules {
@@ -2561,18 +2563,26 @@ pub fn module_info(cx: &Ctx) -> Frame {
         (true, false) => l.pick(["已开启", "已開啟", "On"]),
         (false, _) => l.pick(["已关闭", "已關閉", "Off"]),
     };
-    let mut facts: Vec<(&str, String)> = vec![(l.pick([["版本", "版本", "Version"]][0]), m.note.clone())];
+    let mut facts: Vec<(&str, String)> = vec![(l.pick(["版本", "版本", "Version"]), m.note.clone())];
     if !m.about.is_empty() {
-        facts.push((l.pick([["说明", "說明", "About"]][0]), m.about.clone()));
+        facts.push((l.pick(["说明", "說明", "About"]), m.about.clone()));
     }
-    facts.push((l.pick([["状态", "狀態", "State"]][0]), state_note.to_string()));
-    facts.push((l.pick([["位置", "位置", "Where"]][0]), format!("/data/adb/modules/{}", m.id)));
+    facts.push((l.pick(["状态", "狀態", "State"]), state_note.to_string()));
+    facts.push((l.pick(["位置", "位置", "Where"]), format!("/data/adb/modules/{}", m.id)));
     let y = widgets::info_card(&mut c, t, f, top, &facts);
+    // 开关一张卡片，卸载另一张：卸载要重启才生效，也不该和开关并排放着。
     let switch_label = if m.enabled { l.pick(["关闭模块", "關閉模組", "Turn it off"]) } else { l.pick(["开启模块", "開啟模組", "Turn it on"]) };
+    let turned = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(switch_label).icon(BLUE, Icon::Layers)]);
     let remove_label = if m.removing { l.pick(["取消卸载", "取消卸載", "Keep it"]) } else { l.pick(["卸载模块", "卸載模組", "Uninstall"]) };
-    let acts = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(switch_label).icon(BLUE, Icon::Layers), Row::new(remove_label).icon(RED, Icon::Wipe).tint(t.pal.danger)]);
-    let out = hits(&acts.rows, &[Action::ModuleToggle(at), Action::ModuleRemove(at)]);
-    Frame::new(t, c, out, l.pick(MODULES), top)
+    let removed = widgets::list(&mut c, t, f, turned.bottom + t.m.card_gap, &[Row::new(remove_label).icon(RED, Icon::Wipe).tint(t.pal.danger)]);
+    let mut out = hits(&turned.rows, &[Action::ModuleToggle(at)]);
+    out.extend(hits(&removed.rows, &[Action::ModuleRemove(at)]));
+    let note = match m.removing {
+        true => l.pick(["这个模块会在下次启动时被移除。再点一次就留下它。", "這個模組會在下次啟動時被移除。再點一次就留下它。", "This module is taken away at the next start. Choose it again to keep it."]),
+        false => l.pick(["卸载要重启后才生效，重启前可以取消。", "卸載要重啟後才生效，重啟前可以取消。", "Uninstalling takes effect at the next start, and can be undone until then."]),
+    };
+    let bottom = widgets::footnote(&mut c, t, f, removed.bottom, note);
+    Frame::new(t, fit(c, t, bottom), out, l.pick(MODULES), top)
 }
 
 const MODULES: Text = ["模块管理", "模組管理", "Modules"];
