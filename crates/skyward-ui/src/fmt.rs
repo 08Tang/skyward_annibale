@@ -356,6 +356,13 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
                 "The data partition was made anew after the backup, as a factory reset does, so the backup's data partition can't be restored.",
             ])
             .into(),
+        BackupRefusal::Nothing => l
+            .pick([
+                "所选内容在这台手机上没有可取的部分，没有备份任何东西。",
+                "所選內容在這台手機上沒有可取的部分，沒有備份任何東西。",
+                "Nothing that was chosen is on this phone to take, so nothing was backed up.",
+            ])
+            .into(),
     }
 }
 

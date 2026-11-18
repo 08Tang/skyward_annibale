@@ -506,6 +506,7 @@ fn backup_end(end: backup::End) -> BackupEnd {
             backup::Refusal::OtherPhone(device) => BackupRefusal::OtherPhone(device),
             backup::Refusal::Resized(name) => BackupRefusal::Resized(name),
             backup::Refusal::DataReset => BackupRefusal::DataReset,
+            backup::Refusal::Nothing => BackupRefusal::Nothing,
         }),
         backup::End::Failed(why) => BackupEnd::Failed(why),
     }

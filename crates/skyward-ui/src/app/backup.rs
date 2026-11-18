@@ -100,6 +100,10 @@ pub enum BackupRefusal {
     /// The data partition has been made afresh since the backup, as a
     /// factory reset makes it: the files backed up would not open in it.
     DataReset,
+    /// Nothing that was chosen to be taken is there to take: the parts asked
+    /// for hold nothing this phone names, as the baseband's does where the
+    /// configuration names no partition of it.
+    Nothing,
 }
 
 impl App {
