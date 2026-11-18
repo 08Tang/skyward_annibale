@@ -1,6 +1,6 @@
 use crate::app::{
     ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock, DownloadEnd,
-    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, Pick, Place, Rows,
+    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, Pick, Place, Rows,
     SCREEN_OFF, Screen, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
     USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
 };
@@ -226,8 +226,13 @@ pub fn home(cx: &Ctx) -> Frame {
     let (t, f, i, s, l) = (cx.t, cx.f, cx.info, cx.state, cx.state.lang);
     let mut c = long_page(cx);
     let mut out = Vec::new();
-    // No search bar: the page starts with the phone itself.
-    let mut y = t.m.content_top;
+    // The search bar is left room on the page and drawn over it, folding
+    // away as the page scrolls up.
+    let bar = Rect::new(t.m.margin, t.m.content_top, t.m.w as f32 - t.m.margin * 2.0, t.m.search_h);
+    let mut y = bar.y + bar.h + t.m.after_search;
+    let cards_top = y;
+    let fold = Fold { bar, hint: l.pick(SEARCH_HINT), span: cards_top - bar.y };
+    out.push(Hit { rect: bar, action: Action::Open(Screen::Search) });
 
     // Under the phone's name the card holds only what asks for something to
     // be done: a battery too low to install on, an update waiting to merge,
@@ -363,7 +368,7 @@ pub fn home(cx: &Ctx) -> Frame {
     // However little it holds, the page scrolls far enough to fold its bar
     // away.
     let height = fitted(t, footer.bottom).max(t.m.h);
-    Frame { back: false, ..Frame::new(t, c.crop_height(height), out, HOME_TITLE, t.m.content_top) }
+    Frame { back: false, fold: Some(fold), ..Frame::new(t, c.crop_height(height), out, HOME_TITLE, cards_top) }
 }
 
 /// What the home page says beside its entry to the systems: the one that
