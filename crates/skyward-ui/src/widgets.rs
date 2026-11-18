@@ -1242,6 +1242,10 @@ pub const PILL_GAP_DP: f32 = 9.0;
 
 /// One pill at `x`, `y`: the label centred in a rounded rect as tall as the
 /// pills elsewhere on the page. Returns how wide it was drawn.
+// A pill is where it is, in the colour it is in, saying what it says: the
+// parts are its whole description, and gathering them into a struct would
+// name the same things twice.
+#[allow(clippy::too_many_arguments)]
 pub fn pill(c: &mut Canvas, t: &Theme, f: &Fonts, x: f32, y: f32, label: &str, fill: Rgba, ink: Rgba) -> f32 {
     let m = &t.m;
     let (h, pad, px) = (m.dp(PILL_DP), m.dp(PILL_PAD_DP), m.dp(PILL_TEXT_DP));
@@ -1249,6 +1253,7 @@ pub fn pill(c: &mut Canvas, t: &Theme, f: &Fonts, x: f32, y: f32, label: &str, f
 }
 
 /// The same pill, at a size the caller gives.
+#[allow(clippy::too_many_arguments)]
 pub fn pill_sized(c: &mut Canvas, f: &Fonts, x: f32, y: f32, h: f32, px: f32, pad: f32, label: &str, fill: Rgba, ink: Rgba) -> f32 {
     let w = c.text_width(&f.value, label, px) + pad * 2.0;
     c.fill_round_rect(x, y, w, h, h / 2.0, fill);

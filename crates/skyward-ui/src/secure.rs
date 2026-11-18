@@ -111,8 +111,10 @@ fn pool_string(bytes: &[u8], at: usize, flags: u32) -> Option<String> {
         let (len, at) = pool_len16(bytes, at)?;
         let raw = bytes.get(at..at + len * 2)?;
         let units: Vec<u16> = raw
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
             .collect();
         String::from_utf16(&units).ok()
     }

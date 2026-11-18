@@ -247,6 +247,7 @@ pub fn row(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, e: &FileRow, now: i64,
 /// Entry `e`'s row, with a tick at its right when the file manager is choosing
 /// entries and this one is chosen: the tick takes the chevron's place, and a
 /// folder's too.
+#[allow(clippy::too_many_arguments)]
 pub fn row_marked(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, e: &FileRow, now: i64, zone: usize, chosen: bool) {
     let m = &t.m;
     let p = palette(t);

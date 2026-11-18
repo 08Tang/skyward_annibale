@@ -362,7 +362,7 @@ pub fn home(cx: &Ctx) -> Frame {
     out.extend(hits(&footer.rows, &footer_opens));
     // However little it holds, the page scrolls far enough to fold its bar
     // away.
-    let height = fitted(t, footer.bottom).max(t.m.h as u32);
+    let height = fitted(t, footer.bottom).max(t.m.h);
     Frame { back: false, ..Frame::new(t, c.crop_height(height), out, HOME_TITLE, t.m.content_top) }
 }
 
@@ -2538,7 +2538,7 @@ pub fn modules(cx: &Ctx) -> Frame {
     let pill_y = t.m.back_cy - pill_h / 2.0;
     // 一枚「安装」：去文件管理器挑 zip。
     let install = l.pick(["安装", "安裝", "Install"]);
-    let wid = widgets::pill(&mut c, t, &f, pill_x, pill_y, install, t.pal.search, t.pal.text);
+    let wid = widgets::pill(&mut c, t, f, pill_x, pill_y, install, t.pal.search, t.pal.text);
     out.push(Hit { rect: Rect::new(pill_x, pill_y, wid, pill_h), action: Action::Open(Screen::Files) });
     let listed = widgets::list(&mut c, t, f, top, &rows);
     let rows_hits = hits(&listed.rows, &acts);
@@ -3688,6 +3688,10 @@ pub fn choose(cx: &Ctx, place: Place) -> Frame {
 /// entries in one list on the plain page, each row drawn as it scrolls into
 /// view and touched for `action`. In place of the list, `absent` says why
 /// nothing of the folder can be shown, and `empty` that it holds nothing.
+// A folder shown in one place is described by where it is, what stands in
+// for it when it cannot be read, and what its rows do: every part is used,
+// and naming them in a struct would only move the list.
+#[allow(clippy::too_many_arguments)]
 fn listing(
     cx: &Ctx,
     folder: &Folder,
@@ -3879,7 +3883,7 @@ pub fn file_info(cx: &Ctx) -> Frame {
                 c.fill_round_rect(side, y, room, ph, ph / 2.0, pill_bg);
                 c.text_center(&f.value, label, side + room / 2.0, y + ph / 2.0, px, t.pal.danger);
                 rects.push(Rect::new(side, y, room, ph));
-                acts.push(action.clone());
+                acts.push(*action);
             }
             continue;
         }
@@ -3891,7 +3895,7 @@ pub fn file_info(cx: &Ctx) -> Frame {
             let shown = cut_to(&c, &f.value, label, grid_px, cell - grid_pad * 2.0);
             c.text_center(&f.value, &shown, x + cell / 2.0, y + ph / 2.0, grid_px, if *bad { t.pal.danger } else { pill_ink });
             rects.push(Rect::new(x, y, cell, ph));
-            acts.push(action.clone());
+            acts.push(*action);
         }
     }
     let page_title = l.pick(if folder { ["文件夹信息", "資料夾資訊", "Folder info"] } else { ["文件信息", "檔案資訊", "File info"] });
