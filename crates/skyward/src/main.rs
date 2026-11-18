@@ -662,57 +662,6 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
         Ok(found) => (found.described, found.steps),
         Err(e) => (Vec::new(), Err(e)),
     };
-    // Two of the programs the partitions name cannot run here, and one of them
-    // holds the phone's devices back twenty seconds while it fails:
-    //  - the secure element's own service ends as it starts in a recovery, and
-    //    the devices wait for a registration that never comes, which leaves the
-    //    keys unusable;
-    //  - the weaver reaches its secure element through the secure element
-    //    service of a running Android, which a recovery does not serve, so the
-    //    user's files are unlocked through the gatekeeper-protected note
-    //    instead (see `weaver_first` in the configuration).
-    // The secure element service the recovery would serve itself is left out
-    // for the same reason.
-    // Which programs these are is read from what each one registers, not from
-    // where its binary lies: a system that renames or moves the weaver or the
-    // secure element service is followed as it is, as a system that keeps the
-    // names is.
-    // Which those are is the phone's to say: the configuration names the
-    // interfaces whose programs cannot run here (pudding: the secure element's
-    // own service and Thales's weaver), and a phone that names none has them all
-    // started as its partitions say.
-    let cannot_run_here = cfg.keys.leave_out.clone();
-    let served = found.as_deref().is_ok_and(keys::serves_elements);
-    let mut left_out: Vec<String> = Vec::new();
-    let found = found.map(|steps| {
-        steps
-            .into_iter()
-            .filter(|step| match step {
-                skyward_programs::secure::Step::ServeElements => false,
-                skyward_programs::secure::Step::Start(program) => {
-                    let serves = program.service.ready_service.iter().chain(&program.service.registers).any(|name| cannot_run_here.iter().any(|prefix| name.starts_with(prefix)));
-                    if serves {
-                        let what = program
-                            .service
-                            .ready_service
-                            .iter()
-                            .chain(&program.service.registers)
-                            .find(|name| cannot_run_here.iter().any(|prefix| name.starts_with(prefix)))
-                            .cloned()
-                            .unwrap_or_else(|| program.service.path.clone());
-                        left_out.push(format!("{} ({what})", program.service.path));
-                    }
-                    !serves
-                }
-            })
-            .collect::<Vec<_>>()
-    });
-    for what in &left_out {
-        skyward_sys::kmsg(&format!("{what} is left out: it cannot run in a recovery on this phone"))?;
-    }
-    if served {
-        skyward_sys::kmsg("the secure element is left to the phone's own system, not served here")?;
-    }
     // What either service directory has to know of, it has to know before
     // anything registers with it, so both are told of the configuration's
     // programs and of those that use the phone's keys together.

@@ -40,20 +40,6 @@ pub mod ramdisk {
     }
 }
 
-/// Programs the phone's partitions name for its keys that a recovery of this
-/// phone cannot run: they are left out of the steps the partitions give.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct Keys {
-    /// Interfaces whose programs are left out, each a prefix: a phone whose
-    /// secure element service ends as it starts in a recovery names
-    /// `android.hardware.secure_element.` here, and one whose weaver reaches
-    /// its secure element through a running Android names
-    /// `android.hardware.weaver.`. Left out, every program the partitions name
-    /// is started as they say.
-    #[serde(default)]
-    pub leave_out: Vec<String>,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct DeviceConfig {
     pub device: Device,
@@ -83,9 +69,6 @@ pub struct DeviceConfig {
     /// boot actions.
     #[serde(default)]
     pub owners: Vec<Owners>,
-    /// Which of the programs the partitions name for the keys are left out.
-    #[serde(default)]
-    pub keys: Keys,
     #[serde(default)]
     pub wipe: Wipe,
     #[serde(default)]
