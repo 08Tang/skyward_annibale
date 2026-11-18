@@ -223,7 +223,7 @@ impl App {
     /// The question a copy or a move asks first: the phone's own storage, or
     /// the drive. Two pills in a card over the page.
     pub(super) fn compose_place(&mut self, out: &mut Canvas, f: &Fonts) {
-        let t = *self.theme();
+        let t = self.theme();
         let m = &t.m;
         let l = self.state.lang;
         let (w, h) = (m.w as f32, m.h as f32);
@@ -451,7 +451,7 @@ impl App {
     /// The lock over the page: the phone's time, its battery, and the knob to
     /// slide along.
     fn compose_lock(&mut self, out: &mut Canvas, f: &Fonts, info: &DeviceInfo, clock: &str, drag: f32) {
-        let t = *self.theme();
+        let t = self.theme();
         let m = &t.m;
         let (w, h) = (m.w as f32, m.h as f32);
         out.fill_rect(0.0, 0.0, w, h, Rgba::rgb(6, 6, 8).with_alpha(226));
