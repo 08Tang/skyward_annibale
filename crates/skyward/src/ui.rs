@@ -2520,7 +2520,7 @@ impl Pages<'_> {
         if self.app.screen() == Screen::Avb {
             if !self.avb_read {
                 self.avb_read = true;
-                let _ = self.effect(Effect::AvbRead, monotonic_ms())?;
+                let _ = self.effect(Effect::ReadAvb, monotonic_ms())?;
             }
         } else if self.avb_read {
             self.avb_read = false;

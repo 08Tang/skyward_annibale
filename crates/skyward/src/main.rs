@@ -808,33 +808,9 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
     let starting = std::time::Instant::now();
     services::start(&services, libraries.as_deref())?;
     skyward_sys::kmsg(&format!("the configuration's programs came up in {:.2} s", starting.elapsed().as_secs_f64()))?;
-    // Where the partitions say nothing of the keys, the programs the
-    // configuration starts are all there is, and the phone's devices are up
-    // before that is said.
-    match found {
-        Ok(steps) => {
-            for line in keys::describe(&steps) {
-                skyward_sys::kmsg(&format!("for the phone's keys: {}", line.replace("\n  ", ", ")))?;
-            }
-            // The boot control uses no key and nothing below waits for it, so
-            // it is started beside the chain that does rather than ahead of it:
-            // its own readiness costs nothing then.
-            let (beside, chain): (Vec<_>, Vec<_>) = steps.into_iter().partition(|step| match step {
-                skyward_programs::secure::Step::Start(program) => program.service.ready_service.iter().any(|name| name.starts_with("android.hardware.boot.")),
-                skyward_programs::secure::Step::ServeElements => false,
-            });
-            let libraries_beside = libraries.clone();
-            let beside = (!beside.is_empty())
-                .then(|| std::thread::Builder::new().name("beside the keys".into()).spawn(move || keys::start(&beside, libraries_beside.as_deref())))
-                .transpose()
-                .context("start the boot control beside the keys")?;
-            keys::start(&chain, libraries.as_deref())?;
-            skyward_sys::kmsg(&format!("the key programs came up at {:.2} s", watched.elapsed().as_secs_f64()))?;
-            if let Some(beside) = beside {
-                beside.join().map_err(|_| anyhow::anyhow!("the thread the boot control ran on panicked"))??;
-            }
-        }
-        Err(e) => skyward_sys::kmsg(&format!("the phone's partitions say nothing of its keys: {e:#}"))?,
+    let steps = found.context("make out from the phone's partitions how its keys are used")?;
+    for line in keys::describe(&steps) {
+        skyward_sys::kmsg(&format!("for the phone's keys: {}", line.replace("\n  ", ", ")))?;
     }
     keys::start(&steps)?;
     agree_on_the_notes_key(&registering)

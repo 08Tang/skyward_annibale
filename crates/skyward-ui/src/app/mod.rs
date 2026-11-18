@@ -723,8 +723,6 @@ pub enum Effect {
     StopFetch,
     /// Keep the file manager's order for the starts that follow.
     KeepSort(SortKey, bool, bool),
-    /// Read verified boot's checks in the slot the phone runs from.
-    AvbRead,
     Wlan(bool),
     /// Keep the WLAN open as the recovery starts, or stop keeping it so.
     WlanAuto(bool),
