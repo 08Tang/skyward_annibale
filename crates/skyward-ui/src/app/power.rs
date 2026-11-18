@@ -94,6 +94,16 @@ impl App {
     /// now, then the panel goes off. A finger on the glass lets go of what
     /// it held, and the page stops where it is.
     pub(super) fn sleep(&mut self, now: u64) {
+        // The panel goes dark under a lock, as a phone's does: the page behind
+        // it is there once the knob is slid along.
+        self.lock = Some(Lock { since: now, drag: 0.0, held: false });
+        // A sheet half pulled is let go of: it does not wait over a dark panel
+        // for a finger that is no longer there.
+        self.shade = 0.0;
+        self.shade_settle = None;
+        self.shade_last = None;
+        self.shade_speed = 0.0;
+        self.shade_press = None;
         self.darkening = self.panel(now);
         self.curtain.set(false, now);
         self.display_on = false;
@@ -208,13 +218,13 @@ mod tests {
         assert!(!app.keys, "volume down waits for the power key first");
         assert!(app.tick(CHORD_MS).is_empty());
         assert!(app.keys, "then lights a control on its own");
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))));
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))));
         assert!(app.key(Key::Power, CHORD_MS + 10).is_empty(), "the power key came too late");
         assert!(app.key_up(Key::VolumeDown, CHORD_MS + 20).is_empty());
         assert!(app.tick(CHORD_MS * 2 + 10).is_empty());
         assert_eq!(app.screen(), Screen::Home, "the power key waits on the control lit until it comes up");
         app.key_up(Key::Power, CHORD_MS * 3);
-        assert_eq!(app.screen(), Screen::Search, "and then works it");
+        assert_eq!(app.screen(), Screen::About, "and then works it");
     }
 
     #[test]
@@ -307,6 +317,9 @@ mod tests {
         assert_eq!(app.top().1, 0.0, "nor scrolled the page");
         press(&mut app, Key::Power, 200);
         assert!(app.display_on());
+        // The panel comes up under the lock, as a phone's does: the knob opens
+        // it, and then a tap reaches the page.
+        unlock(&mut app, &f, 300);
         tap_at(&mut app, &f, &i, Action::Open(Screen::Settings), 700);
         assert_eq!(app.screen(), Screen::Settings, "a tap on the lit panel does");
     }
@@ -377,6 +390,7 @@ mod tests {
         press(&mut app, Key::Power, 0);
         app.tick(365);
         app.plugged(1000, true);
+        unlock(&mut app, &f, 1200);
         app.touch(Touch::Down(x, y), &f, 1500);
         app.touch(Touch::Up, &f, 1550);
         assert!(!app.charge_shown(), "the touch sent it away");
@@ -397,6 +411,7 @@ mod tests {
         press(&mut app, Key::Power, 0);
         app.tick(365);
         app.plugged(1000, true);
+        unlock(&mut app, &f, 1200);
         let mut c = Canvas::new(W, H);
         app.compose(&mut c, &f, &i, "12:00", 3000);
         let px = |x: u32, y: u32| {
@@ -494,15 +509,13 @@ mod tests {
         press(&mut app, Key::Power, 0);
         app.install(Event::Finished(Outcome::Installed { slot: Slot::A, wipe: false }), 100);
         assert!(app.display_on(), "the finished install lit the panel");
-        // A finger reaching for the phone lands on 重启到系统; within the
-        // guard it only keeps the panel awake.
+        // A finger reaching for the phone lands on 重启到系统; the panel is under
+        // the lock, so within the guard it only keeps it awake.
+        unlock(&mut app, &f, 150);
         assert!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::System), 200).is_empty());
         assert_eq!(app.screen(), Screen::Installing, "the stray tap did not reboot");
         // Past the guard the same tap reboots.
-        assert_eq!(
-            tap_at(&mut app, &f, &i, Action::RebootTo(Target::System), 700),
-            vec![Effect::Reboot(Target::System)]
-        );
+        assert_eq!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::System), 700), vec![Effect::Reboot(Target::System)]);
     }
 
     #[test]

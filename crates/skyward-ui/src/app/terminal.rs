@@ -68,11 +68,7 @@ impl App {
             return if cap == Cap::Enter { vec![Effect::StartShell(self.shell_folder.clone())] } else { Vec::new() };
         }
         let bytes = term.typed(cap, shifted);
-        if bytes.is_empty() {
-            Vec::new()
-        } else {
-            vec![Effect::TermInput(bytes)]
-        }
+        if bytes.is_empty() { Vec::new() } else { vec![Effect::TermInput(bytes)] }
     }
 
     /// Scroll the terminal's screen or the editor's text as a finger goes
@@ -108,7 +104,7 @@ mod tests {
     #[test]
     fn the_terminal_sends_every_key_to_its_shell() {
         let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Settings, W, H, PPD);
+        let mut app = App::new(Screen::Advanced, W, H, PPD);
         assert_eq!(tap(&mut app, &f, &i, Action::Open(Screen::Terminal)), vec![Effect::StartShell("/".into())], "the page asks for a shell the first time");
         let (rows, cols) = app.term_size(&f);
         assert!(rows >= 20 && cols >= 40, "a screen of {rows} rows by {cols}");

@@ -99,6 +99,13 @@ impl App {
     /// Where the entry the file page shows is.
     pub(super) fn entry_path(&self) -> String {
         let entry = self.state.file.as_ref().expect("the file page shows an entry");
+        if self.state.file_on_drive {
+            let at = self.state.otg.path.trim_matches('/');
+            return match at.is_empty() {
+                true => format!("{}/{}", super::USB_DRIVE, entry.name),
+                false => format!("{}/{}/{}", super::USB_DRIVE, at, entry.name),
+            };
+        }
         self.state.files.inside(&entry.name)
     }
 
@@ -219,7 +226,7 @@ mod tests {
     #[test]
     fn a_text_file_opens_to_edit_and_saves_what_was_typed() {
         let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Advanced, W, H, PPD);
+        let mut app = App::new(Screen::Home, W, H, PPD);
         tap(&mut app, &f, &i, Action::Open(Screen::Files));
         app.set_files("/data/adb".into(), Ok(vec![entry("run.sh", FileKind::File)]), LISTED);
         assert_eq!(tap(&mut app, &f, &i, Action::OpenEntry(0)), vec![Effect::OpenText("/data/adb/run.sh".into())]);
@@ -355,8 +362,7 @@ mod tests {
         let mut app = in_sdcard(&f, &i);
         hold_entry(&mut app, &f, &i, 1);
         tap(&mut app, &f, &i, Action::RenameEntry);
-        let refused =
-            [("", "请输入名称"), ("..", "名称不能为\".\"或\"..\""), ("x/y", "名称不能包含\"/\""), ("DCIM", "该文件夹中已有\"DCIM\"")];
+        let refused = [("", "请输入名称"), ("..", "名称不能为\".\"或\"..\""), ("x/y", "名称不能包含\"/\""), ("DCIM", "该文件夹中已有\"DCIM\"")];
         for (name, said) in refused {
             app.state.new_name = name.into();
             app.toast = None;

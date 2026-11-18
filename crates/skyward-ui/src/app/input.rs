@@ -5,9 +5,153 @@ use super::*;
 
 impl App {
     pub fn touch(&mut self, ev: Touch, f: &Fonts, now: u64) -> Vec<Effect> {
-        // A finger on the dark panel lights nothing, as on the phone's own
-        // system, where the power key lights it.
+        // 复制/移动先问一句到哪儿去：两个格子吃掉这一下，点别处就收起。
+        if self.state.place_ask.is_some() && self.display_on {
+            if let Touch::Down(x, y) = ev {
+                let hit = self.place_hits.iter().find(|(r, _)| r.contains(x, y)).map(|(_, a)| *a);
+                self.state.place_ask = None;
+                self.dirty = true;
+                if let Some(action) = hit {
+                    return self.act(action, now);
+                }
+            }
+            return Vec::new();
+        }
+        // Two taps on the dark panel light it, as on the phone's own system; a
+        // single one does nothing, so a stray touch in a pocket does not.
         if !self.display_on {
+            if matches!(ev, Touch::Down(..)) {
+                match self.tap_at {
+                    Some(at) if now.saturating_sub(at) <= DOUBLE_TAP_MS => {
+                        self.tap_at = None;
+                        self.wake(now);
+                    }
+                    _ => self.tap_at = Some(now),
+                }
+            }
+            return Vec::new();
+        }
+        // The card asking to delete is over everything: a finger on its swipe
+        // works that, and one anywhere on the card does nothing to the page
+        // under it.
+        if (self.state.asking_delete || self.state.asking_many.is_some() || self.state.asking_remember)
+            && let Some(track) = self.asking_track
+            && let Some((card, which)) = self.asking
+        {
+            let (x, y) = match ev {
+                Touch::Down(x, y) | Touch::Move(x, y) => (x, y),
+                Touch::Up => (0.0, 0.0),
+            };
+            let _ = (x, y);
+            match ev {
+                Touch::Down(x, y) if track.contains(x, y) => {
+                    let travel = (track.w - track.h).max(1.0);
+                    let grab = (x - track.x).clamp(0.0, track.h);
+                    self.state.confirm = ((x - grab - track.x) / travel).clamp(0.0, 1.0);
+                    self.dirty = true;
+                    self.drag = Drag::Confirm { which, track, grab };
+                    return Vec::new();
+                }
+                Touch::Down(x, y) if card.contains(x, y) => {
+                    // A press on the card that is not on the swipe does
+                    // nothing: the card is a question, not a page.
+                    self.drag = Drag::Held;
+                    return Vec::new();
+                }
+                Touch::Move(..) if matches!(self.drag, Drag::Confirm { .. }) => {
+                    if let Drag::Confirm { track, grab, .. } = self.drag {
+                        let travel = (track.w - track.h).max(1.0);
+                        self.state.confirm = ((x - grab - track.x) / travel).clamp(0.0, 1.0);
+                        self.dirty = true;
+                    }
+                    return Vec::new();
+                }
+                // A press anywhere else puts the card away, the page under
+                // it untouched.
+                Touch::Down(..) if self.state.asking_remember => {
+                    self.state.asking_remember = false;
+                    self.dirty = true;
+                    return Vec::new();
+                }
+                Touch::Up if matches!(self.drag, Drag::Confirm { .. }) => {
+                    let Drag::Confirm { which, .. } = self.drag else { unreachable!() };
+                    let done = self.state.confirm > SLID;
+                    self.state.confirm = 0.0;
+                    self.drag = Drag::Idle;
+                    self.dirty = true;
+                    if done {
+                        return self.confirmed(which, now);
+                    }
+                    return Vec::new();
+                }
+                _ => {}
+            }
+        }
+        // The control centre takes every finger while it is out or being
+        // pulled; the lock keeps it shut.
+        let pulling = matches!(self.drag, Drag::Shade { .. });
+        if self.lock.is_none() && (self.shade > 0.0 || pulling) {
+            return self.shade_touch(ev, now);
+        }
+        // A finger that comes down near the top edge may be starting a pull,
+        // but a tap there is the page's -- the back arrow and the first rows
+        // are up there -- so the pull begins only once it has moved down.
+        if self.lock.is_none() {
+            match ev {
+                Touch::Down(_, y) if y <= self.theme().m.dp(40.0) => self.shade_from = Some(y),
+                Touch::Move(_, y) => {
+                    if let Some(start) = self.shade_from
+                        && y - start > self.theme().m.dp(12.0)
+                    {
+                        self.shade_from = None;
+                        self.drag = Drag::Shade { start, from: 0.0 };
+                        return self.shade_touch(Touch::Move(0.0, y), now);
+                    }
+                }
+                Touch::Up => self.shade_from = None,
+                _ => {}
+            }
+        }
+        // While the lock shows, only its knob answers: nothing a touch meant
+        // for the page behind it reaches it.
+        if self.lock.is_some() {
+            let track = self.lock_rect.unwrap_or_else(|| self.lock_track());
+            match ev {
+                Touch::Down(x, y) => {
+                    let on_knob = x >= track.x && x <= track.x + track.w && y >= track.y && y <= track.y + track.h;
+                    if let Some(lock) = &mut self.lock {
+                        lock.held = on_knob;
+                    }
+                }
+                Touch::Move(x, _) => {
+                    let span = (track.w - track.h).max(1.0);
+                    if let Some(lock) = &mut self.lock
+                        && lock.held
+                    {
+                        lock.drag = ((x - (track.x + track.h / 2.0)) / span).clamp(0.0, 1.0);
+                        self.dirty = true;
+                    }
+                }
+                Touch::Up => {
+                    let unlocked = self.lock.as_ref().is_some_and(|l| l.held && l.drag >= UNLOCK_AT);
+                    if let Some(lock) = &mut self.lock {
+                        lock.held = false;
+                        if !unlocked {
+                            lock.drag = 0.0;
+                        }
+                    }
+                    if unlocked {
+                        self.lock = None;
+                        self.refresh();
+                        // The lock gave way: the same click a slider gives.
+                        if self.state.vibrate {
+                            return vec![Effect::Haptic];
+                        }
+                    } else {
+                        self.dirty = true;
+                    }
+                }
+            }
             return Vec::new();
         }
         // A finger on the charging screen sends it away for the page, and
@@ -102,15 +246,14 @@ impl App {
                     // A search bar folding away answers only on what is
                     // left of it.
                     let fr = self.frame.as_ref();
-                    fr.and_then(|fr| fr.hit(x, y + scroll).filter(|h| fr.shown(h.rect, scroll).is_some_and(|r| r.contains(x, y))))
-                        .map(|h| (h.action, h.rect))
+                    fr.and_then(|fr| fr.hit(x, y + scroll).filter(|h| fr.shown(h.rect, scroll).is_some_and(|r| r.contains(x, y)))).map(|h| (h.action, h.rect))
                 };
                 let action = hit.map(|h| h.0);
                 // A row of the page darkens behind its words a moment after
                 // the finger lands on it, if the finger stays.
                 let row = hit
                     .filter(|&(a, r)| self.frame.as_ref().is_some_and(|fr| fr.hits.contains(&Hit { rect: r, action: a })))
-                    .filter(|&(a, r)| row_wide(&t, r) && !matches!(a, Action::Open(Screen::Search) | Action::Confirm(_) | Action::TypeInto(_)))
+                    .filter(|&(a, r)| row_wide(&t, r) && !matches!(a, Action::Open(Screen::About) | Action::Confirm(_) | Action::TypeInto(_)))
                     .map(|(_, r)| r);
                 self.drag = match hit {
                     Some((Action::Slider(which), track)) => {
@@ -198,6 +341,9 @@ impl App {
                     self.tracker.add(now, y);
                     self.drag = self.scroll_history(last, y, carry, pitch);
                 }
+                // The sheet is pulled by its own handler, which sees every
+                // finger while it is out.
+                Drag::Shade { start, from } => self.drag = Drag::Shade { start, from },
                 Drag::Waking => self.drag = Drag::Waking,
                 Drag::Held => self.drag = Drag::Held,
                 Drag::Idle => {}
@@ -277,10 +423,7 @@ impl App {
         if held != self.state.held {
             let was = std::mem::replace(&mut self.state.held, held);
             // Only the rows of what is let go and what is held change.
-            let rects: Option<Vec<Rect>> = self
-                .frame
-                .as_ref()
-                .and_then(|fr| [was, held].into_iter().flatten().map(|a| fr.hits.iter().find(|h| h.action == a).map(|h| h.rect)).collect());
+            let rects: Option<Vec<Rect>> = self.frame.as_ref().and_then(|fr| [was, held].into_iter().flatten().map(|a| fr.hits.iter().find(|h| h.action == a).map(|h| h.rect)).collect());
             match rects {
                 Some(rects) => rects.into_iter().for_each(|r| self.refresh_rows(r.y.floor() as u32, (r.y + r.h).ceil() as u32)),
                 None => self.refresh(),
@@ -294,7 +437,7 @@ impl App {
     pub(super) fn pressing(&self) -> Option<Action> {
         let button = self.frame.as_ref().and_then(|fr| fr.button).map(|(_, a)| a);
         match self.drag {
-            Drag::Press { action: Some(a @ (Action::Back | Action::CloseSearch | Action::Open(Screen::Search))), .. } => Some(a),
+            Drag::Press { action: Some(a @ (Action::Back | Action::CloseSearch | Action::Open(Screen::About))), .. } => Some(a),
             Drag::Press { action: Some(a), .. } if Some(a) == button => Some(a),
             _ => None,
         }
@@ -320,6 +463,12 @@ impl App {
         self.dirty = true;
     }
 
+    /// A panel came up after the keys had been said to work the page instead.
+    pub fn set_touchscreen(&mut self, present: bool) {
+        self.keys = !present;
+        self.dirty = true;
+    }
+
     /// A button went down. With the keys working the page, the volume keys
     /// move the light from control to control and the power key works the
     /// one lit as it comes back up; otherwise the first volume press lights
@@ -328,6 +477,12 @@ impl App {
     /// goes down first waits [`CHORD_MS`] for the other, or until it is let
     /// go, and then does what it does alone, as pressed when it went down.
     pub fn key(&mut self, key: Key, now: u64) -> Vec<Effect> {
+        // 问「到哪儿去」的时候，返回键只说「算了」。
+        if self.state.place_ask.is_some() {
+            self.state.place_ask = None;
+            self.dirty = true;
+            return Vec::new();
+        }
         // Any button stops a gliding page, and brings a sliding one to rest.
         self.fling = None;
         self.end_turn();
@@ -418,9 +573,7 @@ impl App {
                 match self.keys.then(|| self.lit()).flatten() {
                     // Held on a swipe-to-confirm control, the key slides
                     // its knob along as a finger would.
-                    Some(Spot { stop: Stop::Hit(Action::Confirm(which)), rect, .. }) => {
-                        self.button = Some((key, Press::Slide { which, track: rect, at }))
-                    }
+                    Some(Spot { stop: Stop::Hit(Action::Confirm(which)), rect, .. }) => self.button = Some((key, Press::Slide { which, track: rect, at })),
                     Some(spot) => self.button = Some((key, Press::Power { spot, at })),
                     // Turning the screen off, the key ticks the motor.
                     None => {
@@ -438,7 +591,156 @@ impl App {
     /// on, or confirms with the knob it slid far enough. Let go before its
     /// partner in a screenshot came, the key waiting for it first does what
     /// it does alone.
+    /// A finger on the control centre, or one pulling it down from the top.
+    fn shade_touch(&mut self, ev: Touch, now: u64) -> Vec<Effect> {
+        let t = self.theme();
+        match ev {
+            Touch::Down(x, y) => {
+                // A new finger starts the sheet afresh: nothing of the last
+                // pull's inertia carries into it.
+                self.shade_settle = None;
+                self.shade_speed = 0.0;
+                self.shade_last = None;
+                // A finger anywhere the sheet does not reach puts it away:
+                // the page under it was being touched, not the sheet.
+                let sheet = t.m.dp(SHADE_HEIGHT_DP) * self.shade;
+                if self.shade > 0.0 && y > sheet {
+                    self.close_shade();
+                    self.drag = Drag::Idle;
+                    return Vec::new();
+                }
+                if self.shade > 0.0
+                    && let Some((rect, hit)) = self.shade_hits.iter().find(|(r, _)| r.contains(x, y)).copied()
+                {
+                    match hit {
+                        ShadeHit::Brightness | ShadeHit::Vibration => {
+                            let which = if hit == ShadeHit::Brightness { Slider::Brightness } else { Slider::Vibration };
+                            self.shade_slider(which, rect, x);
+                            self.drag = Drag::Slider(which, rect);
+                        }
+                        _ => self.shade_press = Some((hit, y)),
+                    }
+                    return Vec::new();
+                }
+                self.drag = Drag::Shade { start: y, from: self.shade };
+                Vec::new()
+            }
+            Touch::Move(x, y) => {
+                if let Drag::Slider(which, track) = self.drag {
+                    self.shade_slider(which, track, x);
+                    return Vec::new();
+                }
+                // A finger that came down on a tile and then moved was pulling
+                // the sheet: the tile is not pressed after all.
+                if let Some((_, down)) = self.shade_press
+                    && (y - down).abs() > t.m.dp(14.0)
+                {
+                    self.shade_press = None;
+                    self.drag = Drag::Shade { start: down, from: self.shade };
+                }
+                if let Drag::Shade { start, from } = self.drag {
+                    let pulled = from * SHADE_PULL_DP + (y - start);
+                    let eased = if pulled > 0.0 { pulled * (1.0 - 0.22 * (pulled / SHADE_PULL_DP).min(1.0)) } else { pulled };
+                    self.shade = (eased / SHADE_PULL_DP).clamp(0.0, 1.0);
+                    if let Some((was_at, was_y)) = self.shade_last {
+                        let dt = now.saturating_sub(was_at) as f32 / 1000.0;
+                        if dt > 0.0005 {
+                            self.shade_speed = self.shade_speed * 0.55 + ((y - was_y) / dt) * 0.45;
+                        }
+                    }
+                    self.shade_last = Some((now, y));
+                    self.shade_settle = None;
+                    self.dirty = true;
+                }
+                Vec::new()
+            }
+            Touch::Up => {
+                let mut fx = Vec::new();
+                if let Some((hit, _)) = self.shade_press.take() {
+                    match hit {
+                        ShadeHit::Wlan => {
+                            let on = self.state.wlan.as_ref().is_some_and(|w| w.power == Power::On);
+                            fx.push(Effect::Wlan(!on));
+                        }
+                        ShadeHit::Screenshot => {
+                            self.close_shade();
+                            self.shot_when = Some(now + 130);
+                        }
+                        ShadeHit::Reboot => {
+                            self.close_shade();
+                            fx.extend(self.act(Action::Open(Screen::Reboot), now));
+                        }
+                        ShadeHit::Sleep => {
+                            self.close_shade();
+                            self.sleep(now);
+                        }
+                        ShadeHit::Brightness | ShadeHit::Vibration => {}
+                    }
+                    return fx;
+                }
+                if matches!(self.drag, Drag::Slider(..)) {
+                    self.drag = Drag::Idle;
+                }
+                if matches!(self.drag, Drag::Shade { .. }) {
+                    let dragged = self.shade_last.is_some();
+                    self.drag = Drag::Idle;
+                    // Let go, it carries on a little the way it was going, so a
+                    // flick opens it and a slow drag settles where it got to.
+                    let heading = match dragged {
+                        true => self.shade + self.shade_speed / 1400.0,
+                        false => self.shade,
+                    };
+                    let target = if heading >= SHADE_KEEPS { SHADE_PULL_DP } else { 0.0 };
+                    let already = self.shade_settle.is_some_and(|(_, _, _, _, heading)| heading == target);
+                    if !already {
+                        let from = self.shade * SHADE_PULL_DP - target;
+                        let speed = self.shade_speed.clamp(-2600.0, 2600.0);
+                        self.shade_settle = Some((now, from, speed, SHADE_PERIOD, target));
+                    }
+                    self.shade_last = None;
+                    self.shade_speed = 0.0;
+                }
+                fx
+            }
+        }
+    }
+
+    /// Set one of the sheet's sliders from where a finger is.
+    fn shade_slider(&mut self, which: Slider, track: Rect, x: f32) {
+        let level = ((x - track.x) / track.w).clamp(0.0, 1.0);
+        match which {
+            Slider::Brightness => self.state.brightness = level.max(0.02),
+            Slider::Vibration => self.state.vibration = level,
+        }
+        self.dirty = true;
+    }
+
+    /// Shut the control centre at once, for a toggle that opens a page.
+    fn close_shade(&mut self) {
+        self.shade = 0.0;
+        self.shade_settle = None;
+        self.shade_last = None;
+        self.shade_speed = 0.0;
+        self.dirty = true;
+    }
+
     pub fn key_up(&mut self, key: Key, now: u64) -> Vec<Effect> {
+        // A power key let go on the lock opens the lock, or the reboot page
+        // where it was held long enough.
+        if self.lock.is_some() && key == Key::Power {
+            let held = self.lock_press.take().map_or(0, |at| now.saturating_sub(at));
+            if held >= POWER_HOLD_MS {
+                // Held, it opens the reboot page, and the lock goes with it.
+                self.lock = None;
+                self.open(Screen::Reboot);
+                self.refresh();
+                return Vec::new();
+            }
+            // A press that lit the panel leaves the lock showing -- the guard
+            // just after a wake keeps it from going straight out again -- and
+            // a second press, with the panel up, puts it out as it always
+            // does. The knob is what opens it, not the key.
+        }
         let mut fx = match self.chord {
             Some((first, _)) if first == key => self.let_chord_go(now),
             _ => Vec::new(),
@@ -616,14 +918,6 @@ mod tests {
         assert_eq!(grey_at(&c, x, y + button.h * 0.35), over(t.pal.button_press, t.pal.search).r);
         let cross = darkest(&c, button);
         assert!(cross.abs_diff(70) <= 2, "the stock cross held down is 70, not {cross}");
-
-        // The home page's search bar, clear of its words.
-        let mut app = App::new(Screen::Home, W, H, PPD);
-        let bar = app.frame(&f, &i).hits.iter().find(|h| h.action == Action::Open(Screen::Search)).expect("on the home page").rect;
-        let (x, y) = (bar.x + bar.w * 0.8, bar.y + bar.h / 2.0);
-        app.touch(Touch::Down(x, y), &f, 1000);
-        app.compose(&mut c, &f, &i, "12:00", 1000);
-        assert_eq!(grey_at(&c, x, y), over(t.pal.button_press, t.pal.search).r);
     }
 
     #[test]

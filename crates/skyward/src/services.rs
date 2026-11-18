@@ -1,4 +1,4 @@
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use procfs::process::{FDTarget, MMapPath, Process};
 use skyward_config::Service;
 use skyward_programs::script::{Socket, SocketKind};
@@ -68,7 +68,9 @@ pub fn start(programs: &[Started], libraries: Option<&Path>) -> Result<()> {
             continue;
         }
         if program.anew {
+            let left = Instant::now();
             end_left(&s)?;
+            skyward_sys::kmsg(&format!("{}: the one an earlier start left ended in {:.2} s", s.path, left.elapsed().as_secs_f64()))?;
         }
         // A property the program an earlier run of the recovery service
         // started has set says nothing of the one started now, which the
@@ -81,7 +83,11 @@ pub fn start(programs: &[Started], libraries: Option<&Path>) -> Result<()> {
         let waiting = s.clone();
         let name = Path::new(&s.path).file_name().map_or_else(|| s.path.clone(), |n| n.to_string_lossy().into_owned());
         thread::Builder::new().name(name).spawn(move || supervise(&s, &who, &given)).context("start a supervising thread")?;
+        let waited = Instant::now();
         ready(&waiting)?;
+        // How long this program took to say it was up, which is what the
+        // bring-up waits on, one program after another.
+        skyward_sys::kmsg(&format!("{} was ready in {:.2} s", waiting.path, waited.elapsed().as_secs_f64()))?;
     }
     Ok(())
 }
@@ -313,11 +319,7 @@ fn set_capabilities(mask: u64) -> io::Result<()> {
     let header = Header { version: CAPABILITY_VERSION_3, pid: 0 };
     let half = |bits: u32| Sets { effective: bits, permitted: bits, inheritable: bits };
     let sets = [half(mask as u32), half((mask >> 32) as u32)];
-    if unsafe { libc::syscall(libc::SYS_capset, &header, sets.as_ptr()) } == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
+    if unsafe { libc::syscall(libc::SYS_capset, &header, sets.as_ptr()) } == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 
 /// Wait until the program has what it says it will be ready with.

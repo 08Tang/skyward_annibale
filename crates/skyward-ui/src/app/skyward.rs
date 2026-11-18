@@ -69,26 +69,17 @@ impl App {
     /// How far updating Skyward has come, and how fast the download goes,
     /// in bytes a second.
     pub fn skyward_progress(&mut self, stage: SkywardStage, rate: u64) {
-        let job = self
-            .state
-            .skyward_job
-            .as_mut()
-            .expect("only an update under way moves on");
+        let job = self.state.skyward_job.as_mut().expect("only an update under way moves on");
         job.stage = Some(stage);
         job.rate = rate;
-        if self.screen() == Screen::SkywardUpdate {
-            self.refresh();
-        }
+        // 不只在更新页重画：退到首页也要能看见进度条在动。
+        self.refresh();
     }
 
     /// Updating Skyward has ended: its page says how, lit for the user to
     /// read.
     pub fn skyward_ended(&mut self, end: SkywardEnd, now: u64) {
-        let job = self
-            .state
-            .skyward_job
-            .as_mut()
-            .expect("only an update under way ends");
+        let job = self.state.skyward_job.as_mut().expect("only an update under way ends");
         job.stopping = false;
         job.outcome = Some(end);
         self.wake(now);
@@ -119,147 +110,63 @@ mod tests {
     #[test]
     fn skyward_updates_from_its_newest_release_and_its_page_stays_until_the_build_is_in() {
         let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Settings, W, H, PPD);
+        let mut app = App::new(Screen::Home, W, H, PPD);
         app.refresh();
-        let offered = |app: &mut App| {
-            app.frame(&f, &i)
-                .hits
-                .iter()
-                .any(|h| h.action == Action::Open(Screen::SkywardUpdate))
-        };
-        assert!(
-            !offered(&mut app),
-            "a phone whose WLAN the recovery does not bring up"
-        );
+        let offered = |app: &mut App| app.frame(&f, &i).hits.iter().any(|h| h.action == Action::Open(Screen::SkywardUpdate));
+        assert!(!offered(&mut app), "a phone whose WLAN the recovery does not bring up");
         app.state.wlan = Some(Wlan::default());
         app.refresh();
-        assert!(
-            !offered(&mut app),
-            "a phone that keeps no recovery partition in each slot"
-        );
+        assert!(!offered(&mut app), "a phone that keeps no recovery partition in each slot");
         app.state.recovery_partitions = true;
         app.refresh();
-        assert!(
-            tap(&mut app, &f, &i, Action::Open(Screen::SkywardUpdate)).is_empty(),
-            "nothing is asked without a network"
-        );
+        assert!(tap(&mut app, &f, &i, Action::Open(Screen::SkywardUpdate)).is_empty(), "nothing is asked without a network");
         assert!(tap(&mut app, &f, &i, Action::CheckSkyward).is_empty());
-        assert_eq!(
-            app.screen(),
-            Screen::Wlan,
-            "asking takes a network, which the WLAN page joins"
-        );
+        assert_eq!(app.screen(), Screen::Wlan, "asking takes a network, which the WLAN page joins");
         app.key(Key::Back, 0);
         app.set_wlan(connected("Skyward"));
-        assert_eq!(
-            tap(&mut app, &f, &i, Action::CheckSkyward),
-            vec![Effect::CheckSkyward]
-        );
+        assert_eq!(tap(&mut app, &f, &i, Action::CheckSkyward), vec![Effect::CheckSkyward]);
         assert_eq!(app.state.skyward_check, SkywardCheck::Asking);
         app.skyward_checked(Ok(skyward_newest(true)));
         let build = skyward_newest(true).build.unwrap();
         app.state.install = Install::Waiting;
-        assert!(
-            tap(&mut app, &f, &i, Action::UpdateSkyward).is_empty(),
-            "an install under way goes first"
-        );
+        assert!(tap(&mut app, &f, &i, Action::UpdateSkyward).is_empty(), "an install under way goes first");
         app.state.install = Install::Idle;
-        assert_eq!(
-            tap(&mut app, &f, &i, Action::UpdateSkyward),
-            vec![Effect::UpdateSkyward(build.clone())]
-        );
-        app.skyward_progress(
-            SkywardStage::Download(Progress::Downloading {
-                done: 10_000_000,
-                total: 42_739_608,
-            }),
-            2_000_000,
-        );
+        assert_eq!(tap(&mut app, &f, &i, Action::UpdateSkyward), vec![Effect::UpdateSkyward(build.clone())]);
+        app.skyward_progress(SkywardStage::Download(Progress::Downloading { done: 10_000_000, total: 42_739_608 }), 2_000_000);
+        // 下载在后台走：页面可以退出去做别的，回来还在（2026-11-17）。
         app.key(Key::Back, 0);
-        assert_eq!(
-            app.screen(),
-            Screen::SkywardUpdate,
-            "the page stays while the build downloads"
-        );
-        assert_eq!(
-            tap(&mut app, &f, &i, Action::StopSkywardUpdate),
-            vec![Effect::StopSkywardUpdate]
-        );
-        assert!(
-            !app.frame(&f, &i)
-                .hits
-                .iter()
-                .any(|h| h.action == Action::StopSkywardUpdate),
-            "stopping, it is not asked again"
-        );
+        assert_eq!(app.screen(), Screen::Home, "downloading goes on behind the pages");
+        assert!(app.state.updating_skyward(), "the build is still coming in");
+        app.open(Screen::SkywardUpdate);
+        assert_eq!(tap(&mut app, &f, &i, Action::StopSkywardUpdate), vec![Effect::StopSkywardUpdate]);
+        assert!(!app.frame(&f, &i).hits.iter().any(|h| h.action == Action::StopSkywardUpdate), "stopping, it is not asked again");
         // An end lights the panel, and a touch just after only keeps it lit.
         app.skyward_ended(SkywardEnd::Stopped, 0);
-        assert_eq!(
-            tap_at(&mut app, &f, &i, Action::UpdateSkyward, 2000),
-            vec![Effect::UpdateSkyward(build.clone())],
-            "a download stopped carries on"
-        );
-        app.skyward_progress(
-            SkywardStage::Write {
-                done: 1 << 20,
-                total: 4 << 20,
-            },
-            0,
-        );
-        assert!(
-            !app.frame(&f, &i)
-                .hits
-                .iter()
-                .any(|h| h.action == Action::StopSkywardUpdate),
-            "writing goes on to its end"
-        );
+        assert_eq!(tap_at(&mut app, &f, &i, Action::UpdateSkyward, 2000), vec![Effect::UpdateSkyward(build.clone())], "a download stopped carries on");
+        app.skyward_progress(SkywardStage::Write { done: 1 << 20, total: 4 << 20 }, 0);
+        assert!(!app.frame(&f, &i).hits.iter().any(|h| h.action == Action::StopSkywardUpdate), "writing goes on to its end");
         app.key(Key::Back, 2100);
-        assert_eq!(
-            app.screen(),
-            Screen::SkywardUpdate,
-            "nor is the page left while the build is written"
-        );
+        assert_eq!(app.screen(), Screen::SkywardUpdate, "nor is the page left while the build is written");
         app.skyward_ended(SkywardEnd::Updated(vec![Slot::A, Slot::B]), 3000);
-        assert_eq!(
-            tap_at(&mut app, &f, &i, Action::RebootTo(Target::Recovery), 5000),
-            vec![Effect::Reboot(Target::Recovery)]
-        );
+        assert_eq!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::Recovery), 5000), vec![Effect::Reboot(Target::Recovery)]);
         app.key(Key::Back, 5100);
-        assert_eq!(app.screen(), Screen::Settings);
+        assert_eq!(app.screen(), Screen::Home, "back to where the update was asked for");
     }
 
     #[test]
     fn the_skyward_page_asks_github_as_it_opens_once_a_network_is_joined() {
         let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Settings, W, H, PPD);
+        let mut app = App::new(Screen::Home, W, H, PPD);
         app.state.wlan = Some(connected("Skyward"));
         app.state.recovery_partitions = true;
         app.refresh();
-        assert_eq!(
-            tap(&mut app, &f, &i, Action::Open(Screen::SkywardUpdate)),
-            vec![Effect::CheckSkyward]
-        );
-        app.skyward_checked(Err(Unanswered::Failed(
-            "GitHub answered 403 Forbidden: API rate limit exceeded".into(),
-        )));
+        assert_eq!(tap(&mut app, &f, &i, Action::Open(Screen::SkywardUpdate)), vec![Effect::CheckSkyward]);
+        app.skyward_checked(Err(Unanswered::Failed("GitHub answered 403 Forbidden: API rate limit exceeded".into())));
         app.key(Key::Back, 0);
-        assert_eq!(
-            tap(&mut app, &f, &i, Action::Open(Screen::SkywardUpdate)),
-            vec![Effect::CheckSkyward],
-            "a failed check is tried again"
-        );
+        assert_eq!(tap(&mut app, &f, &i, Action::Open(Screen::SkywardUpdate)), vec![Effect::CheckSkyward], "a failed check is tried again");
         app.skyward_checked(Ok(skyward_newest(false)));
-        assert!(
-            !app.frame(&f, &i)
-                .hits
-                .iter()
-                .any(|h| h.action == Action::UpdateSkyward),
-            "nothing newer to update to"
-        );
+        assert!(!app.frame(&f, &i).hits.iter().any(|h| h.action == Action::UpdateSkyward), "nothing newer to update to");
         app.key(Key::Back, 0);
-        assert!(
-            tap(&mut app, &f, &i, Action::Open(Screen::SkywardUpdate)).is_empty(),
-            "an answer heard is not asked again"
-        );
+        assert!(tap(&mut app, &f, &i, Action::Open(Screen::SkywardUpdate)).is_empty(), "an answer heard is not asked again");
     }
 }

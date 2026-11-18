@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -54,7 +54,7 @@ fn yes_or_no(value: Option<&str>) -> Option<bool> {
 /// Every system property whose name starts with `prefix`, with its value.
 #[cfg(target_os = "android")]
 pub fn props(prefix: &str) -> Vec<(String, String)> {
-    use std::ffi::{c_char, c_void, CStr};
+    use std::ffi::{CStr, c_char, c_void};
     unsafe extern "C" {
         fn __system_property_read_callback(
             pi: *const libc::prop_info,
@@ -226,7 +226,53 @@ const RECORD_MOST: usize = 1024 - 48;
 /// the seconds since the phone started as the kernel log stamps it. The
 /// file takes the text first and whole; the kernel takes each of its lines
 /// as a record of its own, and a line longer than a record as several.
+/// Where a copy of the log outlives the recovery, for reading from the running
+/// system when the data partition will not open: the persist partition, which
+/// the phone mounts at boot, and the metadata partition, which is not
+/// encrypted. Whichever takes it is used.
+const KEPT_FILES: [&str; 2] = ["/mnt/vendor/persist/skyward-boot.log", "/metadata/skyward/boot.log"];
+
+/// What the log has said while none of [`KEPT_FILES`] could be written yet:
+/// the bring-up's own first lines come before the partition they are kept on
+/// is mounted, and they are wanted from the first of them. Held here until a
+/// file takes them, and let go of beyond a few thousand lines so that a phone
+/// whose partitions never mount does not grow this without end.
+static PENDING: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Whether `path` lies on a partition the phone has mounted: until persist is
+/// mounted, the folder it goes into is one of the ramdisk's own, which the
+/// partition then covers over -- a file written there is gone by the next line.
+fn on_a_mount(path: &str) -> bool {
+    let Ok(mounts) = std::fs::read_to_string("/proc/mounts") else { return false };
+    mounts.lines().filter_map(|line| line.split_whitespace().nth(1)).any(|point| path.starts_with(point) && point.len() > 1)
+}
+
+/// Append `text` to the first of [`KEPT_FILES`] that can be written, if any,
+/// with every line held so far before it.
+fn keep_besides(text: &str) {
+    let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
+    pending.push(text.to_string());
+    if pending.len() > 4000 {
+        pending.drain(..1000);
+    }
+    for path in KEPT_FILES {
+        if !on_a_mount(path) {
+            continue;
+        }
+        if let Some(dir) = std::path::Path::new(path).parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(path) {
+            for line in pending.drain(..) {
+                let _ = writeln!(f, "{line}");
+            }
+            return;
+        }
+    }
+}
+
 pub fn kmsg(text: &str) -> Result<()> {
+    keep_besides(text);
     let kept = match KEPT.get() {
         Some(kept) => {
             let mut kept = kept.lock().expect("nothing panics while writing the log");
@@ -323,14 +369,11 @@ pub fn kernel_log() -> Result<String> {
 /// was written at.
 #[cfg(any(target_os = "android", test))]
 fn without_levels(log: &str) -> String {
-    log.lines().map(|line| line.strip_prefix('<').and_then(|l| l.split_once('>')).map_or(line, |(_, rest)| rest)).fold(
-        String::with_capacity(log.len()),
-        |mut out, line| {
-            out.push_str(line);
-            out.push('\n');
-            out
-        },
-    )
+    log.lines().map(|line| line.strip_prefix('<').and_then(|l| l.split_once('>')).map_or(line, |(_, rest)| rest)).fold(String::with_capacity(log.len()), |mut out, line| {
+        out.push_str(line);
+        out.push('\n');
+        out
+    })
 }
 
 #[cfg(test)]
@@ -423,14 +466,7 @@ mod tests {
 
     #[test]
     fn power_names_round_trip() {
-        for (name, cmd) in [
-            ("system", "reboot,"),
-            ("recovery", "reboot,recovery"),
-            ("fastboot", "reboot,fastboot"),
-            ("bootloader", "reboot,bootloader"),
-            ("edl", "reboot,edl"),
-            ("off", "shutdown,"),
-        ] {
+        for (name, cmd) in [("system", "reboot,"), ("recovery", "reboot,recovery"), ("fastboot", "reboot,fastboot"), ("bootloader", "reboot,bootloader"), ("edl", "reboot,edl"), ("off", "shutdown,")] {
             assert_eq!(Power::parse(name).unwrap().command(), cmd);
         }
         assert_eq!(Power::parse("download"), None);

@@ -4,7 +4,8 @@ name: Build
 # A tag starting with v publishes that image as a release.
 on:
   push:
-    branches: ["**"]
+    # The preview branch is checked by compiling alone, in its own workflow.
+    branches-ignore: ["preview", "preview/**"]
     tags: ["v*"]
   workflow_dispatch:
 

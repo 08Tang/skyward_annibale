@@ -80,37 +80,6 @@ mod tests {
     use skyward_info::Charge;
 
     #[test]
-    fn a_home_page_grown_by_an_update_notice_scrolls_down_to_its_last_row() {
-        let f = fonts();
-        let plain = info();
-        let mut app = App::new(Screen::Home, W, SNUG, PPD);
-        let fr = app.frame(&f, &plain);
-        let reboot = fr.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;
-        assert!(reboot.y + reboot.h <= SNUG as f32, "without the notice the rows fit the screen");
-        let i = DeviceInfo { snapshot: SnapshotState::Snapshotted, ..info() };
-        let mut app = App::new(Screen::Home, W, SNUG, PPD);
-        let fr = app.frame(&f, &i);
-        let reboot = fr.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;
-        assert!(reboot.y + reboot.h > SNUG as f32, "the notice pushes the last row below the screen");
-        assert!(reboot.y + reboot.h <= fr.canvas.h as f32, "the page is drawn down to it");
-        app.touch(Touch::Down(700.0, 2800.0), &f, 0);
-        app.touch(Touch::Move(700.0, 2000.0), &f, 0);
-        app.touch(Touch::Move(700.0, 1200.0), &f, 0);
-        app.touch(Touch::Up, &f, 0);
-        for ms in (0..3000).step_by(8) {
-            app.tick(ms);
-        }
-        let (_, y) = spot(&mut app, &f, &i, Action::Open(Screen::Reboot));
-        assert!(y < SNUG as f32, "scrolled up into view");
-        tap_at(&mut app, &f, &i, Action::Open(Screen::Reboot), 3000);
-        assert_eq!(app.screen(), Screen::Reboot);
-    }
-
-    /// A screen too short for the home page's rows, which scrolls well past
-    /// the fold of its search bar.
-    const SHORT: u32 = 2600;
-
-    #[test]
     fn the_home_search_bar_folds_away_under_its_still_title_before_the_title_goes() {
         let (f, i) = (fonts(), info());
         let t = Theme::light(W, SHORT, PPD);
@@ -232,6 +201,42 @@ mod tests {
     }
 
     #[test]
+    fn a_home_page_grown_by_an_update_notice_scrolls_down_to_its_last_row() {
+        let f = fonts();
+        let plain = info();
+        // The home page lost the mount row, so a screen the old snug height
+        // fits leaves room the notice no longer fills.
+        let snug = SNUG - 380;
+        let mut app = App::new(Screen::Home, W, snug, PPD);
+        let fr = app.frame(&f, &plain);
+        let reboot = fr.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;
+        assert!(reboot.y + reboot.h <= snug as f32, "without the notice the rows fit the screen");
+        let i = DeviceInfo { snapshot: SnapshotState::Snapshotted, ..info() };
+        let mut app = App::new(Screen::Home, W, snug, PPD);
+        let fr = app.frame(&f, &i);
+        let reboot = fr.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;
+        assert!(reboot.y + reboot.h > snug as f32, "the notice pushes the last row below the screen");
+        assert!(reboot.y + reboot.h <= fr.canvas.h as f32, "the page is drawn down to it");
+        app.touch(Touch::Down(700.0, 2800.0), &f, 0);
+        app.touch(Touch::Move(700.0, 2000.0), &f, 0);
+        app.touch(Touch::Move(700.0, 1200.0), &f, 0);
+        app.touch(Touch::Up, &f, 0);
+        for ms in (0..3000).step_by(8) {
+            app.tick(ms);
+        }
+        let (_, y) = spot(&mut app, &f, &i, Action::Open(Screen::Reboot));
+        assert!(y < SNUG as f32, "scrolled up into view");
+        tap_at(&mut app, &f, &i, Action::Open(Screen::Reboot), 3000);
+        assert_eq!(app.screen(), Screen::Reboot);
+    }
+
+    /// A screen too short for the home page's rows, which scrolls well past
+    /// the fold of its search bar.
+    // The home page lost the mount row, so a screen this short is what leaves
+    // it scrollable.
+    const SHORT: u32 = 2200;
+
+    #[test]
     fn pulling_past_the_top_resists_and_springs_back() {
         let f = fonts();
         let mut app = App::new(Screen::Reboot, W, H, PPD);
@@ -311,15 +316,11 @@ mod tests {
             design: Some(5_500_000),
             full: Some(5_095_000),
             voltage: Some(4_200_000),
+            current: None,
             quick: false,
             plugged: false,
         };
-        let i = DeviceInfo {
-            os_version: Some("OS3.0.305.0.WMACNXM".into()),
-            android: Some("16".into()),
-            battery: Some(battery),
-            ..info()
-        };
+        let i = DeviceInfo { os_version: Some("OS3.0.305.0.WMACNXM".into()), android: Some("16".into()), battery: Some(battery), ..info() };
         let mut app = App::new(Screen::Specs, W, H, PPD);
         app.frame(&f, &i);
         let lift = flick(&mut app, &f, 1000, 20.0);

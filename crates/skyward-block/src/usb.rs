@@ -3,7 +3,7 @@
 //! on them to be read.
 
 use crate::mount;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Component, Path};
@@ -18,8 +18,7 @@ const DEV_BLOCK: &str = "/dev/block";
 /// what each is mounted with to give names as the drive keeps them: FAT
 /// and exFAT keep long names in UTF-16, which the kernel otherwise turns
 /// into a code page without Chinese.
-const FILESYSTEMS: [(&str, &str); 5] =
-    [("vfat", "utf8"), ("exfat", "iocharset=utf8"), ("ntfs3", "iocharset=utf8"), ("ext4", ""), ("f2fs", "")];
+const FILESYSTEMS: [(&str, &str); 5] = [("vfat", "utf8"), ("exfat", "iocharset=utf8"), ("ntfs3", "iocharset=utf8"), ("ext4", ""), ("f2fs", "")];
 
 /// A USB drive as the kernel lists it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,10 +90,7 @@ fn drives_in(listed: &Path) -> Result<Vec<Drive>> {
 /// its UFS controller.
 fn on_usb(device: &Path) -> bool {
     device.components().any(|part| match part {
-        Component::Normal(name) => name
-            .to_str()
-            .and_then(|n| n.strip_prefix("usb"))
-            .is_some_and(|bus| !bus.is_empty() && bus.bytes().all(|b| b.is_ascii_digit())),
+        Component::Normal(name) => name.to_str().and_then(|n| n.strip_prefix("usb")).is_some_and(|bus| !bus.is_empty() && bus.bytes().all(|b| b.is_ascii_digit())),
         _ => false,
     })
 }
@@ -121,6 +117,43 @@ fn present<T>(r: std::io::Result<T>) -> std::io::Result<Option<T>> {
     }
 }
 
+/// Show every partition of `drive` the kernel reads, each at `base` under its
+/// own name: a drive with two of them shows both, one under `sdg1` and the
+/// other under `sdg2`, rather than the first one found hiding the rest. Gives
+/// the ones shown, with their filesystems.
+pub fn mount_all(drive: &Drive, base: &Path) -> Result<Vec<(String, &'static str)>> {
+    fs::create_dir_all(base).with_context(|| format!("create {}", base.display()))?;
+    let mut shown = Vec::new();
+    let mut tried = Vec::new();
+    for name in drive.candidates() {
+        let at = base.join(name);
+        fs::create_dir_all(&at).with_context(|| format!("create {}", at.display()))?;
+        let device = Path::new(DEV_BLOCK).join(name);
+        let mut mounted = false;
+        for (filesystem, own) in FILESYSTEMS {
+            // Read and written, as in `mount`: a file on the phone is copied
+            // onto the drive from the file manager.
+            let options: Vec<String> = ["rw", "nosuid", "nodev", own].map(str::to_string).into();
+            match mount::mount(&device, &at, filesystem, &options) {
+                Ok(()) => {
+                    shown.push((name.to_string(), filesystem));
+                    mounted = true;
+                    break;
+                }
+                Err(e) => tried.push(format!("{name} as {filesystem}: {}", e.root_cause())),
+            }
+        }
+        // A division nothing reads leaves no empty folder standing in the list.
+        if !mounted {
+            let _ = fs::remove_dir(&at);
+        }
+    }
+    if shown.is_empty() {
+        bail!("{} holds no filesystem the kernel reads: {}", drive.disk, tried.join("; "));
+    }
+    Ok(shown)
+}
+
 /// Show `drive` read only at `at`: the first of its partitions, or its
 /// disk, that holds a filesystem the kernel reads. Gives the partition and
 /// the filesystem shown.
@@ -130,7 +163,10 @@ pub fn mount(drive: &Drive, at: &Path) -> Result<(String, &'static str)> {
     for name in drive.candidates() {
         let device = Path::new(DEV_BLOCK).join(name);
         for (filesystem, own) in FILESYSTEMS {
-            let options: Vec<String> = ["ro", "nosuid", "nodev", "noexec", own].map(str::to_string).into();
+            // Read and written: a file on the phone is copied onto the drive
+            // from the file manager, and a drive mounted read-only would turn
+            // every copy down.
+            let options: Vec<String> = ["rw", "nosuid", "nodev", own].map(str::to_string).into();
             match mount::mount(&device, at, filesystem, &options) {
                 Ok(()) => return Ok((name.to_string(), filesystem)),
                 Err(e) => tried.push(format!("{name} as {filesystem}: {}", e.root_cause())),

@@ -83,9 +83,9 @@ fn statvfs(path: &Path) -> io::Result<libc::statvfs> {
 
 #[cfg(target_os = "android")]
 mod sys {
-    use super::{Visible, FILESYSTEMS};
-    use anyhow::{bail, Context, Result};
-    use procfs::process::{all_processes, MMapPath, MountInfo, MountOptFields, Process};
+    use super::{FILESYSTEMS, Visible};
+    use anyhow::{Context, Result, bail};
+    use procfs::process::{MMapPath, MountInfo, MountOptFields, Process, all_processes};
     use procfs::{ProcError, ProcResult};
     use std::collections::{BTreeSet, HashMap, HashSet};
     use std::ffi::CString;
@@ -122,9 +122,7 @@ mod sys {
             let e = os_error();
             match e.raw_os_error() {
                 Some(libc::EINVAL | libc::ENODEV) => refused.push(format!("{fs}: {e}")),
-                _ => {
-                    return Err(e).with_context(|| format!("mount {} on {} as {fs}", device.display(), target.display()))
-                }
+                _ => return Err(e).with_context(|| format!("mount {} on {} as {fs}", device.display(), target.display())),
             }
         }
         bail!("{} holds none of {} ({})", device.display(), FILESYSTEMS.join(", "), refused.join("; "))
@@ -138,8 +136,7 @@ mod sys {
         let ty = CString::new(filesystem).with_context(|| format!("{filesystem} holds a NUL"))?;
         let data = CString::new(own.as_str()).with_context(|| format!("{own} holds a NUL"))?;
         if unsafe { libc::mount(src.as_ptr(), dst.as_ptr(), ty.as_ptr(), flags as libc::c_ulong, data.as_ptr().cast()) } != 0 {
-            return Err(os_error())
-                .with_context(|| format!("mount {} on {} as {filesystem} with {}", device.display(), target.display(), options.join(",")));
+            return Err(os_error()).with_context(|| format!("mount {} on {} as {filesystem} with {}", device.display(), target.display(), options.join(",")));
         }
         Ok(())
     }
@@ -327,6 +324,25 @@ mod sys {
         under_parked(target, umount_detach)
     }
 
+    /// Take away every mount at or under `base`, the deepest first. Nothing
+    /// here counts as a failure: a drive pulled out of the port has already had
+    /// its mounts go with it, and a folder that was never a mount point is no
+    /// work at all.
+    ///
+    /// `umount_detach_over` is not this: it unmounts `target` itself first and
+    /// gives up with EINVAL where `target` is only a folder holding the mounts
+    /// -- which is what the OTG drive's folder is, once each of its divisions
+    /// is shown under it (2026-11-16: pulling the drive ended the recovery,
+    /// and with it the partition was locked again).
+    pub fn umount_under(base: &Path) -> Result<()> {
+        let mut points: Vec<std::path::PathBuf> = mounts()?.into_iter().map(|m| m.mount_point).filter(|p| p.starts_with(base)).collect();
+        points.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
+        for point in points {
+            let _ = umount_detach(&point);
+        }
+        Ok(())
+    }
+
     fn under_parked(target: &Path, unmount: fn(&Path) -> Result<()>) -> Result<()> {
         let mut parked = park(target)?;
         if let Err(e) = unmount(target) {
@@ -429,7 +445,7 @@ mod sys {
 #[cfg(not(target_os = "android"))]
 mod sys {
     use super::Visible;
-    use anyhow::{bail, Result};
+    use anyhow::{Result, bail};
     use std::collections::{BTreeSet, HashMap};
     use std::path::Path;
 
@@ -465,6 +481,10 @@ mod sys {
         bail!("this host does not unmount {}", target.display())
     }
 
+    pub fn umount_under(base: &Path) -> Result<()> {
+        bail!("this host does not unmount {}", base.display())
+    }
+
     pub fn is_mount_point(path: &Path) -> Result<bool> {
         bail!("this host has no mount table to look up {}", path.display())
     }
@@ -495,8 +515,7 @@ mod sys {
 }
 
 pub use sys::{
-    bind, holders, holding, is_mount_point, mount, mount_ids, mount_ro, mount_ro_over, points_of, remount_writable, umount,
-    umount_detach, umount_detach_over, umount_over, visible,
+    bind, holders, holding, is_mount_point, mount, mount_ids, mount_ro, mount_ro_over, points_of, remount_writable, umount, umount_detach, umount_detach_over, umount_over, umount_under, visible,
 };
 
 #[cfg(test)]
@@ -505,10 +524,7 @@ mod tests {
 
     #[test]
     fn the_kernels_flags_are_taken_out_of_a_phones_mount_options() {
-        let data: Vec<String> = "noatime,nosuid,nodev,discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier,inlinecrypt,gc_merge,atgc"
-            .split(',')
-            .map(str::to_string)
-            .collect();
+        let data: Vec<String> = "noatime,nosuid,nodev,discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier,inlinecrypt,gc_merge,atgc".split(',').map(str::to_string).collect();
         let (flags, own) = split_options(&data);
         assert_eq!(flags, (1 << 10) | (1 << 1) | (1 << 2), "noatime, nosuid and nodev");
         assert_eq!(own, "discard,reserve_root=32768,resgid=1065,fsync_mode=nobarrier,inlinecrypt,gc_merge,atgc");

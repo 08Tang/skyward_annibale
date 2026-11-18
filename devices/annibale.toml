@@ -91,6 +91,14 @@ package_version = "OS4.0.6.0.XPKCNXM"
 package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS4.0.6.0.XPKCNXM/annibale-ota_full-OS4.0.6.0.XPKCNXM-user-17.0-0207c91df5.zip"
 recovery = "2ee942234acfde1bb0e6abfdc87eb34439966008052ff68f4ee65484519b926a"
 
+# The baseband's settings with the phone's own identity, and the sensors'
+# calibration. modemst1 and modemst2 hold the modem's own storage, fsg the
+# factory settings it falls back on, fsc the counters beside them, and
+# persist the MAC addresses, the sensors' calibration and the WLAN's own
+# files. The phone's partition table names all five as it names no other.
+[backup]
+efs = ["modemst1", "modemst2", "fsg", "fsc", "persist"]
+
 # qcom-hv-haptics (qcom,hv-haptics in its dtbo), whose driver says the
 # motor's resonant frequency as the 17 Ultra's does; the click is made from
 # samples at that frequency, and the strengths are the 17 Ultra's. Neither

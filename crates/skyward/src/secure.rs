@@ -2,7 +2,7 @@
 //! recovery: the libraries their partitions were built against, and a
 //! service directory that knows the phone describes them.
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -99,35 +99,30 @@ pub fn prepare_hardware_directory(wanted: &[String]) -> Result<()> {
     // Made under the recovery's own umask the folder is root's alone, and
     // the programs that ask for this loader run as the users their init
     // scripts name: as the system's own folder is, it is open to all.
-    fs::set_permissions(dir, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-        .with_context(|| format!("open {} to every user", dir.display()))?;
+    fs::set_permissions(dir, std::os::unix::fs::PermissionsExt::from_mode(0o755)).with_context(|| format!("open {} to every user", dir.display()))?;
     if loader.exists() {
         fs::remove_file(loader).with_context(|| format!("take away {}", loader.display()))?;
     }
     std::os::unix::fs::symlink(&from, loader).with_context(|| format!("point {} at {}", loader.display(), from.display()))?;
     let driver = Path::new(HARDWARE_DRIVER);
     if !driver.exists() {
-        std::os::unix::fs::symlink(HARDWARE_DRIVER_NODE, driver)
-            .with_context(|| format!("point {HARDWARE_DRIVER} at {HARDWARE_DRIVER_NODE}"))?;
+        std::os::unix::fs::symlink(HARDWARE_DRIVER_NODE, driver).with_context(|| format!("point {HARDWARE_DRIVER} at {HARDWARE_DRIVER_NODE}"))?;
     }
     // The system's own init opens the driver to every program, as it does
     // /dev/binder; a recovery's, which uses none of it, leaves it root's
     // alone, and the directory and the services that register with it run
     // as the users their init scripts name.
-    fs::set_permissions(driver, std::os::unix::fs::PermissionsExt::from_mode(0o666))
-        .with_context(|| format!("open {HARDWARE_DRIVER} to every program"))?;
+    fs::set_permissions(driver, std::os::unix::fs::PermissionsExt::from_mode(0o666)).with_context(|| format!("open {HARDWARE_DRIVER} to every program"))?;
     let from = Path::new(SERVICE_LABELS);
     let into = Path::new(RECOVERY_LABELS).join(from.file_name().expect("a named file"));
     fs::create_dir_all(RECOVERY_LABELS).with_context(|| format!("make {RECOVERY_LABELS}"))?;
     // The directory reads both of these as the user its init script names,
     // and what the recovery makes under its own umask is root's alone: they
     // are given the modes the system's own copies have.
-    fs::set_permissions(RECOVERY_LABELS, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-        .with_context(|| format!("open {RECOVERY_LABELS} to every user"))?;
+    fs::set_permissions(RECOVERY_LABELS, std::os::unix::fs::PermissionsExt::from_mode(0o755)).with_context(|| format!("open {RECOVERY_LABELS} to every user"))?;
     fs::copy(from, &into).with_context(|| format!("copy {} to {}", from.display(), into.display()))?;
     fs::write(RECOVERY_MANIFEST, describe_hardware(wanted)?).with_context(|| format!("write {RECOVERY_MANIFEST}"))?;
-    fs::set_permissions(RECOVERY_MANIFEST, std::os::unix::fs::PermissionsExt::from_mode(0o644))
-        .with_context(|| format!("let every user read {RECOVERY_MANIFEST}"))?;
+    fs::set_permissions(RECOVERY_MANIFEST, std::os::unix::fs::PermissionsExt::from_mode(0o644)).with_context(|| format!("let every user read {RECOVERY_MANIFEST}"))?;
     // The directory turns itself off when it cannot find its own
     // description, and a run of it before this was written may have left
     // that behind.
@@ -142,9 +137,7 @@ pub fn prepare_hardware_directory(wanted: &[String]) -> Result<()> {
 fn describe_hardware(wanted: &[String]) -> Result<String> {
     let mut out = String::from("<manifest version=\"1.0\" type=\"framework\">\n");
     for name in std::iter::once(HARDWARE_DIRECTORY).chain(wanted.iter().map(String::as_str)) {
-        let (package, rest) = name
-            .split_once('@')
-            .with_context(|| format!("{name} does not read as a hardware service's name"))?;
+        let (package, rest) = name.split_once('@').with_context(|| format!("{name} does not read as a hardware service's name"))?;
         out.push_str("    <hal format=\"hidl\">\n");
         out.push_str(&format!("        <name>{package}</name>\n"));
         out.push_str("        <transport>hwbinder</transport>\n");
@@ -202,14 +195,25 @@ fn image(file: &Path) -> Result<(u64, u64)> {
 /// description of one program or in the one a whole partition shares, and
 /// the directory reads the whole of its description directory at once, so
 /// that one file it cannot make sense of leaves it describing nothing.
-pub fn publish_descriptions(wanted: &[String]) -> Result<()> {
+/// What the directory was told to read again: the process that answered
+/// before, and what had registered with it, each with the init service behind
+/// it, to be started again once it answers anew.
+pub struct Restarting {
+    was: Option<u32>,
+    registered: Vec<(String, String)>,
+}
+
+/// Write what the recovery's own programs register, and have the directory
+/// start again where it has to read these anew -- without waiting for it:
+/// what the page waits for (the drivers, the phone's files) goes on at the
+/// same time, and the directory is waited for by [`await_descriptions`].
+pub fn write_descriptions(wanted: &[String]) -> Result<Option<Restarting>> {
     let into = Path::new(RECOVERY_DESCRIPTIONS);
     fs::create_dir_all(into).with_context(|| format!("make {}", into.display()))?;
     // Both directories read these as the users their init scripts name,
     // and what the recovery makes under its own umask is root's alone: the
     // folder and the description are given the modes the system's own have.
-    fs::set_permissions(into, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-        .with_context(|| format!("open {} to every user", into.display()))?;
+    fs::set_permissions(into, std::os::unix::fs::PermissionsExt::from_mode(0o755)).with_context(|| format!("open {} to every user", into.display()))?;
     let to = into.join(PHONE_DESCRIPTION);
     // A service told of twice has the directory take none of what it
     // reads, so what the descriptions the recovery ships with tell of
@@ -242,18 +246,64 @@ pub fn publish_descriptions(wanted: &[String]) -> Result<()> {
             break;
         }
     }
-    if unknown || rewritten > 0 {
-        // It comes back knowing nothing of what had registered with it,
-        // and nothing registers again by itself, so init starts each of
-        // those services again, as the installed system's init does
-        // whenever its directory restarts.
+    if rewritten > 0 || unknown {
+        skyward_sys::kmsg("the description is written; the directory has to start again")?;
+        // It comes back knowing nothing of what had registered with it, and
+        // nothing registers again by itself, so init starts each of those
+        // services again once it answers, which `await_descriptions` does.
         let registered = registered()?;
         let was = crate::services::running(DIRECTORY_PROGRAM);
-        skyward_sys::set_prop("ctl.restart", DIRECTORY_SERVICE).context("have the service directory start again")?;
-        answering_again(was)?;
-        register_again(&registered)?;
+        // Stopped and started by hand rather than through `ctl.restart`: the
+        // directory's own service is `disabled`, and init's restart of a
+        // disabled service does not come back at once -- it was 3.67 s between
+        // the kill and the new process, all of it waited for here
+        // (2026-11-15). `ctl.start` starts a disabled service as asked.
+        skyward_sys::set_prop("ctl.stop", DIRECTORY_SERVICE).context("have the service directory stop")?;
+        let mut gone = false;
+        for _ in 0..400 {
+            if crate::services::running(DIRECTORY_PROGRAM).is_none() {
+                gone = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        // If it would not go, init is asked for a restart instead: waiting for
+        // a process that never left would have this read the one already
+        // there as the new one, and the descriptions would never be read.
+        // 手起只在目录的服务是 `disabled` 时才成立（pudding 就是那样）。
+        // 有些机型这份服务不是 disabled，`ctl.start` 会被 init 拒
+        // 掉 —— 那时退回 `ctl.restart`，否则整个 bring_up 在这里就断了，
+        // 密钥程序一个都不会起，解密只会报 keymint 没在跑。
+        let by_hand = gone && skyward_sys::set_prop("ctl.start", DIRECTORY_SERVICE).is_ok();
+        if !by_hand {
+            if gone {
+                skyward_sys::kmsg("the directory is not started by hand here; init is asked to restart it")?;
+            }
+            skyward_sys::set_prop("ctl.restart", DIRECTORY_SERVICE).context("have the service directory start again")?;
+        }
+        return Ok(Some(Restarting { was, registered }));
     }
+    Ok(None)
+}
+
+/// Wait until the directory answers again, and have what had registered with
+/// it register again: those services register once, as it reads the
+/// descriptions once.
+pub fn await_descriptions(restarting: Option<Restarting>) -> Result<()> {
+    let Some(Restarting { was, registered }) = restarting else { return Ok(()) };
+    let starting = Instant::now();
+    answering_again(was)?;
+    skyward_sys::kmsg(&format!("the directory answers again after {:.2} s", starting.elapsed().as_secs_f64()))?;
+    let told = Instant::now();
+    register_again(&registered)?;
+    skyward_sys::kmsg(&format!("the {} services that had registered are answered again in {:.2} s", registered.len(), told.elapsed().as_secs_f64()))?;
     Ok(())
+}
+
+/// Write the descriptions and wait for the directory, as one.
+pub fn publish_descriptions(wanted: &[String]) -> Result<()> {
+    let restarting = write_descriptions(wanted)?;
+    await_descriptions(restarting)
 }
 
 /// What has registered with the service directory, each with the init
@@ -269,10 +319,8 @@ fn registered() -> Result<Vec<(String, String)>> {
         if pid == directory {
             continue;
         }
-        let (prop, _) = started
-            .iter()
-            .find(|(_, value)| value.parse() == Ok(pid))
-            .with_context(|| format!("{name} is served by process {pid}, which init does not run, so nothing would register it again"))?;
+        let (prop, _) =
+            started.iter().find(|(_, value)| value.parse() == Ok(pid)).with_context(|| format!("{name} is served by process {pid}, which init does not run, so nothing would register it again"))?;
         out.push((name, prop[SERVICE_PIDS.len()..].to_string()));
     }
     Ok(out)

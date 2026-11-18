@@ -1,0 +1,117 @@
+name: Preview
+
+# The preview branch carries pages brought over from other phones' builds
+# before they are ready for `main`. It is checked by compiling alone: the
+# workspace as it builds on the computer, the recovery as it builds for the
+# phone, and the recovery packed into an image that can be flashed. No
+# linting and no tests, so that a page half brought over still says whether
+# it builds and what it builds into.
+on:
+  push:
+    branches: ["preview", "preview/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  compile:
+    name: Compile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # The preview branch takes in dependencies the release does not have
+      # yet, so the lock file is brought up to date rather than held to.
+      - name: Compile what runs on the computer
+        run: cargo check --workspace --all-targets
+      - name: Compile what runs on the phone
+        run: cargo ndk -t arm64-v8a --platform 30 check --workspace --all-targets
+
+  # `check` only type-checks; nothing is linked and no image comes out. This
+  # job does the real build, so that a preview says whether it is a recovery
+  # that runs, not only one that type-checks.
+  recovery:
+    name: Recovery for annibale
+    needs: compile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Build the recovery service for the phone
+        run: cargo ndk -t arm64-v8a --platform 30 build --release -p skyward
+      # It runs as a second system's first program, before any library is
+      # there to load.
+      - name: Build the second system's first program, static
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: cargo ndk -t arm64-v8a --platform 30 build --release -p skyward-system-init --target-dir target/system-init
+      - name: Build the packer
+        run: cargo build --release -p skyward-pack
+      - name: Gather them
+        run: |
+          mkdir tools
+          cp target/aarch64-linux-android/release/skyward target/release/skyward-pack tools/
+          cp target/system-init/aarch64-linux-android/release/system-init tools/
+      - name: Make the tools runnable
+        run: chmod +x tools/skyward tools/skyward-pack
+      - name: Read the stock build the recovery is made on
+        id: stock
+        run: tools/skyward-pack stock --config devices/annibale.toml >> "$GITHUB_OUTPUT"
+      - name: Restore the stock recovery
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: stock/recovery.img
+          key: stock-recovery-${{ steps.stock.outputs.recovery }}
+      # Only what the recovery partition takes is read of the package, which
+      # is several gigabytes in all.
+      - name: Take the recovery partition out of the stock package
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: tools/skyward-pack stock --config devices/annibale.toml --out stock/recovery.img
+      - name: Check the stock recovery
+        env:
+          RECOVERY: ${{ steps.stock.outputs.recovery }}
+        run: echo "$RECOVERY  stock/recovery.img" | sha256sum --check
+      - name: Pack the recovery
+        id: pack
+        env:
+          STOCK: ${{ steps.stock.outputs.version }}
+        run: |
+          version="${GITHUB_SHA::7}"
+          name="skyward-$version-annibale-$STOCK"
+          mkdir out
+          tools/skyward-pack recovery --stock stock/recovery.img --binary tools/skyward --system-init tools/system-init \
+            --config devices/annibale.toml --font resources/fonts/MiSansVF.ttf --mono resources/fonts/KirkMono-Regular.ttf \
+            --mono-license resources/fonts/KirkMono-OFL.txt --out "out/$name.img"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      # The image is checked as it will be flashed: its header, and the files
+      # its ramdisk holds, the recovery service among them.
+      - name: Check the image
+        env:
+          NAME: ${{ steps.pack.outputs.name }}
+        run: |
+          tools/skyward-pack list "out/$NAME.img"
+          size=$(stat -c%s "out/$NAME.img")
+          echo "image is $size bytes"
+      # The image is the whole partition, flashed as it is, and most of it is
+      # the room the recovery leaves empty; it is handed out zipped.
+      - name: Zip the image
+        working-directory: out
+        env:
+          NAME: ${{ steps.pack.outputs.name }}
+        run: zip -9 "$NAME.zip" "$NAME.img"
+      # The artifact takes the zip's name.
+      - uses: actions/upload-artifact@v7
+        with:
+          path: out/${{ steps.pack.outputs.name }}.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 7

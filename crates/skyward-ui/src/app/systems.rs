@@ -17,11 +17,7 @@ pub struct SystemChoice {
 
 /// The system that starts, as the runtime last read the systems.
 pub fn starting(systems: &Overview) -> Who {
-    if systems.other_starts {
-        Who::Other
-    } else {
-        Who::Installed
-    }
+    if systems.other_starts { Who::Other } else { Who::Installed }
 }
 
 /// Work on the systems the runtime carries out for the systems page.
@@ -311,7 +307,7 @@ mod tests {
         let y = track.centre().1 - app.top().1;
         app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
         app.touch(Touch::Move(track.x + track.w, y), &f, 1000);
-        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::InstallSystem { size: 8 << 30 }]);
+        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Haptic, Effect::InstallSystem { size: 8 << 30 }]);
         assert_eq!(app.state.install, Install::Systeming { name: "Ubuntu Touch".into(), stage: None });
         app.install(Event::Progress(Stage::Root { done: 1 << 30, total: 6 << 30 }), 1000);
         assert_eq!(app.state.install, Install::Systeming { name: "Ubuntu Touch".into(), stage: Some(Stage::Root { done: 1 << 30, total: 6 << 30 }) });

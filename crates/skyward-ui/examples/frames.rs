@@ -2,7 +2,7 @@ use skyward_info::{Battery, Boot, Charge, Cpu, DeviceInfo, Storage};
 use skyward_ui::app::{Action, FileKind, FileRow, Key, Screen, Touch};
 use skyward_ui::pages::Band;
 use skyward_ui::widgets::{self, Cap};
-use skyward_ui::{pages, App, Canvas, Ctx, Fonts, Theme};
+use skyward_ui::{App, Canvas, Ctx, Fonts, Theme, pages};
 use skyward_vab::{Slot, SnapshotState};
 use std::time::Instant;
 
@@ -123,15 +123,7 @@ fn run(name: &str, f: &Fonts, i: &DeviceInfo, quiet: bool) {
         }
         "files" => {
             let mut p = Panel::new(Screen::Files, f, i, quiet);
-            let many = (0..5000).map(|k| FileRow {
-                name: format!("IMG_{k:05}.jpg"),
-                kind: FileKind::File,
-                size: 4_200_000,
-                modified: 1_792_348_260,
-                mode: 0o100_644,
-                uid: 1023,
-                gid: 1023,
-            });
+            let many = (0..5000).map(|k| FileRow { name: format!("IMG_{k:05}.jpg"), kind: FileKind::File, size: 4_200_000, modified: 1_792_348_260, mode: 0o100_644, uid: 1023, gid: 1023 });
             p.app.set_files("/sdcard/DCIM/Camera".into(), Ok(many.collect()), 1_792_348_260 + 86_400);
             p.run(100);
             p.skip();
@@ -200,10 +192,7 @@ fn renders(f: &Fonts, i: &DeviceInfo, only: Option<&str>, quiet: bool) {
             let (whole, first, laid) = (time(None), time(band((0, H))), time(band((0, 0))));
             if !quiet {
                 let held = if t.pal.card == Theme::light(W, H, PPD).pal.card { "" } else { " held down" };
-                println!(
-                    "render {screen:?}{held}: {:.1} ms (slowest {:.1}), its first screen {:.1} ms (slowest {:.1}), laid out only {:.2} ms",
-                    whole.0, whole.1, first.0, first.1, laid.0
-                );
+                println!("render {screen:?}{held}: {:.1} ms (slowest {:.1}), its first screen {:.1} ms (slowest {:.1}), laid out only {:.2} ms", whole.0, whole.1, first.0, first.1, laid.0);
             }
         }
     }
@@ -325,13 +314,7 @@ impl<'a> Panel<'a> {
         let worst = (0..ms.len()).max_by(|&a, &b| ms[a].total_cmp(&ms[b])).expect("frames were drawn") + 1;
         ms.sort_by(f64::total_cmp);
         let at = |q: f64| ms[((ms.len() - 1) as f64 * q).round() as usize];
-        println!(
-            "{what}: {} frames, median {:.2} ms, 90% {:.2}, slowest {:.2} (frame {worst}), {over} over {BUDGET_MS} ms",
-            ms.len(),
-            at(0.5),
-            at(0.9),
-            at(1.0)
-        );
+        println!("{what}: {} frames, median {:.2} ms, 90% {:.2}, slowest {:.2} (frame {worst}), {over} over {BUDGET_MS} ms", ms.len(), at(0.5), at(0.9), at(1.0));
     }
 }
 
@@ -361,6 +344,7 @@ fn info() -> DeviceInfo {
             design: None,
             full: None,
             voltage: None,
+            current: None,
             quick: false,
             plugged: true,
         }),

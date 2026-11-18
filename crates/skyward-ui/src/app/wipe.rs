@@ -24,8 +24,7 @@ pub enum Wipe {
 }
 
 /// What the wipe page offers, in the order it lists them.
-pub const WIPES: [Wipe; 9] =
-    [Wipe::All, Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates, Wipe::Cache];
+pub const WIPES: [Wipe; 9] = [Wipe::All, Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates, Wipe::Cache];
 
 /// A part of the phone that erasing goes through, in the order it does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -167,7 +166,9 @@ mod tests {
         assert!(app.display_on(), "what comes next is the user's to choose");
         assert_eq!(app.state.data, Data::Erased, "the data partition went before /metadata failed");
         let later = 2000;
-        assert_eq!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::PowerOff), later), vec![Effect::Reboot(Target::PowerOff)]);
+        // The panel came up under the lock: the knob opens it before a tap.
+        unlock(&mut app, &f, later);
+        assert_eq!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::PowerOff), later + 300), vec![Effect::Reboot(Target::PowerOff)]);
         assert_eq!(tap_at(&mut app, &f, &i, Action::Dismiss, later), vec![Effect::Dismiss]);
         assert_eq!(app.screen(), Screen::Home);
     }
@@ -235,7 +236,9 @@ mod tests {
         assert!(app.display_on(), "how it ended waits to be read");
         assert_eq!(app.state.data, Data::Closed, "the data partition itself stays");
         let later = 2000;
-        assert_eq!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::System), later), vec![Effect::Reboot(Target::System)]);
+        // The panel came up under the lock: the knob opens it before a tap.
+        unlock(&mut app, &f, later);
+        assert_eq!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::System), later + 300), vec![Effect::Reboot(Target::System)]);
         assert_eq!(tap_at(&mut app, &f, &i, Action::Dismiss, later), vec![Effect::Dismiss]);
         assert_eq!(app.screen(), Screen::Home);
     }
@@ -251,8 +254,12 @@ mod tests {
         assert_eq!(app.state.data, Data::Locked { user: 0, keys: Keys::Digits, checking: false }, "the partition stays as it was");
         assert_eq!(tap_at(&mut app, &f, &i, Action::Dismiss, 1000), vec![Effect::Dismiss]);
         assert_eq!(app.screen(), Screen::Home);
-        assert_eq!(tap_at(&mut app, &f, &i, Action::Open(Screen::Decrypt), 1000), Vec::new(), "the screen lock is asked for at once");
-        assert_eq!(app.screen(), Screen::Decrypt);
+        // The decrypt page is on the advanced page now: the screen lock is
+        // asked for as soon as it opens.
+        let mut on = App::new(Screen::Advanced, W, H, PPD);
+        on.state.data = Data::Locked { user: 0, keys: Keys::Digits, checking: false };
+        assert!(tap(&mut on, &f, &i, Action::Open(Screen::Decrypt)).is_empty(), "the screen lock is asked for at once");
+        assert_eq!(on.screen(), Screen::Decrypt);
     }
 
     #[test]
@@ -264,7 +271,11 @@ mod tests {
         app.erase_ended(Ok(()), 0);
         assert_eq!(app.state.data, Data::Erased);
         assert_eq!(tap_at(&mut app, &f, &i, Action::Dismiss, 1000), vec![Effect::Dismiss]);
-        assert!(tap_at(&mut app, &f, &i, Action::Open(Screen::Decrypt), 1000).is_empty(), "nothing opens until the system makes it afresh");
-        assert_eq!(app.screen(), Screen::Decrypt);
+        // The decrypt page is opened from the advanced page, which is where
+        // the row is; what the page says of itself is that nothing opens.
+        let mut on = App::new(Screen::Advanced, W, H, PPD);
+        on.state.data = Data::Erased;
+        assert!(tap(&mut on, &f, &i, Action::Open(Screen::Decrypt)).is_empty(), "nothing opens until the system makes it afresh");
+        assert_eq!(on.screen(), Screen::Decrypt);
     }
 }

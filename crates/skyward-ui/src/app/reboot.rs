@@ -80,7 +80,7 @@ mod tests {
         app.touch(Touch::Move(track.x + track.w / 2.0, y), &f, 0);
         app.touch(Touch::Move(track.x + track.w, y), &f, 0);
         let fx = app.touch(Touch::Up, &f, 0);
-        assert_eq!(fx, vec![Effect::Reboot(Target::Bootloader)]);
+        assert_eq!(fx, vec![Effect::Haptic, Effect::Reboot(Target::Bootloader)]);
         assert_eq!(app.state.confirm, 0.0, "the knob springs back");
     }
 
@@ -134,7 +134,7 @@ mod tests {
         assert_eq!(app.screen(), Screen::Home);
         app.key(Key::Back, 0);
         assert_eq!(app.screen(), Screen::Home, "fastboot is not behind it");
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))), "the keys go on working the pages");
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))), "the keys go on working the pages");
         app.touch(Touch::Down(W as f32 / 2.0, 200.0), &f, 0);
         app.touch(Touch::Up, &f, 0);
         assert_eq!(press(&mut app, Key::Power, 0), vec![Effect::Ticks]);

@@ -134,6 +134,10 @@ pub enum Refusal {
     Resized(String),
     /// The data partition has been made afresh since the backup.
     DataReset,
+    /// Nothing that was chosen to be taken is there to take: the parts asked
+    /// for hold nothing this phone names, as the baseband's does where the
+    /// configuration names no partition of it.
+    Nothing,
 }
 
 impl std::fmt::Display for Refusal {
@@ -144,6 +148,7 @@ impl std::fmt::Display for Refusal {
             Refusal::OtherPhone(device) => write!(f, "the backup was made on {device}"),
             Refusal::Resized(name) => write!(f, "{name} is not the size it was backed up at"),
             Refusal::DataReset => write!(f, "the data partition has been made afresh since the backup"),
+            Refusal::Nothing => write!(f, "nothing that was chosen to be taken is on this phone to take"),
         }
     }
 }
@@ -356,6 +361,11 @@ fn backup(t: BackupTask, tell: &dyn Fn(Event), cancel: &AtomicBool) -> Result<Pa
     }
     // Compressed, what the files take is not known until they are written.
     needed += plan.iter().map(|p| p.3).sum::<u64>();
+    // A backup of nothing is not made: the folder would hold a manifest
+    // listing no files, and be reported as a backup that was saved.
+    if plan.is_empty() {
+        return Err(Refusal::Nothing.into());
+    }
     let free = free_bytes(&t.into)?;
     if !t.compress && needed > free {
         return Err(Refusal::Room { needed, free }.into());

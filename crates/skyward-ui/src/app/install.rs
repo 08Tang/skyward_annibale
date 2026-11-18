@@ -74,28 +74,50 @@ pub enum Install {
     Waiting,
     /// The package of `size` bytes is looked at; a zip's signature is
     /// checked, once the installer tells how far.
-    Checking { size: u64, stage: Option<Stage> },
+    Checking {
+        size: u64,
+        stage: Option<Stage>,
+    },
     /// An image waits to be told where it goes.
     Choosing(Choice),
     /// An update waits for the user to agree: the version it brings, and
     /// whether all user data is erased after it.
-    Confirming { version: Option<String>, wipe: bool },
+    Confirming {
+        version: Option<String>,
+        wipe: bool,
+    },
     /// `overwriting` says whether the update writes over the running
     /// system.
-    Updating { version: Option<String>, stage: Option<Stage>, overwriting: bool },
-    Flashing { partition: &'static str, stage: Option<Stage> },
+    Updating {
+        version: Option<String>,
+        stage: Option<Stage>,
+        overwriting: bool,
+    },
+    Flashing {
+        partition: &'static str,
+        stage: Option<Stage>,
+    },
     /// A zip with an install script waits for the user to agree to run it.
     ConfirmingScript,
     /// A system to install beside the installed one waits for the room its
     /// root takes to be chosen.
     SystemChoosing(SystemChoice),
     /// The system is being installed: its name, and how far.
-    Systeming { name: String, stage: Option<Stage> },
+    Systeming {
+        name: String,
+        stage: Option<Stage>,
+    },
     /// Its install script is made ready and then, once `running`, runs; how
     /// far it says it is, once it says.
-    Scripting { stage: Option<Stage>, running: bool },
+    Scripting {
+        stage: Option<Stage>,
+        running: bool,
+    },
     /// `damage` is what a failure may have left broken.
-    Finished { outcome: Outcome, damage: Option<Damage> },
+    Finished {
+        outcome: Outcome,
+        damage: Option<Damage>,
+    },
     /// In rescue, all user data is being erased, as the computer asked.
     Wiping,
     /// In rescue, erasing all user data ended: done, or why it stopped.
@@ -235,9 +257,7 @@ impl App {
                     *overwriting = true;
                 }
             }
-            Event::Image { kind, size, partitions } => {
-                *install = Install::Choosing(Choice { kind, size, partitions, partition: 0, pick: Pick::Current })
-            }
+            Event::Image { kind, size, partitions } => *install = Install::Choosing(Choice { kind, size, partitions, partition: 0, pick: Pick::Current }),
             Event::Script => *install = Install::ConfirmingScript,
             Event::System { name, version, sizes } => *install = Install::SystemChoosing(SystemChoice { name, version, sizes, size: 0 }),
             Event::Running => {
@@ -264,9 +284,7 @@ impl App {
             Event::Done(outcome) | Event::Finished(outcome) => {
                 let damage = match (&outcome, &*install) {
                     (Outcome::Failed(_), Install::Updating { overwriting: true, .. }) => Some(Damage::System),
-                    (Outcome::Failed(_), Install::Flashing { partition, stage: Some(Stage::Flashing { done, .. }) }) if *done > 0 => {
-                        Some(Damage::Partition(partition))
-                    }
+                    (Outcome::Failed(_), Install::Flashing { partition, stage: Some(Stage::Flashing { done, .. }) }) if *done > 0 => Some(Damage::Partition(partition)),
                     (Outcome::Failed(_), Install::Scripting { running: true, .. }) => Some(Damage::Script),
                     _ => None,
                 };
@@ -353,7 +371,7 @@ mod tests {
         let y = track.centre().1 - app.top().1;
         app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
         app.touch(Touch::Move(track.x + track.w, y), &f, 1000);
-        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Flash { partition: "boot", pick: Pick::Both }]);
+        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Haptic, Effect::Flash { partition: "boot", pick: Pick::Both }]);
         assert_eq!(app.state.install, Install::Flashing { partition: "boot", stage: None });
         app.install(Event::Progress(Stage::Flashing { done: 10, total: 40 }), 1000);
         assert_eq!(app.state.install, Install::Flashing { partition: "boot", stage: Some(Stage::Flashing { done: 10, total: 40 }) });
@@ -426,7 +444,7 @@ mod tests {
         let y = track.centre().1 - app.top().1;
         app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
         app.touch(Touch::Move(track.x + track.w, y), &f, 1000);
-        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Install]);
+        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Haptic, Effect::Install]);
         assert_eq!(app.state.install, Install::Updating { version: Some("OS3.0.306.0.WMACNXM".into()), stage: None, overwriting: false });
         app.key(Key::Back, 1000);
         assert_eq!(app.screen(), Screen::Installing, "an update being written keeps the page");
@@ -454,7 +472,7 @@ mod tests {
         let y = track.centre().1 - app.top().1;
         app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
         app.touch(Touch::Move(track.x + track.w, y), &f, 1000);
-        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Install]);
+        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Haptic, Effect::Install]);
         assert_eq!(app.state.install, Install::Scripting { stage: None, running: false });
         app.install(Event::Running, 1000);
         for line in ["- Flashing boot", " ", "- Done"] {
