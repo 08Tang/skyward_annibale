@@ -121,13 +121,14 @@ fn cut(src: &[u8], w: u32, h: u32, channels: usize, size: u32) -> Vec<u8> {
 /// `device_name` line of the settings file, whose bytes are a string table
 /// rather than text.
 ///
-/// The name the owner gave the phone is the one at the top of its settings,
-/// which is kept as `bluetooth_name` — MIUI writes the name set there to that
-/// key, since the name the phone is found by over Bluetooth is the same one.
-/// Where that is absent the settings' own `device_name` is read; where nothing
-/// is kept at all, the caller falls back to the model.
+/// The name the owner gave the phone is kept as `device_name`, which is what
+/// Android means by the phone's name. `bluetooth_name` is read only where that
+/// is absent: it is the name the phone is found by over Bluetooth, and the apps
+/// of what it has been paired with write it, so a phone that has been paired
+/// with a band may hold the band's name there rather than its own. Where
+/// nothing is kept at all, the caller falls back to the model.
 pub fn device_name(secure: &Path) -> Option<String> {
-    named(secure, b"bluetooth_name").or_else(|| named(secure, b"device_name"))
+    named(secure, b"device_name").or_else(|| named(secure, b"bluetooth_name"))
 }
 
 /// The string kept after `key` in the settings file at `path`.
@@ -180,14 +181,25 @@ mod tests {
     }
 
     #[test]
-    fn a_name_is_read_from_the_settings_string_table() {
-        // What the phone keeps: zero, index, zero, length, then the bytes. The
-        // Bluetooth name comes first, the model behind it.
+    fn the_settings_own_name_is_read_before_the_bluetooth_one() {
+        // What the phone keeps: zero, index, zero, length, then the bytes. A
+        // phone paired with a band may hold the band's name as its Bluetooth
+        // name; its own name is the one shown.
         let mut bytes = vec![b'X'; 20];
-        bytes.extend(b"\x00\x04\x00\x0ebluetooth_name/\x00\x05\x00\x07Mari0us/\x00\x06\x00\x0bdevice_name/\x00\x07\x00\x09Xiaomi 17/");
+        bytes.extend(b"\x00\x04\x00\x0ebluetooth_name/\x00\x05\x00\x16Xiaomi Smart Band 9 56B0/\x00\x06\x00\x0bdevice_name/\x00\x07\x00\x09Xiaomi 17/");
         let at = std::env::temp_dir().join("skyward-avatar-name-test");
         std::fs::write(&at, &bytes).unwrap();
-        assert_eq!(device_name(&at).as_deref(), Some("Mari0us"), "the name the owner gave is the one read");
+        assert_eq!(device_name(&at).as_deref(), Some("Xiaomi 17"), "the phone's own name wins over the band's");
+        let _ = std::fs::remove_file(&at);
+    }
+
+    #[test]
+    fn the_bluetooth_name_is_read_where_no_other_is_kept() {
+        let mut bytes = vec![b'X'; 20];
+        bytes.extend(b"\x00\x04\x00\x0ebluetooth_name/\x00\x05\x00\x07Mari0us/");
+        let at = std::env::temp_dir().join("skyward-avatar-bluetooth-test");
+        std::fs::write(&at, &bytes).unwrap();
+        assert_eq!(device_name(&at).as_deref(), Some("Mari0us"));
         let _ = std::fs::remove_file(&at);
     }
 
@@ -205,7 +217,7 @@ mod tests {
     fn a_chinese_name_is_read_whole() {
         // The one the owner gave this phone: four characters, twelve bytes.
         let mut bytes = vec![b'X'; 20];
-        bytes.extend(b"\x00\x04\x00\x0ebluetooth_name/\x00\x05\x00\x0c");
+        bytes.extend(b"\x00\x06\x00\x0bdevice_name/\x00\x07\x00\x0c");
         bytes.extend("碎屏飞牛".as_bytes());
         bytes.push(b'/');
         let at = std::env::temp_dir().join("skyward-avatar-chinese-test");
