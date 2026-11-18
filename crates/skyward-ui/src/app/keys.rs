@@ -606,4 +606,23 @@ mod tests {
         app.tick(REPEAT_DELAY_MS + REPEAT_MS * 5);
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Modules))), "let go, it stops");
     }
+
+    #[test]
+    fn the_keys_unfold_the_search_bar_to_light_it() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        let span = app.frame(&f, &i).fold.expect("the home page's search bar folds").span;
+        scroll_to(&mut app, &f, span, 0);
+        app.tick(3000);
+        press(&mut app, Key::VolumeDown, 3000);
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))), "a bar folded away is not in view");
+        press(&mut app, Key::VolumeUp, 3000);
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))));
+        for ms in (3000..5000).step_by(8) {
+            app.tick(ms);
+        }
+        assert_eq!(app.top().1, 0.0, "the page went back up to unfold it");
+        press(&mut app, Key::Power, 5000);
+        assert_eq!(app.screen(), Screen::Search);
+    }
 }
