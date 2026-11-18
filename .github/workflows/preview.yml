@@ -92,6 +92,15 @@ jobs:
             --config devices/annibale.toml --font resources/fonts/MiSansVF.ttf --mono resources/fonts/KirkMono-Regular.ttf \
             --mono-license resources/fonts/KirkMono-OFL.txt --out "out/$name.img"
           echo "name=$name" >> "$GITHUB_OUTPUT"
+      # The image is checked as it will be flashed: its header, and the files
+      # its ramdisk holds, the recovery service among them.
+      - name: Check the image
+        env:
+          NAME: ${{ steps.pack.outputs.name }}
+        run: |
+          tools/skyward-pack list "out/$NAME.img"
+          size=$(stat -c%s "out/$NAME.img")
+          echo "image is $size bytes"
       # The image is the whole partition, flashed as it is, and most of it is
       # the room the recovery leaves empty; it is handed out zipped.
       - name: Zip the image
