@@ -37,6 +37,7 @@ mod pty;
 mod readings;
 #[cfg(target_os = "android")]
 mod relabel;
+#[cfg(target_os = "android")]
 mod remember;
 #[cfg(target_os = "android")]
 mod secure;
@@ -566,15 +567,19 @@ fn load_modules(cfg: &DeviceConfig, names: &[String]) -> Result<Vec<PathBuf>> {
 /// among the phone's partitions: where what the partitions say could not
 /// be made out, the phone's devices are up before that is said.
 /// How long a page waits for the phone's own parts before it goes ahead.
+#[cfg(target_os = "android")]
 const PREPARE_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
 
+#[cfg(target_os = "android")]
 struct Gate {
     done: std::sync::Mutex<bool>,
     cv: std::sync::Condvar,
 }
 
+#[cfg(target_os = "android")]
 static PREPARED: std::sync::OnceLock<Gate> = std::sync::OnceLock::new();
 
+#[cfg(target_os = "android")]
 fn gate() -> &'static Gate {
     PREPARED.get_or_init(|| Gate { done: std::sync::Mutex::new(false), cv: std::sync::Condvar::new() })
 }
@@ -605,6 +610,7 @@ pub(crate) fn take_wlan() -> Option<crate::wlan::Worker> {
 
 /// Say the phone's own parts are up, or that bringing them up failed: either
 /// way nothing is gained by waiting longer.
+#[cfg(target_os = "android")]
 fn mark_prepared() {
     #[cfg(target_os = "android")]
     skyward_ui::progress::reached(skyward_ui::progress::READY);
@@ -616,6 +622,7 @@ fn mark_prepared() {
 /// Wait until the phone's own parts are up, and no longer than [`PREPARE_WAIT`]:
 /// a page that needs the partitions or the phone's services calls this first,
 /// so that the screen can be drawn before any of them are ready.
+#[cfg(target_os = "android")]
 pub(crate) fn wait_prepared() {
     let gate = gate();
     let done = gate.done.lock().unwrap_or_else(|e| e.into_inner());
@@ -625,6 +632,7 @@ pub(crate) fn wait_prepared() {
 }
 
 /// Whether the phone's own parts are up already, asked without waiting.
+#[cfg(target_os = "android")]
 pub(crate) fn prepared() -> bool {
     *gate().done.lock().unwrap_or_else(|e| e.into_inner())
 }
