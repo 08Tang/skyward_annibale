@@ -630,6 +630,7 @@ pub(crate) fn prepared() -> bool {
     *gate().done.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+#[cfg(target_os = "android")]
 fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Found>) -> Result<()> {
     let watched = std::time::Instant::now();
     let nodes = skyward_sys::ueventd::apply()?;
@@ -1001,10 +1002,6 @@ fn recovery() -> Result<()> {
             bcb::clear(&misc)?;
         }
         let cfg = DeviceConfig::load(Path::new("/").join(ramdisk::CONFIG))?;
-        // Whether the weaver's own slots are used is read here, before any page
-        // asks for the data partition to be opened.
-        let weaver_first = cfg.data.as_ref().is_some_and(|d| d.weaver_first);
-        skyward_crypto::data::use_weaver_first(weaver_first);
         skyward_sys::kmsg(&format!("{} {} recovery up, misc command {:?} args {:?}, asking for {:?}", cfg.device.codename, skyward_info::RUNNING, message.command, message.args, request.work))?;
         if !request.unknown.is_empty() {
             skyward_sys::kmsg(&format!("misc arguments this recovery does not know: {:?}", request.unknown))?;

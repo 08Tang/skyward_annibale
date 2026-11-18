@@ -54,18 +54,6 @@ pub struct Keys {
     pub leave_out: Vec<String>,
 }
 
-/// How the data partition is opened: the weaver keeps every user's secret in a
-/// slot of the secure element, and where its service answers a recovery can use
-/// those slots as the phone does. Where it does not, the blob the credential
-/// service guards is taken instead.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct Data {
-    /// Whether the weaver's own slots are used. Left out, the other blob is
-    /// taken, which is what a phone whose weaver cannot be reached needs.
-    #[serde(default)]
-    pub weaver_first: bool,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct DeviceConfig {
     pub device: Device,
@@ -95,9 +83,6 @@ pub struct DeviceConfig {
     /// boot actions.
     #[serde(default)]
     pub owners: Vec<Owners>,
-    /// How the data partition is opened, where the phone's configuration says.
-    #[serde(default)]
-    pub data: Option<Data>,
     /// Which of the programs the partitions name for the keys are left out.
     #[serde(default)]
     pub keys: Keys,
