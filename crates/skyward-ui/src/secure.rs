@@ -145,11 +145,23 @@ fn pool_len16(bytes: &[u8], at: usize) -> Option<(usize, usize)> {
 /// one: the element whose `name` attribute is `key`, and the text inside it.
 fn text(bytes: &[u8], key: &str) -> Option<String> {
     let text = std::str::from_utf8(bytes).ok()?;
+    // The quotes are part of the needle, so `device_name_backup` is not taken
+    // for `device_name`.
     let needle = format!("name=\"{key}\"");
     let after = text.get(text.find(&needle)? + needle.len()..)?;
     let body = after.get(after.find('>')? + 1..)?;
-    let value = body.get(..body.find('<')?)?.trim();
-    (!value.is_empty()).then(|| value.to_string())
+    let value = unescape(body.get(..body.find('<')?)?.trim());
+    (!value.is_empty()).then_some(value)
+}
+
+/// `what` with the XML entities a text settings file writes put back, so a name
+/// the owner gave the phone reads as they typed it.
+fn unescape(what: &str) -> String {
+    what.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
 }
 
 #[cfg(test)]
@@ -303,6 +315,26 @@ mod tests {
             value(text, "bluetooth_name").as_deref(),
             Some("Xiaomi Smart Band 9 56B0")
         );
+    }
+
+    #[test]
+    fn an_escaped_name_in_a_text_file_reads_as_it_was_typed() {
+        let text = br#"<map><string name="device_name">Tom &amp; Jerry</string></map>"#;
+        assert_eq!(value(text, "device_name").as_deref(), Some("Tom & Jerry"));
+    }
+
+    #[test]
+    fn a_key_that_is_a_prefix_of_another_is_not_taken_for_it() {
+        // `device_name_backup` holds the same letters; the quotes keep the two
+        // apart, so the real one is read.
+        let text = br#"<map><string name="device_name_backup">wrong</string><string name="device_name">right</string></map>"#;
+        assert_eq!(value(text, "device_name").as_deref(), Some("right"));
+    }
+
+    #[test]
+    fn an_empty_element_is_none() {
+        let text = br#"<map><string name="device_name"></string></map>"#;
+        assert_eq!(value(text, "device_name"), None);
     }
 
     #[test]
