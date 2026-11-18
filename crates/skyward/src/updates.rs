@@ -254,79 +254,6 @@ enum Again {
 /// `urls` in turn, trying again while the connection fails and something
 /// more comes each time; `refused` says what a server turning it down leads
 /// to.
-/// How many bytes a mirror is asked for when it is measured.
-const SAMPLE_BYTES: usize = 256 * 1024;
-
-/// How long a mirror is measured for.
-const SAMPLE_TIME: Duration = Duration::from_secs(3);
-
-/// The address that came fastest last time, kept for a while so asking twice
-/// does not measure every mirror again.
-static FASTEST: Mutex<Option<(String, Instant)>> = Mutex::new(None);
-
-/// How long that answer is kept for.
-const FASTEST_FOR: Duration = Duration::from_secs(30 * 60);
-
-/// How many bytes `url` hands over within [`SAMPLE_TIME`], asked for the first
-/// [`SAMPLE_BYTES`] only. Nothing is kept: this is a measurement.
-fn sample(agent: &ureq::Agent, url: &str) -> usize {
-    let started = Instant::now();
-    let asked = format!("bytes=0-{}", SAMPLE_BYTES - 1);
-    let Ok(mut answer) = agent.get(url).header("Range", asked).call() else {
-        return 0;
-    };
-    let mut reader = answer.body_mut().with_config().limit(u64::MAX).reader();
-    let mut buf = vec![0u8; 64 * 1024];
-    let mut got = 0;
-    while got < SAMPLE_BYTES && started.elapsed() < SAMPLE_TIME {
-        match reader.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => got += n,
-            Err(_) => break,
-        }
-    }
-    got
-}
-
-/// The addresses, the one measured fastest first, all measured at once: a
-/// mirror that never answers must not hold up the ones that do.
-fn by_speed(servers: &Servers, urls: Vec<String>) -> Vec<String> {
-    if urls.len() < 2 {
-        return urls;
-    }
-    let agent = http::probe_agent(servers.clone());
-    let measured: Vec<(usize, String)> = thread::scope(|scope| {
-        let measuring: Vec<_> = urls
-            .iter()
-            .map(|url| {
-                let agent = agent.clone();
-                scope.spawn(move || (sample(&agent, url), url.clone()))
-            })
-            .collect();
-        measuring.into_iter().map(|m| m.join().unwrap_or((0, String::new()))).collect()
-    });
-    let mut measured = measured;
-    measured.sort_by(|a, b| b.0.cmp(&a.0));
-    // Whichever answered last time, first, so a page asked twice settles at
-    // once; the measurement still puts it back if it has gone slow.
-    let known = FASTEST.lock().ok().and_then(|k| k.clone()).filter(|(_, at)| at.elapsed() < FASTEST_FOR).map(|(url, _)| url);
-    if let Some(known) = known {
-        if let Some(at) = measured.iter().position(|(_, url)| *url == known) {
-            let first = measured.remove(at);
-            measured.insert(0, first);
-        }
-    }
-    for (got, url) in &measured {
-        let _ = skyward_sys::kmsg(&format!("asking {} first: {got} bytes came in three seconds", host(url)));
-    }
-    if let Some((_, url)) = measured.first() {
-        if let Ok(mut known) = FASTEST.lock() {
-            *known = Some((url.clone(), Instant::now()));
-        }
-    }
-    measured.into_iter().map(|(_, url)| url).collect()
-}
-
 #[allow(clippy::too_many_arguments)]
 fn fetch(
     servers: &Servers,
@@ -472,7 +399,8 @@ fn order(urls: Vec<String>, mut speeds: Vec<(usize, u64)>, cached: Option<&str>)
     if speeds.iter().all(|(_, speed)| *speed == 0) {
         return (urls, None);
     }
-    speeds.sort_by(|(ia, a), (ib, b)| b.cmp(a).then_with(|| ia.cmp(ib)));
+    // The fastest first, and where two came as fast, the one asked first.
+    speeds.sort_by_key(|&(i, speed)| (std::cmp::Reverse(speed), i));
     let fastest = speeds[0].0;
     let first = cached.and_then(|url| urls.iter().position(|candidate| candidate == url)).filter(|i| speeds.iter().any(|(i0, speed)| i0 == i && *speed > 0)).unwrap_or(fastest);
     let mut indices: Vec<usize> = speeds.into_iter().map(|(i, _)| i).collect();

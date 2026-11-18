@@ -74,12 +74,12 @@ fn read_unmounted() -> Kept {
             _ => {}
         }
     }
-    if kept.keep {
-        if let (Some(ssid), Some(password)) = (ssid, password) {
-            if !ssid.is_empty() && !password.is_empty() {
-                kept.saved = Some(Saved { ssid, password });
-            }
-        }
+    if kept.keep
+        && let (Some(ssid), Some(password)) = (ssid, password)
+        && !ssid.is_empty()
+        && !password.is_empty()
+    {
+        kept.saved = Some(Saved { ssid, password });
     }
     kept
 }
@@ -157,7 +157,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn unhex(text: &str) -> Option<Vec<u8>> {
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return None;
     }
     (0..text.len()).step_by(2).map(|i| u8::from_str_radix(text.get(i..i + 2)?, 16).ok()).collect()

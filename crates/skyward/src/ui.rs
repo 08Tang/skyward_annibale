@@ -49,7 +49,6 @@ use std::fs;
 use std::io::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// How long init may take to hand the USB port to another function: the
@@ -2466,18 +2465,19 @@ impl Pages<'_> {
                 skyward_sys::kmsg(if self.wlan_saved.is_some() { "the WLAN is opened for the network kept" } else { "the WLAN is opened as the recovery starts, with no network kept" })?;
             }
         }
-        if self.app.state.wlan_auto && !self.wlan_joined {
-            if let Some(saved) = self.wlan_saved.clone() {
-                let power = self.app.state.wlan.as_ref().map(|w| w.power.clone());
-                let found = self.app.state.wlan.as_ref().and_then(|w| w.networks.iter().find(|n| n.ssid == saved.ssid)).cloned();
-                if matches!(power, Some(WlanPower::On)) {
-                    if let Some(found) = found {
-                        self.wlan_joined = true;
-                        self.wlan_password = Some(saved.password.clone());
-                        skyward_sys::kmsg(&format!("joining the network kept: {}", found.name))?;
-                        wlan_worker(&self.wlan)?.send(wlan::Command::Join { ssid: found.ssid, name: found.name, security: found.security, password: saved.password });
-                    }
-                }
+        if self.app.state.wlan_auto
+            && !self.wlan_joined
+            && let Some(saved) = self.wlan_saved.clone()
+        {
+            let power = self.app.state.wlan.as_ref().map(|w| w.power.clone());
+            let found = self.app.state.wlan.as_ref().and_then(|w| w.networks.iter().find(|n| n.ssid == saved.ssid)).cloned();
+            if matches!(power, Some(WlanPower::On))
+                && let Some(found) = found
+            {
+                self.wlan_joined = true;
+                self.wlan_password = Some(saved.password.clone());
+                skyward_sys::kmsg(&format!("joining the network kept: {}", found.name))?;
+                wlan_worker(&self.wlan)?.send(wlan::Command::Join { ssid: found.ssid, name: found.name, security: found.security, password: saved.password });
             }
         }
         // A WLAN that did not come up is tried again a few times: the driver
@@ -2493,30 +2493,31 @@ impl Pages<'_> {
         }
         // A network joined with a password the recovery has is kept for the
         // starts that follow, or forgotten where the access point refused it.
-        if self.app.state.wlan_keep && !self.wlan_kept {
-            if let Some(joined) = self.app.state.wlan.as_ref().and_then(|w| w.joined.as_ref()) {
-                match &joined.stage {
-                    Joining::Connected(_) => {
-                        if let Some(password) = &self.wlan_password {
-                            match crate::wlanmem::save(&joined.ssid, password) {
-                                Ok(()) => {
-                                    self.wlan_kept = true;
-                                    self.wlan_saved = Some(crate::wlanmem::Saved { ssid: joined.ssid.clone(), password: password.clone() });
-                                    skyward_sys::kmsg(&format!("the network {} is kept for the starts that follow", joined.name))?;
-                                }
-                                Err(e) => skyward_sys::kmsg(&format!("the network was not kept: {e:#}"))?,
+        if self.app.state.wlan_keep
+            && !self.wlan_kept
+            && let Some(joined) = self.app.state.wlan.as_ref().and_then(|w| w.joined.as_ref())
+        {
+            match &joined.stage {
+                Joining::Connected(_) => {
+                    if let Some(password) = &self.wlan_password {
+                        match crate::wlanmem::save(&joined.ssid, password) {
+                            Ok(()) => {
+                                self.wlan_kept = true;
+                                self.wlan_saved = Some(crate::wlanmem::Saved { ssid: joined.ssid.clone(), password: password.clone() });
+                                skyward_sys::kmsg(&format!("the network {} is kept for the starts that follow", joined.name))?;
                             }
+                            Err(e) => skyward_sys::kmsg(&format!("the network was not kept: {e:#}"))?,
                         }
                     }
-                    Joining::WrongPassword => {
-                        self.wlan_kept = true;
-                        self.wlan_saved = None;
-                        self.wlan_password = None;
-                        let _ = crate::wlanmem::forget_network();
-                        skyward_sys::kmsg("the password kept was refused; the WLAN stays on and the network is forgotten")?;
-                    }
-                    _ => {}
                 }
+                Joining::WrongPassword => {
+                    self.wlan_kept = true;
+                    self.wlan_saved = None;
+                    self.wlan_password = None;
+                    let _ = crate::wlanmem::forget_network();
+                    skyward_sys::kmsg("the password kept was refused; the WLAN stays on and the network is forgotten")?;
+                }
+                _ => {}
             }
         }
         // The avb page reads the checks when it shows, and lets them go when
@@ -3747,7 +3748,7 @@ fn read_modules() -> Result<Vec<skyward_ui::app::ModuleRow>, String> {
             removing: path.join("remove").exists(),
         });
     }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|m| m.name.to_lowercase());
     Ok(out)
 }
 

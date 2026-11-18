@@ -3,7 +3,7 @@
 
 use anyhow::{Context, Result, bail};
 use std::io::{Read, Write};
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -59,10 +59,6 @@ impl Worker {
             })
             .context("start the fetching thread")?;
         Ok(Worker { ended, wake, stop, done, total, thread: Some(thread) })
-    }
-
-    pub fn fd(&self) -> RawFd {
-        self.wake.as_raw_fd()
     }
 
     /// How many bytes have come, and how many the server named where it did.
