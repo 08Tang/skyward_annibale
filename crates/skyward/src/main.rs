@@ -580,12 +580,14 @@ fn gate() -> &'static Gate {
     PREPARED.get_or_init(|| Gate { done: std::sync::Mutex::new(false), cv: std::sync::Condvar::new() })
 }
 
+#[cfg(target_os = "android")]
 /// The WLAN's thread, started by the bringing-up as soon as its driver is
 /// warmed, rather than once the pages are built: the supplicant then scans and
 /// joins while the decrypt page is still being answered, as it did before the
 /// screen was brought up beside the phone's parts (2026-11-15).
 static WLAN: std::sync::OnceLock<std::sync::Mutex<Option<crate::wlan::Worker>>> = std::sync::OnceLock::new();
 
+#[cfg(target_os = "android")]
 /// The DNS servers the joined network gave, for looking names up: the WLAN
 /// thread started by the bringing-up fills it, and the pages look through the
 /// same one.
@@ -593,8 +595,10 @@ pub(crate) fn servers() -> skyward_net::http::Servers {
     SERVERS.get_or_init(|| std::sync::Arc::new(std::sync::Mutex::new(Vec::new()))).clone()
 }
 
+#[cfg(target_os = "android")]
 static SERVERS: std::sync::OnceLock<skyward_net::http::Servers> = std::sync::OnceLock::new();
 
+#[cfg(target_os = "android")]
 /// Take the WLAN's thread the bringing-up started, if it did.
 pub(crate) fn take_wlan() -> Option<crate::wlan::Worker> {
     WLAN.get().and_then(|slot| slot.lock().unwrap_or_else(|e| e.into_inner()).take())
@@ -603,6 +607,7 @@ pub(crate) fn take_wlan() -> Option<crate::wlan::Worker> {
 /// Say the phone's own parts are up, or that bringing them up failed: either
 /// way nothing is gained by waiting longer.
 fn mark_prepared() {
+    #[cfg(target_os = "android")]
     skyward_ui::progress::reached(skyward_ui::progress::READY);
     let gate = gate();
     *gate.done.lock().unwrap_or_else(|e| e.into_inner()) = true;
