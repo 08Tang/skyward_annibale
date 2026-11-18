@@ -260,7 +260,7 @@ mod tests {
         }));
 
         let mut out = Vec::new();
-        out.extend((RES_XML_TYPE as u16).to_le_bytes());
+        out.extend(RES_XML_TYPE.to_le_bytes());
         out.extend(8u16.to_le_bytes());
         out.extend(((8 + pool_full.len() + body.len()) as u32).to_le_bytes());
         out.extend(&pool_full);
