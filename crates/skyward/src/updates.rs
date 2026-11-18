@@ -12,7 +12,6 @@ use skyward_net::http::{self, Servers};
 use skyward_net::reach::{self, Reach};
 use skyward_net::release::{self, Installed, Release, Unanswered};
 use skyward_vab::Slot;
-use std::io::Read;
 use std::os::fd::RawFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
