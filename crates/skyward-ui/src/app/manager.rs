@@ -859,7 +859,6 @@ mod tests {
 
     #[test]
     fn a_file_goes_to_the_drive_and_one_on_it_comes_back() {
-        let (f, i) = (fonts(), info());
         let mut app = App::new(Screen::Files, W, H, PPD);
         app.state.usb_drive = Some(UsbDrive::Shown);
         app.set_files("/sdcard/Download".into(), Ok(vec![entry("a.zip", FileKind::File)]), LISTED);

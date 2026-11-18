@@ -59,7 +59,7 @@ impl App {
                     return Vec::new();
                 }
                 Touch::Move(..) if matches!(self.drag, Drag::Confirm { .. }) => {
-                    if let Drag::Confirm { which, track, grab } = self.drag {
+                    if let Drag::Confirm { track, grab, .. } = self.drag {
                         let travel = (track.w - track.h).max(1.0);
                         self.state.confirm = ((x - grab - track.x) / travel).clamp(0.0, 1.0);
                         self.dirty = true;
