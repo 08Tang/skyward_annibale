@@ -179,23 +179,30 @@ jobs:
         working-directory: images
         run: sha256sum -- *.zip > SHA256SUMS
       # Each zip shows on the release as the phone it is for, its model and
-      # then its codename, which is how people look for theirs; a device
-      # whose zip is missing stops the release. The notes lead with what
-      # changed: the recovery shows the first four plain lines of them and
-      # nothing else, so the phone's details and the build's go after, where
-      # they cannot push the changes out.
+      # then its codename, which is how people look for theirs. The zips that
+      # came are the ones this run built, so a device whose configuration is
+      # here but which was not built is not looked for. The notes lead with
+      # what changed: the recovery shows the first four plain lines of them
+      # and nothing else, so the phone's details and the build's go after,
+      # where they cannot push the changes out.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           zips=()
-          for config in devices/*.toml; do
-            device=$(basename "$config" .toml)
+          for zip in images/skyward-"$GITHUB_REF_NAME"-*.zip; do
+            device=$(basename "$zip" .zip)
+            device=${device#"skyward-$GITHUB_REF_NAME"-}
+            device=${device%%-*}
+            config="devices/$device.toml"
             model=$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["device"]["model"])' "$config")
-            zip=$(ls images/skyward-"$GITHUB_REF_NAME"-"$device"-*.zip)
             zips+=("$zip#$model ($device)")
           done
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "no zip came for $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
           notes=$(mktemp)
           {
             cat .github/release-notes.md
