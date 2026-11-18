@@ -49,21 +49,6 @@ impl App {
                 self.resort_files();
                 return vec![Effect::KeepSort(self.state.sort, self.state.sort_desc, self.state.folders_first)];
             }
-            // A row turns the check the page shows; the swipe below writes both.
-            Action::Avb(which) => {
-                let (mut verity, mut verification) = match (self.state.avb_pending, &self.state.avb) {
-                    (Some(pending), _) => pending,
-                    (None, Some(Ok(now))) => *now,
-                    _ => (true, true),
-                };
-                if which {
-                    verification = !verification;
-                } else {
-                    verity = !verity;
-                }
-                self.state.avb_pending = Some((verity, verification));
-                self.refresh();
-            }
             Action::FetchStart => {
                 let url = self.state.fetch_url.trim().to_string();
                 if url.is_empty() {
@@ -1030,11 +1015,6 @@ impl App {
             fx.push(Effect::Haptic);
         }
         match which {
-            Confirm::Avb => {
-                if let Some((verity, verification)) = self.state.avb_pending.take() {
-                    fx.push(Effect::AvbSet(verity, verification));
-                }
-            }
             Confirm::Reboot => fx.push(Effect::Reboot(TARGETS[self.state.reboot])),
             // The slider taken across: the lock is kept from now on. The risk
             // is asked again the next time it is turned on.

@@ -263,12 +263,6 @@ pub struct State {
     /// manager shown for it.
     pub serving: Serving,
     pub picking: bool,
-    /// Both of verified boot's checks in the slot the phone runs from, as
-    /// read, as the page has turned them before the swipe, and what the last
-    /// write said.
-    pub avb: Option<Result<(bool, bool), String>>,
-    pub avb_pending: Option<(bool, bool)>,
-    pub avb_notice: Option<String>,
     /// The address typed on the download page, how its download stands, and
     /// where the page another device types an address for it is.
     pub fetch_url: String,
@@ -400,9 +394,6 @@ impl Default for State {
             remember: false,
             serving: Serving::Off,
             picking: false,
-            avb: None,
-            avb_pending: None,
-            avb_notice: None,
             fetch_url: String::new(),
             fetch: Fetch::Idle,
             fetch_portal: None,

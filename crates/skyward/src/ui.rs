@@ -3181,20 +3181,6 @@ impl Pages<'_> {
                 self.app.state.avb = Some(read.map_err(|e| format!("{e:#}")));
                 self.app.refresh();
             }
-            Effect::AvbSet(verity, verification) => {
-                use skyward_install::commands::avbctl::{self, Switch};
-                let wrote = (|| -> anyhow::Result<(bool, bool)> {
-                    avbctl::turn(Switch::Verity, verity)?;
-                    avbctl::turn(Switch::Verification, verification)?;
-                    Ok((avbctl::read(Switch::Verity)?, avbctl::read(Switch::Verification)?))
-                })();
-                match wrote {
-                    Ok(now) => {
-                        skyward_sys::kmsg(&format!("verified boot's checks are now verity {now:?}"))?;
-                        self.app.state.avb = Some(Ok(now));
-                        self.app.state.avb_pending = None;
-                        self.app.state.avb_notice = Some(format!("已写入：逐块校验 {}，启动校验 {}", if now.0 { "开" } else { "关" }, if now.1 { "开" } else { "关" }));
-                    }
                     Err(e) => {
                         let why = format!("{e:#}");
                         skyward_sys::kmsg(&format!("the checks are not written: {why}"))?;

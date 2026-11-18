@@ -158,9 +158,6 @@ pub enum Screen {
     /// A file taken from an address typed on the page's keyboard, or handed
     /// over by a page another device opens.
     Fetch,
-    /// Verified boot's two checks in the slot the phone runs from, turned on
-    /// or off with a swipe.
-    Avb,
     /// Skyward's newest release, and updating to it: its build for the
     /// phone downloaded and written into the recovery partitions.
     SkywardUpdate,
@@ -228,8 +225,6 @@ pub enum Confirm {
     /// Keep the screen lock for the starts that follow, with the risk of it
     /// said first.
     KeepLock,
-    /// Write the verified boot checks the avb page has turned.
-    Avb,
     /// Install the update that waits to be agreed to.
     Install,
     /// Install an update that erases all user data after it.
@@ -261,9 +256,6 @@ pub enum Action {
     CycleSort,
     ToggleSortOrder,
     ToggleFoldersFirst,
-    /// Turn one of verified boot's checks: `false` is dm-verity, `true` is
-    /// the bootloader's own verification.
-    Avb(bool),
     /// Start the download the address typed is of, and stop the one under way.
     FetchStart,
     FetchStop,
@@ -733,8 +725,6 @@ pub enum Effect {
     KeepSort(SortKey, bool, bool),
     /// Read verified boot's checks in the slot the phone runs from.
     AvbRead,
-    /// Write both checks as the page has them.
-    AvbSet(bool, bool),
     Wlan(bool),
     /// Keep the WLAN open as the recovery starts, or stop keeping it so.
     WlanAuto(bool),

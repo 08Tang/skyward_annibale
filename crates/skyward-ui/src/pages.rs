@@ -122,7 +122,6 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
 pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
     const INSTALL: Text = ["滑动以安装", "滑動以安裝", "Slide to install"];
     let (label, danger) = match which {
-        Confirm::Avb => (["滑动以写入", "滑動以寫入", "Slide to write"], true),
         Confirm::Filesystem => match s.fs_action {
             FsAction::Repair => (["滑动以修复", "滑動以修復", "Slide to repair"], true),
             FsAction::Remake(_) => (["滑动以更换", "滑動以更換", "Slide to change"], true),
@@ -2330,52 +2329,6 @@ pub fn serve(cx: &Ctx) -> Frame {
 
 const SERVE: Text = ["无线传输", "無線傳輸", "Wireless transfer"];
 const FETCH: Text = ["网络下载", "網路下載", "Download"];
-const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
-
-/// Verified boot's two checks in the slot the phone runs from, each turned by
-/// its own row, and written once the swipe below is dragged to its end.
-pub fn avb(cx: &Ctx) -> Frame {
-    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-    let mut c = page(cx);
-    let top = t.m.content_top;
-    let mut out = Vec::new();
-    let (now_verity, now_verification) = match &s.avb {
-        Some(Ok(now)) => *now,
-        _ => (false, false),
-    };
-    // Before the swipe, the rows show what is about to be written.
-    let (verity, verification) = s.avb_pending.unwrap_or((now_verity, now_verification));
-    let rows = widgets::list(
-        &mut c,
-        t,
-        f,
-        top,
-        &[
-            Row::new(l.pick(["逐块校验（dm-verity）", "逐塊校驗（dm-verity）", "Block checks (dm-verity)"])).icon(RED, Icon::Shield).trail(Trail::Switch(verity)),
-            Row::new(l.pick(["启动校验（verification）", "啟動驗證（verification）", "Boot checks (verification)"])).icon(RED, Icon::Shield).trail(Trail::Switch(verification)),
-        ],
-    );
-    out.extend(hits(&rows.rows, &[Action::Avb(false), Action::Avb(true)]));
-    let note = l.pick([
-        "关闭后，改过的系统才能启动：启动校验关掉，bootloader 不再检查分区；逐块校验关掉，读到的块不再与签名比对。两者都要解锁 bootloader。",
-        "關閉後，改過的系統才能啟動：關閉啟動驗證後 bootloader 不再檢查分割區；關閉逐塊校驗後讀到的區塊不再與簽章比對。兩者都需要解鎖 bootloader。",
-        "Off, a changed system can start: with boot checks off the bootloader no longer checks the partitions, and with block checks off a block read is no longer compared with its signature. Both need an unlocked bootloader.",
-    ]);
-    let y = widgets::footnote(&mut c, t, f, rows.bottom, note);
-    let y = match &s.avb_notice {
-        Some(text) => widgets::footnote(&mut c, t, f, y, text),
-        None => y,
-    };
-    let y = match &s.avb {
-        Some(Err(why)) => widgets::footnote(&mut c, t, f, y, why),
-        _ => y,
-    };
-    let (label, danger) = confirm_label(Confirm::Avb, s);
-    let track = widgets::confirm(&mut c, t, f, y + t.m.dp(24.0), label, danger, s.confirm);
-    out.push(Hit { rect: track, action: Action::Confirm(Confirm::Avb) });
-    Frame::new(t, fit(c, t, track.y + track.h), out, l.pick(AVB), top)
-}
-
 /// A length of bytes in the units the pages speak.
 fn mb(bytes: u64) -> String {
     match bytes {
