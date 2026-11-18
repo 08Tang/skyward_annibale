@@ -270,20 +270,40 @@ impl Update {
     }
 }
 
-pub fn snapshot_state() -> Result<SnapshotState> {
-    if !skyward_block::mount::is_mount_point(Path::new(METADATA))? {
-        return Ok(SnapshotState::Unknown);
+/// Run `work` with /metadata mounted, mounting it read-only where it is not and
+/// taking it away again after.
+///
+/// The recovery does not mount /metadata as it comes up: the pages ask for it
+/// when something they show is kept there, and each such ask mounts it for its
+/// own length. The update's state is kept there, so reading it has to ask too --
+/// otherwise the state reads as unknown for the whole session, and the pages say
+/// they cannot read it when they simply never looked.
+///
+/// `None` where /metadata cannot be mounted at all: the state is then unknown,
+/// as it was before there was anything to mount, rather than an error the pages
+/// would have to word.
+fn with_metadata<T>(work: impl FnOnce() -> Result<T>) -> Result<Option<T>> {
+    let at = Path::new(METADATA);
+    if skyward_block::mount::is_mount_point(at)? {
+        return work().map(Some);
     }
-    Ok(read_state(Path::new(OTA_DIR))?.phase())
-}
-
-/// The update libsnapshot keeps track of, where /metadata is mounted to
-/// tell; `None` where it is not.
-pub fn update() -> Result<Option<Update>> {
-    if !skyward_block::mount::is_mount_point(Path::new(METADATA))? {
+    if skyward_block::mount::mount_ro(&Path::new(skyward_block::BY_NAME).join("metadata"), at).is_err() {
         return Ok(None);
     }
-    read_update(Path::new(OTA_DIR)).map(Some)
+    let done = work();
+    // Taken away whatever the work made of it, so the session is left as found.
+    let _ = skyward_block::mount::umount(at);
+    done.map(Some)
+}
+
+pub fn snapshot_state() -> Result<SnapshotState> {
+    Ok(with_metadata(|| Ok(read_state(Path::new(OTA_DIR))?.phase()))?.unwrap_or(SnapshotState::Unknown))
+}
+
+/// The update libsnapshot keeps track of, where /metadata holds it to tell;
+/// `None` where it cannot be read.
+pub fn update() -> Result<Option<Update>> {
+    with_metadata(|| read_update(Path::new(OTA_DIR)))
 }
 
 fn read_update(dir: &Path) -> Result<Update> {

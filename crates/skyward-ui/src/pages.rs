@@ -263,9 +263,13 @@ pub fn home(cx: &Ctx) -> Frame {
     // the phone was given, with the model and the system under it, and the page
     // of details a tap away. It waits for the partition it is kept on to be
     // open; before that neither the picture nor the name is there.
-    // The model and the codename only: the version is on the page the row opens,
-    // and inside the row it runs past the end.
-    let detail = format!("{} \u{b7} {}", i.model, i.codename);
+    // The system version and the codename under it. The version says which
+    // build the phone runs, which is what the row is asked about; the model is
+    // on the page a tap opens, and inside the row it was the least telling of
+    // the two. A phone whose partitions are not mounted yet has no version
+    // read, so its model stands in until it does.
+    let version = i.os_version.as_deref().unwrap_or(&i.model);
+    let detail = format!("{} \u{b7} {}", version, i.codename);
     match &s.device_name {
         Some(name) => {
             let account = widgets::account_card(&mut c, t, f, y, name, Some(&detail), s.avatar.as_ref());
@@ -275,7 +279,7 @@ pub fn home(cx: &Ctx) -> Frame {
         // Nothing of the phone itself read yet: the model alone stands in, and
         // a tap still goes to the details.
         None => {
-            let card = widgets::account_card(&mut c, t, f, y, &i.model, Some(&i.codename), None);
+            let card = widgets::account_card(&mut c, t, f, y, &i.model, Some(&detail), None);
             out.push(Hit { rect: card.rows[0], action: Action::Open(Screen::About) });
             y = card.bottom + t.m.card_gap;
         }
