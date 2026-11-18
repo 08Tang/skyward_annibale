@@ -205,8 +205,11 @@ mod tests {
         let f = fonts();
         let plain = info();
         // The home page lost the mount row, so a screen the old snug height
-        // fits leaves room the notice no longer fills.
-        let snug = SNUG - 380;
+        // fits leaves room the notice no longer fills. The search bar sits
+        // above the rows, and takes its own height and the gap under it off
+        // that screen.
+        let t = Theme::light(W, SNUG, PPD);
+        let snug = SNUG - 380 - (t.m.search_h + t.m.after_search) as u32;
         let mut app = App::new(Screen::Home, W, snug, PPD);
         let fr = app.frame(&f, &plain);
         let reboot = fr.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;

@@ -325,7 +325,7 @@ mod tests {
         app.frame(&f, &i);
         assert_eq!(app.light(0.0), None, "a page opens to the touch");
         app.touchscreen_missing();
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))));
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))));
         assert!(app.light(0.0).is_some(), "lit before any key is pressed");
         assert!(app.take_dirty(), "and shown");
     }
@@ -337,7 +337,9 @@ mod tests {
         app.frame(&f, &i);
         assert!(!app.keys, "a page opens to the touch");
         press(&mut app, Key::VolumeDown, 0);
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))), "the first press lights the first control in view");
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))), "the first press lights the search bar, the first control in view");
+        press(&mut app, Key::VolumeDown, 0);
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))), "the phone's own row comes next");
         press(&mut app, Key::VolumeDown, 0);
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Files))), "the file manager comes next");
         press(&mut app, Key::VolumeDown, 0);
@@ -347,6 +349,8 @@ mod tests {
         press(&mut app, Key::VolumeUp, 0);
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))));
         press(&mut app, Key::VolumeUp, 0);
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))));
+        press(&mut app, Key::VolumeUp, 0);
         // Up from the first goes round to the last row of the page: wiping data
         // is above rebooting now.
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Wipe))), "up from the first goes round to the last");
@@ -354,7 +358,7 @@ mod tests {
         let last = app.lit().expect("lit");
         assert!(app.shows(&last, app.top().1), "scrolled into view");
         press(&mut app, Key::VolumeDown, 6000);
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))), "down from the last goes round to the first");
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))), "down from the last goes round to the first");
         app.tick(10_000);
         assert_eq!(app.top().1, 0.0, "at the top of the page again");
     }
@@ -594,7 +598,7 @@ mod tests {
         app.key(Key::VolumeDown, 0);
         assert_eq!(app.deadline(0), Some(CHORD_MS), "it waits for the power key first");
         app.tick(CHORD_MS);
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))));
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))));
         assert_eq!(app.deadline(CHORD_MS), Some(REPEAT_DELAY_MS), "and repeats as from when it went down");
         app.tick(REPEAT_DELAY_MS - 1);
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))), "not held long enough yet");
@@ -610,7 +614,8 @@ mod tests {
     #[test]
     fn the_keys_unfold_the_search_bar_to_light_it() {
         let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Home, W, H, PPD);
+        // A screen shorter than the page, so it can scroll past the bar.
+        let mut app = App::new(Screen::Home, W, SNUG - 800, PPD);
         let span = app.frame(&f, &i).fold.expect("the home page's search bar folds").span;
         scroll_to(&mut app, &f, span, 0);
         app.tick(3000);

@@ -218,7 +218,7 @@ mod tests {
         assert!(!app.keys, "volume down waits for the power key first");
         assert!(app.tick(CHORD_MS).is_empty());
         assert!(app.keys, "then lights a control on its own");
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))));
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))));
         assert!(app.key(Key::Power, CHORD_MS + 10).is_empty(), "the power key came too late");
         assert!(app.key_up(Key::VolumeDown, CHORD_MS + 20).is_empty());
         assert!(app.tick(CHORD_MS * 2 + 10).is_empty());
