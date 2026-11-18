@@ -2801,6 +2801,14 @@ impl Pages<'_> {
                 // has done its work and the menu is what to show.
                 if self.closed.is_empty() {
                     skyward_sys::kmsg("the decrypt page is done; the menu shows")?;
+                    // Read again now that the phone's parts are up: the pages
+                    // came up before the thread that mounts them was done, so
+                    // what they hold of the update's state was read too early
+                    // to find it, and would say it cannot be read until the
+                    // readings next come round.
+                    crate::wait_prepared();
+                    self.read_at = Instant::now();
+                    read_details(self.cfg, &mut self.info, &mut self.unread.details)?;
                     self.app.decrypted();
                 }
             }
