@@ -17,4 +17,3 @@
 - 机型：REDMI K90（`annibale`）
 - 系统：`OS4.0.6.0.XPKCNXM`
 - 版本标识：`OS4.0.6.0.WPKCNXM.D02`
-- 源码提交：`b3e075c`
