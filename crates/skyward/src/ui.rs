@@ -3173,23 +3173,6 @@ impl Pages<'_> {
                     worker.stop();
                 }
             }
-            // Verified boot's two checks in the slot the phone runs from, as
-            // the avb page reads them and as it writes what was turned.
-            Effect::AvbRead => {
-                use skyward_install::commands::avbctl::{self, Switch};
-                let read = (|| -> anyhow::Result<(bool, bool)> { Ok((avbctl::read(Switch::Verity)?, avbctl::read(Switch::Verification)?)) })();
-                self.app.state.avb = Some(read.map_err(|e| format!("{e:#}")));
-                self.app.refresh();
-            }
-                    Err(e) => {
-                        let why = format!("{e:#}");
-                        skyward_sys::kmsg(&format!("the checks are not written: {why}"))?;
-                        self.app.state.avb = Some(Err(why.clone()));
-                        self.app.state.avb_notice = Some(why);
-                    }
-                }
-                self.app.refresh();
-            }
             Effect::KeepSort(key, desc, folders) => {
                 self.app.state.sort = key;
                 self.app.state.sort_desc = desc;
