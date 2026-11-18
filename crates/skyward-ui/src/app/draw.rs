@@ -319,10 +319,23 @@ impl App {
         let top = sheet - tall;
         let pane = Rgba::rgb(20, 20, 26).with_alpha(238);
         // The sheet itself, its foot rounded off.
-        out.fill_rect(0.0, 0.0, w, sheet - m.dp(30.0), pane);
-        out.fill_circle(m.dp(30.0), sheet - m.dp(30.0), m.dp(30.0), pane);
-        out.fill_circle(w - m.dp(30.0), sheet - m.dp(30.0), m.dp(30.0), pane);
-        out.fill_rect(m.dp(30.0), sheet - m.dp(30.0), w - m.dp(60.0), m.dp(30.0), pane);
+        //
+        // One shape, drawn once. It was a body, two circles and a strip between
+        // them, and each of the four laid the pane at its own alpha: where they
+        // met along the foot the corners came out laid twice, which is darker
+        // than the rest, and the circle's antialiased edge left a wedge of the
+        // page showing beside it. One rounded rect has no joins to show.
+        //
+        // The top corners are square, since the sheet comes down from the top
+        // edge; only the foot is rounded, so the radius is given to the bottom
+        // alone by drawing the shape a radius taller than it shows and letting
+        // the screen's edge cut the top.
+        //
+        // A barely opened sheet is shorter than the radius, and a radius that
+        // large would round its top corners too, leaving the screen's edge
+        // showing through them. The radius gives way to the sheet's height.
+        let radius = m.dp(30.0).min(sheet.max(0.0));
+        out.fill_round_rect(0.0, top - radius, w, sheet - top + radius, radius, pane);
         // A grabber at the foot of the sheet.
         out.fill_round_rect(w / 2.0 - m.dp(18.0), sheet - m.dp(13.0), m.dp(36.0), m.dp(5.0), m.dp(2.5), white.with_alpha(80));
         // The time and what is left in the battery, set a little further down

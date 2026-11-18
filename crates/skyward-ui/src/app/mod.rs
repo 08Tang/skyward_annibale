@@ -1266,7 +1266,13 @@ fn keyboard_strip(t: &Theme, frame: &Frame) -> (Canvas, i32) {
 
 /// How far the control centre has to be pulled, in dp, for it to stay open
 /// once let go, and how long its settling takes.
-const SHADE_PULL_DP: f32 = 110.0;
+///
+/// This is how far a finger travels to open the sheet, so it is set against the
+/// sheet's own height rather than below it: at 110 dp the sheet came up more
+/// than four times as fast as the finger, and the least touch of the top edge
+/// filled half the screen. At 320 dp a pull of 40 dp shows a sliver and one of
+/// 115 dp keeps the sheet open, which is a pull the hand means.
+const SHADE_PULL_DP: f32 = 320.0;
 const SHADE_PERIOD: f32 = 1.8;
 /// The share of the pull past which letting go opens the sheet.
 const SHADE_KEEPS: f32 = 0.36;

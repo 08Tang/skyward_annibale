@@ -117,9 +117,11 @@ fn cut(src: &[u8], w: u32, h: u32, channels: usize, size: u32) -> Vec<u8> {
     out
 }
 
-/// The name the phone gives itself, read from what its settings hold: the
-/// `device_name` line of the settings file, whose bytes are a string table
-/// rather than text.
+/// The name the phone gives itself, read from what its settings hold.
+///
+/// The file is a compiled XML whose text lives in a shared string pool, so the
+/// value is found through the element that carries it, not by the bytes that
+/// follow the key; see `crate::secure`.
 ///
 /// The name the owner gave the phone is kept as `device_name`, which is what
 /// Android means by the phone's name. `bluetooth_name` is read only where that
@@ -128,39 +130,33 @@ fn cut(src: &[u8], w: u32, h: u32, channels: usize, size: u32) -> Vec<u8> {
 /// with a band may hold the band's name there rather than its own. Where
 /// nothing is kept at all, the caller falls back to the model.
 pub fn device_name(secure: &Path) -> Option<String> {
-    named(secure, b"device_name").or_else(|| named(secure, b"bluetooth_name"))
+    named(secure, "device_name").or_else(|| named(secure, "bluetooth_name"))
 }
 
-/// The string kept after `key` in the settings file at `path`.
-fn named(path: &Path, key: &[u8]) -> Option<String> {
+/// Whether `what` reads as something a phone is called.
+///
+/// The settings file holds more than the owner's name, and a value that is not
+/// a name should not be shown as one: this phone once displayed
+/// `com.xiaomi.bluetooth`, a package that sat beside the name in the file's
+/// string pool. A value that is all lower case, digits, dots and underscores,
+/// with a dot in it and no space, is a package rather than a name, and is
+/// refused so the caller falls back to the model.
+fn reads_as_a_name(what: &str) -> bool {
+    if what.is_empty() || what.len() > 64 || what.chars().any(char::is_control) {
+        return false;
+    }
+    let package = what.contains('.')
+        && !what.contains(' ')
+        && what.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '_');
+    !package
+}
+
+/// The value the settings file at `path` keeps for `key`.
+fn named(path: &Path, key: &str) -> Option<String> {
     let bytes = std::fs::read(path).ok()?;
-    // Each string is a zero, the index it is kept at, a zero, its length, and
-    // its bytes. The name wanted is the one kept just after `key`.
-    let at = bytes.windows(key.len()).position(|w| w == key)? + key.len();
-    let mut i = at;
-    // A slash may follow the key, as the phone's own format writes it.
-    while i < bytes.len() && bytes[i] == b'/' {
-        i += 1;
-    }
-    while i < bytes.len() && bytes[i] != 0 {
-        i += 1;
-    }
-    let mut j = i;
-    while j < bytes.len() && bytes[j] == 0 {
-        j += 1;
-    }
-    // The index the string is kept at, then the length of what follows.
-    j += 1;
-    while j < bytes.len() && bytes[j] == 0 {
-        j += 1;
-    }
-    let len = *bytes.get(j)? as usize;
-    j += 1;
-    if len == 0 || len > 512 {
-        return None;
-    }
-    let name = std::str::from_utf8(bytes.get(j..j + len)?).ok()?.trim().to_string();
-    if name.is_empty() { None } else { Some(name) }
+    let name = crate::secure::value(&bytes, key)?;
+    let name = name.trim().to_string();
+    if reads_as_a_name(&name) { Some(name) } else { None }
 }
 
 #[cfg(test)]
@@ -180,13 +176,26 @@ mod tests {
         assert_eq!(at(0, 4), 255, "and its left");
     }
 
+    /// A settings file as plain text XML, which the reader takes as well as the
+    /// compiled form Android writes. Entries are given in the order the file
+    /// keeps them, so a test can put a value anywhere in it.
+    fn settings(entries: &[(&str, &str)]) -> Vec<u8> {
+        let mut out = String::from("<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n");
+        for (k, v) in entries {
+            out.push_str(&format!("    <string name=\"{k}\">{v}</string>\n"));
+        }
+        out.push_str("</map>\n");
+        out.into_bytes()
+    }
+
     #[test]
     fn the_settings_own_name_is_read_before_the_bluetooth_one() {
-        // What the phone keeps: zero, index, zero, length, then the bytes. A
-        // phone paired with a band may hold the band's name as its Bluetooth
+        // A phone paired with a band may hold the band's name as its Bluetooth
         // name; its own name is the one shown.
-        let mut bytes = vec![b'X'; 20];
-        bytes.extend(b"\x00\x04\x00\x0ebluetooth_name/\x00\x05\x00\x16Xiaomi Smart Band 9 56B0/\x00\x06\x00\x0bdevice_name/\x00\x07\x00\x09Xiaomi 17/");
+        let bytes = settings(&[
+            ("bluetooth_name", "Xiaomi Smart Band 9 56B0"),
+            ("device_name", "Xiaomi 17"),
+        ]);
         let at = std::env::temp_dir().join("skyward-avatar-name-test");
         std::fs::write(&at, &bytes).unwrap();
         assert_eq!(device_name(&at).as_deref(), Some("Xiaomi 17"), "the phone's own name wins over the band's");
@@ -195,8 +204,7 @@ mod tests {
 
     #[test]
     fn the_bluetooth_name_is_read_where_no_other_is_kept() {
-        let mut bytes = vec![b'X'; 20];
-        bytes.extend(b"\x00\x04\x00\x0ebluetooth_name/\x00\x05\x00\x07Mari0us/");
+        let bytes = settings(&[("bluetooth_name", "Mari0us")]);
         let at = std::env::temp_dir().join("skyward-avatar-bluetooth-test");
         std::fs::write(&at, &bytes).unwrap();
         assert_eq!(device_name(&at).as_deref(), Some("Mari0us"));
@@ -205,8 +213,7 @@ mod tests {
 
     #[test]
     fn the_settings_own_name_is_read_where_the_owners_is_not_kept() {
-        let mut bytes = vec![b'X'; 20];
-        bytes.extend(b"\x00\x06\x00\x0bdevice_name/\x00\x07\x00\x09Xiaomi 17/");
+        let bytes = settings(&[("device_name", "Xiaomi 17")]);
         let at = std::env::temp_dir().join("skyward-avatar-model-test");
         std::fs::write(&at, &bytes).unwrap();
         assert_eq!(device_name(&at).as_deref(), Some("Xiaomi 17"));
@@ -215,11 +222,7 @@ mod tests {
 
     #[test]
     fn a_chinese_name_is_read_whole() {
-        // The one the owner gave this phone: four characters, twelve bytes.
-        let mut bytes = vec![b'X'; 20];
-        bytes.extend(b"\x00\x06\x00\x0bdevice_name/\x00\x07\x00\x0c");
-        bytes.extend("碎屏飞牛".as_bytes());
-        bytes.push(b'/');
+        let bytes = settings(&[("device_name", "碎屏飞牛")]);
         let at = std::env::temp_dir().join("skyward-avatar-chinese-test");
         std::fs::write(&at, &bytes).unwrap();
         assert_eq!(device_name(&at).as_deref(), Some("碎屏飞牛"));
@@ -232,5 +235,31 @@ mod tests {
         std::fs::write(&at, b"nothing here").unwrap();
         assert_eq!(device_name(&at), None);
         let _ = std::fs::remove_file(&at);
+    }
+
+    #[test]
+    fn a_package_name_beside_the_key_is_not_read_as_the_name() {
+        // What this phone showed: a package kept beside the name came out as
+        // the phone's name. The value now comes from the element that holds it,
+        // so the package is never looked at.
+        let bytes = settings(&[
+            ("device_name", "com.xiaomi.bluetooth"),
+        ]);
+        let at = std::env::temp_dir().join("skyward-avatar-package-test");
+        std::fs::write(&at, &bytes).unwrap();
+        assert_eq!(device_name(&at), None, "a package is not what a phone is called");
+        let _ = std::fs::remove_file(&at);
+    }
+
+    #[test]
+    fn a_name_with_a_dot_and_a_space_is_still_a_name() {
+        // Refusing every dotted value would lose names like `Mr. Smith`.
+        assert!(reads_as_a_name("Mr. Smith"));
+        assert!(reads_as_a_name("Xiaomi 17"));
+        assert!(reads_as_a_name("碎屏飞牛"));
+        assert!(!reads_as_a_name("com.xiaomi.bluetooth"));
+        assert!(!reads_as_a_name("android.process.acore"));
+        assert!(!reads_as_a_name(""));
+        assert!(!reads_as_a_name(&"x".repeat(65)));
     }
 }

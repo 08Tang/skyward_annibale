@@ -2415,7 +2415,10 @@ impl Pages<'_> {
             // The name the owner gave the phone, and where the settings keep
             // none, the model the phone calls itself by.
             match avatar::device_name(Path::new("/data/system/users/0/settings_secure.xml")) {
-                Some(name) => self.app.set_device_name(name),
+                Some(name) => {
+                    let _ = skyward_sys::kmsg(&format!("the name the phone goes by is read: {name}"));
+                    self.app.set_device_name(name)
+                }
                 None => match skyward_sys::prop("ro.product.marketname") {
                     Some(model) if !model.trim().is_empty() => {
                         let _ = skyward_sys::kmsg("the name the phone gives itself is not read; its model is shown instead");
