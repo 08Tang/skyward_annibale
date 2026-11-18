@@ -84,6 +84,14 @@
 //! ```
 
 #![forbid(unsafe_code)]
+// Vendored as Project Nayuki publishes it, and left as it is: these are the
+// lints of a compiler newer than the code was written for, over code this
+// project neither wrote nor changes. Its own project holds it to its own
+// standard; this one only calls it.
+#![allow(unknown_lints)]
+#![allow(unused_parens)]
+#![allow(deprecated)]
+#![allow(clippy::all)]
 use std::convert::TryFrom;
 
 /*---- QrCode functionality ----*/

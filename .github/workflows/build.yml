@@ -45,15 +45,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      # The QR code generator is vendored as its own project publishes it, and
-      # is held to its warnings rather than to this one's: it is left out of
-      # the lint, and built as a dependency all the same.
       - name: Lint what runs on the computer
-        run: cargo clippy --locked --workspace --all-targets --exclude qrcodegen -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Test
-        run: cargo test --locked --workspace --exclude qrcodegen
+        run: cargo test --locked --workspace
       - name: Lint what runs on the phone
-        run: cargo ndk -t arm64-v8a --platform 30 clippy --locked --workspace --all-targets --exclude qrcodegen -- -D warnings
+        run: cargo ndk -t arm64-v8a --platform 30 clippy --locked --workspace --all-targets -- -D warnings
 
   tools:
     name: Build the recovery service and the packer
