@@ -1,0 +1,35 @@
+name: Preview
+
+# The preview branch carries pages brought over from other phones' builds
+# before they are ready for `main`. It is checked by compiling alone: the
+# workspace as it builds on the computer, and the recovery as it builds for
+# the phone. No linting, no tests and no image, so that a page half brought
+# over still says whether it compiles.
+on:
+  push:
+    branches: ["preview", "preview/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  compile:
+    name: Compile
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # The preview branch takes in dependencies the release does not have
+      # yet, so the lock file is brought up to date rather than held to.
+      - name: Compile what runs on the computer
+        run: cargo check --workspace --all-targets
+      - name: Compile what runs on the phone
+        run: cargo ndk -t arm64-v8a --platform 30 check --workspace --all-targets
