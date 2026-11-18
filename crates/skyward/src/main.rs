@@ -565,7 +565,6 @@ fn load_modules(cfg: &DeviceConfig, names: &[String]) -> Result<Vec<PathBuf>> {
 /// The programs that use the phone's keys come after them, as `found`
 /// among the phone's partitions: where what the partitions say could not
 /// be made out, the phone's devices are up before that is said.
-#[cfg(target_os = "android")]
 /// How long a page waits for the phone's own parts before it goes ahead.
 const PREPARE_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
 

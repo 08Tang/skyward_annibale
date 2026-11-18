@@ -2466,7 +2466,6 @@ pub fn advanced(cx: &Ctx) -> Frame {
             Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal),
             Row::new(l.pick(FILESYSTEMS)).icon(RED, Icon::Mount),
             Row::new(l.pick(AVB)).icon(GREEN, Icon::Shield),
-            Row::new(l.pick(LOGS)).icon(ORANGE, Icon::Log),
             Row::new(l.pick(SERVE)).icon(BLUE, Icon::Globe),
             Row::new(l.pick(FETCH)).icon(GREEN, Icon::Globe),
             Row::new(l.pick(UPDATE)).icon(GREEN, Icon::Layers).trail(Trail::Value(update_value(cx))),
@@ -2478,19 +2477,11 @@ pub fn advanced(cx: &Ctx) -> Frame {
     let out = hits(
         &tools.rows,
         &[
-            Action::Open(Screen::Files),
-            Action::Open(Screen::Terminal),
-            Action::Open(Screen::Relabel),
-            Action::Open(Screen::Filesystems),
-            Action::Open(Screen::Avb),
-            Action::Open(Screen::Logs),
-            Action::Open(Screen::Update),
-        ],
-        &[
             Action::Open(Screen::Decrypt),
             Action::Open(Screen::Mount),
             Action::Open(Screen::Terminal),
             Action::Open(Screen::Filesystems),
+            Action::Open(Screen::Avb),
             Action::Open(Screen::Serve),
             Action::Open(Screen::Fetch),
             Action::Open(Screen::Update),
