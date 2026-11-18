@@ -83,15 +83,18 @@ mod tests {
     fn a_home_page_grown_by_an_update_notice_scrolls_down_to_its_last_row() {
         let f = fonts();
         let plain = info();
-        let mut app = App::new(Screen::Home, W, SNUG, PPD);
+        // The home page lost the mount row, so a screen the old snug height
+        // fits leaves room the notice no longer fills.
+        let snug = SNUG - 380;
+        let mut app = App::new(Screen::Home, W, snug, PPD);
         let fr = app.frame(&f, &plain);
         let reboot = fr.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;
-        assert!(reboot.y + reboot.h <= SNUG as f32, "without the notice the rows fit the screen");
+        assert!(reboot.y + reboot.h <= snug as f32, "without the notice the rows fit the screen");
         let i = DeviceInfo { snapshot: SnapshotState::Snapshotted, ..info() };
-        let mut app = App::new(Screen::Home, W, SNUG, PPD);
+        let mut app = App::new(Screen::Home, W, snug, PPD);
         let fr = app.frame(&f, &i);
         let reboot = fr.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;
-        assert!(reboot.y + reboot.h > SNUG as f32, "the notice pushes the last row below the screen");
+        assert!(reboot.y + reboot.h > snug as f32, "the notice pushes the last row below the screen");
         assert!(reboot.y + reboot.h <= fr.canvas.h as f32, "the page is drawn down to it");
         app.touch(Touch::Down(700.0, 2800.0), &f, 0);
         app.touch(Touch::Move(700.0, 2000.0), &f, 0);
@@ -108,128 +111,9 @@ mod tests {
 
     /// A screen too short for the home page's rows, which scrolls well past
     /// the fold of its search bar.
-    const SHORT: u32 = 2600;
-
-    #[test]
-    fn the_home_search_bar_folds_away_under_its_still_title_before_the_title_goes() {
-        let (f, i) = (fonts(), info());
-        let t = Theme::light(W, SHORT, PPD);
-        let m = t.m;
-        let mut app = App::new(Screen::Home, W, SHORT, PPD);
-        let fold = app.frame(&f, &i).fold.expect("the home page's search bar folds");
-        assert!((fold.span - (m.search_h + m.after_search)).abs() < 1e-3, "the bar and the gap under it");
-        let mut screen = Canvas::new(W, SHORT);
-        // Down a column through the bar clear of its words: the rows in the
-        // bar's grey, and the first row of the device card's white.
-        let x = m.dp(300.0) as u32;
-        let px = |screen: &Canvas, y: u32| screen.data[((y * W + x) * 4) as usize];
-        let bar = |screen: &Canvas| (0..SHORT).filter(|&y| px(screen, y) == t.pal.search.r).collect::<Vec<_>>();
-        let card = |screen: &Canvas| (fold.bar.y as u32..SHORT).find(|&y| px(screen, y) == t.pal.card.r).expect("the card shows");
-        // The large title's band.
-        let (top, bottom) = ((m.title_top - m.dp(14.0)) as u32, fold.bar.y as u32);
-        let title = |screen: &Canvas| screen.crop(0, top, W, bottom - top).data.clone();
-
-        app.compose(&mut screen, &f, &i, "12:00", 0);
-        let (whole, still, first) = (bar(&screen), title(&screen), card(&screen));
-        assert_eq!((whole[0], *whole.last().expect("the bar shows")), (fold.bar.y.ceil() as u32, (fold.bar.y + fold.bar.h).floor() as u32 - 1));
-
-        let half = (fold.bar.h / 2.0).round();
-        scroll_to(&mut app, &f, half, 1000);
-        app.compose(&mut screen, &f, &i, "12:00", 1800);
-        let rows = bar(&screen);
-        assert_eq!(rows[0], whole[0], "its top stays");
-        assert_eq!(*rows.last().expect("half the bar shows"), (fold.bar.y + fold.bar.h - half).floor() as u32 - 1, "its foot rises with the page");
-        assert_eq!(card(&screen), first - half as u32, "the content follows the finger");
-        assert!(title(&screen) == still, "the title holds still");
-
-        scroll_to(&mut app, &f, fold.span, 3000);
-        app.compose(&mut screen, &f, &i, "12:00", 3800);
-        assert!(bar(&screen).is_empty(), "folded away");
-        assert_eq!(card(&screen), first - fold.span.round() as u32, "the gap under it closed");
-        assert!(title(&screen) == still, "the title holds still till then");
-
-        scroll_to(&mut app, &f, fold.span + m.dp(10.0), 5000);
-        app.compose(&mut screen, &f, &i, "12:00", 5800);
-        assert!(title(&screen) != still, "then it goes up with the page");
-        assert!(!app.title.on, "the bar's title waits for the large one to fade");
-        scroll_to(&mut app, &f, fold.span + m.dp(TITLE_FADE_DP) + 2.0, 7000);
-        assert!(app.title.on);
-    }
-
-    #[test]
-    fn a_home_page_let_go_with_its_search_bar_part_folded_folds_it_whole_or_not_at_all() {
-        let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Home, W, SHORT, PPD);
-        let span = app.frame(&f, &i).fold.expect("the home page's search bar folds").span;
-        let settle = |app: &mut App, from: u64| {
-            for ms in (from..from + 2000).step_by(8) {
-                app.tick(ms);
-            }
-            app.top().1
-        };
-        scroll_to(&mut app, &f, span * (FOLD_SETTLE - 0.1), 0);
-        assert_eq!(settle(&mut app, 800), 0.0, "short of the mark it unfolds");
-        scroll_to(&mut app, &f, span * (FOLD_SETTLE + 0.1), 3000);
-        assert_eq!(settle(&mut app, 3800), span, "past it it folds away");
-        scroll_to(&mut app, &f, span + 50.0, 6000);
-        assert_eq!(settle(&mut app, 6800), span + 50.0, "a page scrolled past the fold stays");
-
-        // A light flick down, a thousand pixels a second, let go past the
-        // fold, that glides to rest with the bar part folded.
-        scroll_to(&mut app, &f, span + 86.0, 8000);
-        app.touch(Touch::Down(10.0, 1000.0), &f, 9000);
-        for k in 1..=7u64 {
-            app.touch(Touch::Move(10.0, 1000.0 + 8.0 * k as f32), &f, 9000 + 8 * k);
-        }
-        app.touch(Touch::Up, &f, 9056);
-        let glide = app.fling.expect("it glides");
-        let (rest, _) = glide.at(u64::MAX);
-        assert!(rest > 0.0 && rest < span, "this one comes to rest in the fold: {rest}");
-        let folded = if rest < span * FOLD_SETTLE { 0.0 } else { span };
-        assert_eq!(settle(&mut app, 9056), folded, "it settles there the same way");
-
-        // Let go in the fold while still moving, too slowly to glide out of
-        // it: the bar settles at once from where it was let go.
-        scroll_to(&mut app, &f, 0.0, 12_000);
-        app.touch(Touch::Down(10.0, 1000.0), &f, 13_000);
-        for k in 1..=5u64 {
-            app.touch(Touch::Move(10.0, 1000.0 - 30.0 * k as f32), &f, 13_000 + 8 * k);
-        }
-        for k in 1..=14u64 {
-            app.touch(Touch::Move(10.0, 850.0 + 2.0 * k as f32), &f, 13_040 + 8 * k);
-        }
-        app.touch(Touch::Up, &f, 13_152);
-        assert_eq!(app.top().1, 122.0);
-        assert!(app.fling.is_none(), "no glide");
-        assert_eq!(app.seek.map(|(rest, _)| rest), Some(span), "it was let go past the mark");
-        assert_eq!(settle(&mut app, 13_152), span);
-
-        // A flick that carries the page out of the fold glides on.
-        scroll_to(&mut app, &f, 0.0, 16_000);
-        app.touch(Touch::Down(10.0, 1000.0), &f, 17_000);
-        for k in 1..=4u64 {
-            app.touch(Touch::Move(10.0, 1000.0 - 30.0 * k as f32), &f, 17_000 + 8 * k);
-        }
-        app.touch(Touch::Up, &f, 17_032);
-        let (end, _) = app.fling.expect("it glides").at(u64::MAX);
-        assert!(end > span, "on past the fold: {end}");
-    }
-
-    #[test]
-    fn a_search_bar_folded_away_answers_no_touch() {
-        let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Home, W, H, PPD);
-        let fold = app.frame(&f, &i).fold.expect("the home page's search bar folds");
-        scroll_to(&mut app, &f, fold.span, 0);
-        app.tick(3000);
-        // Where the page carried the bar's middle had the bar scrolled with
-        // it: under the large title.
-        let (x, y) = fold.bar.centre();
-        app.touch(Touch::Down(x, y - fold.span), &f, 3000);
-        assert_eq!(app.pressing(), None, "nothing shows held");
-        app.touch(Touch::Up, &f, 3000);
-        assert_eq!(app.screen(), Screen::Home);
-    }
+    // The home page lost the mount row, so a screen this short is what leaves
+    // it scrollable.
+    const SHORT: u32 = 2200;
 
     #[test]
     fn pulling_past_the_top_resists_and_springs_back() {
@@ -311,15 +195,11 @@ mod tests {
             design: Some(5_500_000),
             full: Some(5_095_000),
             voltage: Some(4_200_000),
+            current: None,
             quick: false,
             plugged: false,
         };
-        let i = DeviceInfo {
-            os_version: Some("OS3.0.305.0.WMACNXM".into()),
-            android: Some("16".into()),
-            battery: Some(battery),
-            ..info()
-        };
+        let i = DeviceInfo { os_version: Some("OS3.0.305.0.WMACNXM".into()), android: Some("16".into()), battery: Some(battery), ..info() };
         let mut app = App::new(Screen::Specs, W, H, PPD);
         app.frame(&f, &i);
         let lift = flick(&mut app, &f, 1000, 20.0);

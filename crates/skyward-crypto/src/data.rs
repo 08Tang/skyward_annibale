@@ -4,7 +4,7 @@
 //! what it opens holds every file, with the names and contents of the ones
 //! that are a user's own still encrypted.
 
-use crate::encryption::{key_dir, target, Encryption};
+use crate::encryption::{Encryption, key_dir, target};
 use crate::gatekeeper::Gatekeeper;
 use crate::keymint::KeyMint;
 use crate::keystore::{StoredKey, Unwrap};
@@ -31,6 +31,12 @@ pub const SDCARD: &str = "/sdcard";
 
 /// The phone's owner, the first of its users.
 const OWNER: u32 = 0;
+
+/// The second space HyperOS keeps: a user of its own, whose files are kept
+/// behind the owner's credential. Opening them is a second unlock, behind the
+/// one the page asked for, and one that can leave the page waiting; the
+/// recovery leaves them closed.
+const SECOND_SPACE: u32 = 999;
 
 /// Unwrap the key the phone keeps for its data partition and give the
 /// storage hardware the form of it that lasts until the phone is started
@@ -84,9 +90,12 @@ fn open(service: &KeyMint) -> Result<Opened> {
     })();
     match mounted {
         Ok((checked, filesystem)) => Ok(Opened { mapped, filesystem, checked }),
-        Err(e) => match dm::remove(MAPPED) {
-            Ok(()) => Err(e),
-            Err(r) => Err(e.context(format!("removing {MAPPED} afterwards failed too: {r:#}"))),
+        Err(e) => match dm::status(MAPPED) {
+            Ok(Some(_)) => match dm::remove(MAPPED) {
+                Ok(()) => Err(e),
+                Err(r) => Err(e.context(format!("removing {MAPPED} afterwards failed too: {r:#}"))),
+            },
+            _ => Err(e),
         },
     }
 }
@@ -99,6 +108,11 @@ fn map(service: &KeyMint) -> Result<(Vec<Entry>, PathBuf)> {
     let entry = entries.first().with_context(|| format!("the phone's own table says nothing about {MOUNT}"))?;
     let encryption = Encryption::of(entry)?;
     let device = skyward_block::fstab::device(entry)?;
+    // A partition whose own filesystem can be read has nothing in front of it:
+    // there is no key to unwrap, and no device to put before it.
+    if skyward_block::probe::filesystem(Path::new(&device))?.is_some() {
+        return Ok((entries, PathBuf::from(device)));
+    }
     let key = storage_key(service, entry, &encryption)?;
     let sectors = skyward_block::size_bytes(&device)? / 512;
     let mapped = dm::create(MAPPED, &[target(&device, sectors, &key, &encryption)], false)?;
@@ -115,7 +129,10 @@ pub fn map_unmounted(service: &KeyMint) -> Result<PathBuf> {
 
 /// Take away the mapping [`map_unmounted`] made.
 pub fn unmap() -> Result<()> {
-    dm::remove(MAPPED)
+    match dm::status(MAPPED)? {
+        Some(_) => dm::remove(MAPPED),
+        None => Ok(()),
+    }
 }
 
 /// Show the owner's shared storage at /sdcard; shown already, it stays.
@@ -172,10 +189,22 @@ pub fn open_without_credential(service: &KeyMint) -> Result<Opening> {
         true => None,
         false => Some(open(service)?),
     };
+    // A partition that keeps no key for the files readable before anyone signs
+    // in is read as the phone's system reads it: every file is open already,
+    // and no user is left closed.
+    if !Path::new(FILE_MODE).exists() {
+        show_owner_storage()?;
+        return Ok(Opening { mounted, closed: Vec::new() });
+    }
     open_shared(service)?;
     let mut closed = Vec::new();
     let mut owner = Note::default();
     for user in open_users(service)? {
+        // The second space is left closed: its unlock follows the owner's, and
+        // a page waiting on it looks stuck.
+        if user == SECOND_SPACE {
+            continue;
+        }
         let protector = protector(user)?;
         match protector.lock {
             None => {
@@ -308,49 +337,67 @@ fn protector(user: u32) -> Result<crate::user::Protector> {
     }
     let id = match crate::locksettings::current_protector(Path::new(crate::locksettings::DATABASE), user)? {
         Some(recorded) => {
-            anyhow::ensure!(
-                ids.contains(&recorded),
-                "the phone keeps user {user}'s secret behind the blob {recorded}, which is not among the {} in {}",
-                ids.len(),
-                dir.display()
-            );
+            anyhow::ensure!(ids.contains(&recorded), "the phone keeps user {user}'s secret behind the blob {recorded}, which is not among the {} in {}", ids.len(), dir.display());
             recorded
         }
         // Where the phone records none, only a blob that is alone is
         // beyond doubt the user's.
         None => match &ids[..] {
             [only] => only.clone(),
-            _ => anyhow::bail!(
-                "{} holds {} of the user's blobs, and the phone records none of them as the one the user's own credential opens",
-                dir.display(),
-                ids.len()
-            ),
+            _ => anyhow::bail!("{} holds {} of the user's blobs, and the phone records none of them as the one the user's own credential opens", dir.display(), ids.len()),
         },
     };
-    // A user who has set a screen lock has what the phone recorded about
-    // it beside the blob; a user who has set none has nothing there.
-    let recorded = dir.join(format!("{id}.pwd"));
-    let lock = match recorded.exists() {
-        true => Some(crate::user::Lock::of(
-            &std::fs::read(&recorded).with_context(|| format!("read {}", recorded.display()))?,
-        )?),
-        false => None,
+    // What one blob keeps the user's secret behind, read as it lies.
+    let build = |id: &str| -> Result<crate::user::Protector> {
+        // A user who has set a screen lock has what the phone recorded about
+        // it beside the blob; a user who has set none has nothing there.
+        let recorded = dir.join(format!("{id}.pwd"));
+        let lock = match recorded.exists() {
+            true => Some(crate::user::Lock::of(&std::fs::read(&recorded).with_context(|| format!("read {}", recorded.display()))?)?),
+            false => None,
+        };
+        // A phone with a weaver records the slot it keeps for the blob; any
+        // other keeps the bytes the blob is bound to beside it.
+        let slot = dir.join(format!("{id}.weaver"));
+        let bound = match slot.exists() {
+            true => Bound::Weaver(crate::user::weaver_slot(&std::fs::read(&slot).with_context(|| format!("read {}", slot.display()))?)?),
+            false => Bound::Secdiscardable(std::fs::read(dir.join(format!("{id}.secdis"))).with_context(|| format!("read what the blob in {} is bound to", dir.display()))?),
+        };
+        Ok(crate::user::Protector { blob: std::fs::read(dir.join(format!("{id}.spblob"))).with_context(|| format!("read the blob in {}", dir.display()))?, bound, id: id.to_string(), lock })
     };
-    // A phone with a weaver records the slot it keeps for the blob; any
-    // other keeps the bytes the blob is bound to beside it.
-    let slot = dir.join(format!("{id}.weaver"));
-    let bound = match slot.exists() {
-        true => Bound::Weaver(crate::user::weaver_slot(&std::fs::read(&slot).with_context(|| format!("read {}", slot.display()))?)?),
-        false => Bound::Secdiscardable(
-            std::fs::read(dir.join(format!("{id}.secdis"))).with_context(|| format!("read what the blob in {} is bound to", dir.display()))?,
-        ),
-    };
-    Ok(crate::user::Protector {
-        blob: std::fs::read(dir.join(format!("{id}.spblob"))).with_context(|| format!("read the blob in {}", dir.display()))?,
-        bound,
-        id,
-        lock,
-    })
+    let first = build(&id)?;
+    // The weaver of a phone that has one lives in its secure element, reached
+    // through the phone's own OMAPI service; a recovery runs none of Android's
+    // framework, so the blob the lock settings name cannot be opened there even
+    // where the weaver's service answers. Android keeps a second blob for the
+    // same user bound to the bytes beside it, which the credential service
+    // alone opens: that one is taken instead, and opens the same secret with the
+    // same credential. A phone whose weaver answers sets that it is used first.
+    if matches!(first.bound, Bound::Weaver(_)) && !weaver_first() {
+        let other = ids.iter().find(|other| other.as_str() != id.as_str() && dir.join(format!("{other}.secdis")).is_file() && dir.join(format!("{other}.pwd")).is_file());
+        if let Some(other) = other {
+            let alt = build(other)?;
+            if matches!(alt.bound, Bound::Secdiscardable(_)) {
+                return Ok(alt);
+            }
+        }
+    }
+    Ok(first)
+}
+
+/// Whether the weaver's own slots are used for a phone whose blobs are bound to
+/// it: said once by the program that read the configuration, before the data
+/// partition is opened.
+static WEAVER_FIRST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Says whether the weaver's own slots are used, as the phone's configuration
+/// asks. Left unsaid, the other blob is taken.
+pub fn use_weaver_first(yes: bool) {
+    WEAVER_FIRST.store(yes, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn weaver_first() -> bool {
+    WEAVER_FIRST.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Which of the secure world's slots a user's enrolments sit in. What the
@@ -411,9 +458,7 @@ fn made_up_credential(service: &KeyMint, user: u32, id: &str, owner: Option<&Tok
     }
     let (nonce, body) = stored.split_at(NONCE_BYTES);
     let held = crate::keystore2::key_blob(Path::new(crate::keystore2::DATABASE), &alias)?;
-    let credential = service.gcm_decrypt(&held, &[], nonce, body, owner).with_context(|| {
-        format!("open the credential the phone made up for user {user}, which is kept behind the owner's own")
-    })?;
+    let credential = service.gcm_decrypt(&held, &[], nonce, body, owner).with_context(|| format!("open the credential the phone made up for user {user}, which is kept behind the owner's own"))?;
     Ok(Some(credential))
 }
 
@@ -435,9 +480,7 @@ fn open_user_files(service: &KeyMint, user: u32, credential: Option<&[u8]>, owne
         Some(lock) => {
             let typed = match made_up_credential(service, user, &protector.id, owner)? {
                 Some(made_up) => made_up,
-                None => credential
-                    .with_context(|| format!("user {user} has set a screen lock, and their files do not open without it"))?
-                    .to_vec(),
+                None => credential.with_context(|| format!("user {user} has set a screen lock, and their files do not open without it"))?.to_vec(),
             };
             lock.stretched(&typed).context("stretch the credential")?
         }
@@ -459,11 +502,7 @@ fn open_user_files(service: &KeyMint, user: u32, credential: Option<&[u8]>, owne
         // it will use that key.
         (Bound::Secdiscardable(secdiscardable), Some(lock)) => {
             let (binder, hardware) = (Binder::open()?, Binder::hardware()?);
-            let note = Gatekeeper::open(&binder, &hardware)?.verify(
-                TYPED_SLOT + user,
-                &lock.enrolled,
-                &crate::user::gatekeeper_password(&stretched),
-            )?;
+            let note = Gatekeeper::open(&binder, &hardware)?.verify(TYPED_SLOT + user, &lock.enrolled, &crate::user::gatekeeper_password(&stretched))?;
             (crate::user::protector_secret(&stretched, secdiscardable), Some(note))
         }
         (Bound::Secdiscardable(secdiscardable), None) => (crate::user::protector_secret(&stretched, secdiscardable), None),
@@ -474,9 +513,7 @@ fn open_user_files(service: &KeyMint, user: u32, credential: Option<&[u8]>, owne
         anyhow::bail!("the user's blob is too short to hold anything");
     }
     let (nonce, body) = content.split_at(NONCE_BYTES);
-    let inner = service
-        .gcm_decrypt(&held, &[], nonce, body, note.as_ref())
-        .context("open what the secure world holds the user's blob closed with")?;
+    let inner = service.gcm_decrypt(&held, &[], nonce, body, note.as_ref()).context("open what the secure world holds the user's blob closed with")?;
     let synthetic_password = crate::user::open_inner(&secret, &inner)?;
     let file_secret = crate::user::file_secret(&synthetic_password);
 

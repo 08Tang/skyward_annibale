@@ -53,12 +53,7 @@ fn ioctl(fd: &OwnedFd, what: libc::c_int, arg: *mut libc::c_void, doing: &str) -
 }
 
 fn sockaddr(address: Ipv4Addr) -> libc::sockaddr {
-    let inet = libc::sockaddr_in {
-        sin_family: libc::AF_INET as libc::sa_family_t,
-        sin_port: 0,
-        sin_addr: libc::in_addr { s_addr: u32::from_ne_bytes(address.octets()) },
-        sin_zero: [0; 8],
-    };
+    let inet = libc::sockaddr_in { sin_family: libc::AF_INET as libc::sa_family_t, sin_port: 0, sin_addr: libc::in_addr { s_addr: u32::from_ne_bytes(address.octets()) }, sin_zero: [0; 8] };
     unsafe { std::mem::transmute::<libc::sockaddr_in, libc::sockaddr>(inet) }
 }
 
@@ -74,6 +69,11 @@ pub fn hardware_address(interface: &str) -> Result<[u8; 6]> {
         *to = from.to_ne_bytes()[0];
     }
     Ok(mac)
+}
+
+/// Bring the interface up, or take it down.
+pub fn exists(interface: &str) -> bool {
+    std::path::Path::new("/sys/class/net").join(interface).exists()
 }
 
 /// Bring the interface up, or take it down.

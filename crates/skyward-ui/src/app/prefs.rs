@@ -26,7 +26,14 @@ pub enum Switch {
     /// Write Skyward back into the recovery partitions an install writes
     /// over.
     KeepRecovery,
+    /// Keep the screen lock that opened the user's files for the starts that
+    /// follow.
+    Remember,
     Wlan,
+    /// Open the WLAN as the recovery starts.
+    WlanAuto,
+    /// Keep the password of the network joined last, beside the network.
+    WlanKeep,
     /// Show the password typed rather than a dot for each character.
     ShowPassword,
 }
@@ -158,7 +165,7 @@ mod tests {
         assert_eq!(app.frame(&f, &i).title, "語言");
         tap_back(&mut app, &f, &i, 0);
         app.tick(1000);
-        assert_eq!((app.screen(), app.frame(&f, &i).title), (Screen::Settings, "設定"), "and so does the page gone back to");
+        assert_eq!((app.screen(), app.frame(&f, &i).title), (Screen::Settings, "選項設定"), "and so does the page gone back to");
         app.set_mounts(Ok(vec![MountRow { base: "odm".into(), point: "/odm".into(), mounted: true, holders: vec!["qseecomd".into()] }]));
         tap(&mut app, &f, &i, Action::Open(Screen::Language));
         tap(&mut app, &f, &i, Action::Language(Lang::En));
@@ -166,6 +173,8 @@ mod tests {
         app.tick(2000);
         tap_back(&mut app, &f, &i, 2000);
         app.tick(3000);
+        // The mount page is on the advanced page now.
+        tap(&mut app, &f, &i, Action::Open(Screen::Advanced));
         tap(&mut app, &f, &i, Action::Open(Screen::Mount));
         tap(&mut app, &f, &i, Action::Unavailable("A partition in use can't be unmounted"));
         assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("A partition in use can't be unmounted"), "as do its messages");

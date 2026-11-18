@@ -1,6 +1,6 @@
 use crate::app::{Action, FileKind, FileRow, Hit, Pinned, Rows};
 use crate::canvas::Canvas;
-use crate::color::{mix, Rgba};
+use crate::color::{Rgba, mix};
 use crate::fmt;
 use crate::font::{Face, Fonts};
 use crate::geom::Rect;
@@ -17,7 +17,19 @@ use std::path::{Component, Path};
 /// Where the path strip starts on an unscrolled page; scrolled up to the
 /// bar, it stays right under it.
 pub const STRIP_TOP_DP: f32 = 164.0;
+/// How tall the strip of pills is.
 const STRIP_DP: f32 = 51.0;
+/// How tall the row of sort controls under the pills is.
+pub const SORT_ROW_DP: f32 = 44.0;
+
+/// Where the list of entries starts: under the strip and the sort row drawn in
+/// it, so the first entry is covered by neither (2026-11-15: it was covered by
+/// the pills, and the first folder showed half behind them).
+pub const LIST_TOP_DP: f32 = STRIP_TOP_DP + STRIP_DP + SORT_ROW_DP;
+/// The three labels of the sort row, as the tests give them.
+#[cfg(test)]
+const ORDER: [&str; 3] = ["名称", "升序 ↑", "文件夹置顶"];
+
 const PILL_TOP_DP: f32 = 13.0;
 const PILL_DP: f32 = 33.0;
 const PILL_PAD_DP: f32 = 14.0;
@@ -26,7 +38,9 @@ const PILL_TEXT_DP: f32 = 10.9;
 const ARROW_GAP_DP: f32 = 6.0;
 const ARROW_DP: f32 = 14.0;
 /// Where the first row starts on an unscrolled page.
-pub const ROWS_TOP_DP: f32 = 223.7;
+/// Where the first entry's row starts: right under the strip and its sort row,
+/// so neither covers it.
+pub const ROWS_TOP_DP: f32 = LIST_TOP_DP;
 const ROW_DP: f32 = 72.0;
 /// What a second line of name adds to a row.
 const NAME_LINE_DP: f32 = 22.33;
@@ -227,6 +241,13 @@ pub fn rows(t: &Theme, f: &Fonts, entries: &[FileRow], action: fn(usize) -> Acti
 /// for what opens as a folder.
 #[allow(clippy::too_many_arguments)]
 pub fn row(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, e: &FileRow, now: i64, zone: usize) {
+    row_marked(c, t, f, l, e, now, zone, false);
+}
+
+/// Entry `e`'s row, with a tick at its right when the file manager is choosing
+/// entries and this one is chosen: the tick takes the chevron's place, and a
+/// folder's too.
+pub fn row_marked(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, e: &FileRow, now: i64, zone: usize, chosen: bool) {
     let m = &t.m;
     let p = palette(t);
     c.clear(p.page);
@@ -250,9 +271,25 @@ pub fn row(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, e: &FileRow, now: i64,
     }
     let base = m.dp(LINE_BASE_DP + NAME_LINE_DP * (lines.len() - 1) as f32);
     c.text(&f.value, &fmt::file_line(l, e, now, zone), x, base, m.dp(LINE_DP), p.line, Some(w));
-    if folder {
+    if chosen {
+        tick_mark(c, t, cy);
+    } else if folder {
         chevron(c, t, cy, p.chevron);
     }
+}
+
+/// The tick at the right of a chosen row: a filled disc with a check on it.
+fn tick_mark(c: &mut Canvas, t: &Theme, cy: f32) {
+    let m = &t.m;
+    let p = palette(t);
+    let cx = m.w as f32 - m.dp(SIDE_DP) - m.dp(10.0);
+    let r = m.dp(11.0);
+    c.fill_circle(cx, cy, r, t.pal.accent);
+    let sw = m.dp(2.0);
+    let ink = Rgba::rgb(255, 255, 255);
+    c.line(cx - r * 0.42, cy + r * 0.02, cx - r * 0.08, cy + r * 0.36, sw, ink);
+    c.line(cx - r * 0.08, cy + r * 0.36, cx + r * 0.46, cy - r * 0.32, sw, ink);
+    let _ = p;
 }
 
 /// A folder 40 units square scaled to `size`: an amber back with its tab,
@@ -362,10 +399,13 @@ fn sign(c: &mut Canvas, f: &Fonts, kind: FileType, x: f32, y: f32, u: f32, sheet
                 let a = deg.to_radians();
                 (20.0 + 7.2 * a.cos(), 23.2 + 7.2 * a.sin())
             };
-            c.fill_convex(&[30.0, 90.0, 150.0, 210.0, 270.0, 330.0].map(|deg| {
-                let (v, w) = corner(deg);
-                at(v, w)
-            }), WHITE);
+            c.fill_convex(
+                &[30.0, 90.0, 150.0, 210.0, 270.0, 330.0].map(|deg| {
+                    let (v, w) = corner(deg);
+                    at(v, w)
+                }),
+                WHITE,
+            );
             for deg in [90.0, 210.0, 330.0] {
                 line(c, (20.0, 23.2), corner(deg), 1.3, sheet);
             }
@@ -440,10 +480,28 @@ fn arrow(c: &mut Canvas, t: &Theme, x: f32, cy: f32, color: Rgba) {
 /// `top`, and the folder shown last in amber; each earlier one goes up to
 /// its folder. A path longer than the strip shows its end, as the stock
 /// strip does scrolled to it.
-pub fn strip(t: &Theme, f: &Fonts, top: &str, folder: &str) -> Pinned {
+pub fn strip(t: &Theme, f: &Fonts, top: &str, folder: &str, order: Option<[&str; 3]>) -> Pinned {
+    strip_with(t, f, top, folder, order, None, None)
+}
+
+/// The same strip, with one more control at the end of the sort row: the file
+/// manager's way into choosing several entries, where the order is set.
+pub fn strip_with(
+    t: &Theme,
+    f: &Fonts,
+    top: &str,
+    folder: &str,
+    order: Option<[&str; 3]>,
+    more: Option<(&str, Action)>,
+    // The other place the files can be shown from, beside the trail: its
+    // label and what reaching it does (`None` where there is but one place).
+    other: Option<(&str, Action)>,
+) -> Pinned {
     let m = &t.m;
     let p = palette(t);
-    let mut c = Canvas::new(m.w, m.dp(STRIP_DP).round() as u32);
+    // Tall enough for the sort row drawn under the pills.
+    let extra = if order.is_some() { SORT_ROW_DP } else { 0.0 };
+    let mut c = Canvas::new(m.w, m.dp(STRIP_DP + extra).round() as u32);
     c.clear(p.page);
     let below = Path::new(folder).components().filter_map(|part| match part {
         Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
@@ -451,26 +509,121 @@ pub fn strip(t: &Theme, f: &Fonts, top: &str, folder: &str) -> Pinned {
     });
     let names: Vec<String> = std::iter::once(top.to_string()).chain(below).collect();
     let px = m.dp(PILL_TEXT_DP);
-    let widths: Vec<f32> = names.iter().map(|n| c.text_width(&f.value, n, px) + m.dp(PILL_PAD_DP) * 2.0).collect();
     let step = m.dp(ARROW_GAP_DP) * 2.0 + m.dp(ARROW_DP);
-    let total = widths.iter().sum::<f32>() + step * (names.len() - 1) as f32;
-    let mut x = m.dp(SIDE_DP).min(m.w as f32 - m.dp(SIDE_DP) - total);
-    let (top, h) = (m.dp(PILL_TOP_DP), m.dp(PILL_DP));
-    let mut hits = Vec::new();
-    for (k, (name, &w)) in names.iter().zip(&widths).enumerate() {
-        let here = k + 1 == names.len();
-        let (fill, ink) = if here { (p.here, p.here_text) } else { (p.pill, p.pill_text) };
-        c.fill_round_rect(x, top, w, h, h / 2.0, fill);
-        c.text_center(&f.value, name, x + w / 2.0, top + h / 2.0, px, ink);
-        if !here {
-            hits.push(Hit { rect: Rect::new(x, top, w, h), action: Action::OpenAncestor(k) });
-            arrow(&mut c, t, x + w + m.dp(ARROW_GAP_DP), top + h / 2.0, p.arrow);
+    let (x_top, h) = (m.dp(PILL_TOP_DP), m.dp(PILL_DP));
+
+    // The other place is put at the right first: the trail is fitted beside it
+    // rather than allowed to run under it, so a folder named long and deep down
+    // still leaves the way to the other place reachable.
+    let gap = m.dp(6.0);
+    let other_pill = other.map(|(label, action)| {
+        let w = c.text_width(&f.value, label, px) + m.dp(PILL_PAD_DP) * 2.0;
+        (label, action, w, m.w as f32 - m.dp(SIDE_DP) - w)
+    });
+    let right_limit = match &other_pill {
+        Some((_, _, w, x)) if *x > 0.0 => x - gap,
+        _ => m.w as f32 - m.dp(SIDE_DP),
+    };
+    let room = right_limit - m.dp(SIDE_DP);
+
+    // The parts of the trail, the first and the last kept where the whole of it
+    // will not fit; the part left out is shown as one pill of its own that
+    // climbs a step at a time, so nothing is unreachable.
+    let widths: Vec<f32> = names.iter().map(|n| c.text_width(&f.value, n, px) + m.dp(PILL_PAD_DP) * 2.0).collect();
+    let ellipsis = m.dp(PILL_TEXT_DP) * 0.86;
+    let dots_w = c.text_width(&f.value, "…", ellipsis) + m.dp(PILL_PAD_DP) * 2.0;
+    let whole = widths.iter().sum::<f32>() + step * (names.len().saturating_sub(1)) as f32;
+    let (mut shown, mut elided) = (widths.clone(), 0usize);
+    let mut fitted = whole;
+    while fitted > room && shown.len() > 2 {
+        // Take away the part just inside the first, counting the pill that
+        // stands for the ones left out too.
+        shown.remove(1);
+        elided += 1;
+        fitted = shown.iter().sum::<f32>() + dots_w + step * shown.len() as f32;
+    }
+
+    // What is drawn: the first part, one pill standing for the parts left
+    // out, and the rest — the last of them being the folder shown, which does
+    // not go up.
+    let mut items: Vec<(String, f32)> = Vec::with_capacity(shown.len() + 1);
+    items.push((names[0].clone(), widths[0]));
+    if elided > 0 {
+        items.push(("…".to_string(), dots_w));
+        for k in (1 + elided)..names.len() {
+            items.push((names[k].clone(), widths[k]));
         }
-        x += w + step;
+    } else {
+        for k in 1..names.len() {
+            items.push((names[k].clone(), widths[k]));
+        }
+    }
+    let mut hits = Vec::new();
+    let mut x = m.dp(SIDE_DP);
+    let last = items.len().saturating_sub(1);
+    for (k, (name, width)) in items.iter().enumerate() {
+        let here = k == last;
+        let dots = elided > 0 && k == 1;
+        let (fill, ink, size) = if here { (p.here, p.here_text, px) } else { (p.pill, p.pill_text, if dots { ellipsis } else { px }) };
+        if x + width > right_limit {
+            break;
+        }
+        widgets::pill_sized(&mut c, f, x, x_top, h, size, m.dp(PILL_PAD_DP), name, fill, ink);
+        if !here && !dots {
+            // `OpenAncestor(n)` climbs to the folder the n-th pill of the trail
+            // names; the pill standing for the parts left out leads nowhere.
+            let ancestor = if elided > 0 { k + elided } else { k };
+            hits.push(Hit { rect: Rect::new(x, x_top, *width, h), action: Action::OpenAncestor(ancestor) });
+            arrow(&mut c, t, x + *width + m.dp(ARROW_GAP_DP), x_top + h / 2.0, p.arrow);
+        } else if !here {
+            arrow(&mut c, t, x + *width + m.dp(ARROW_GAP_DP), x_top + h / 2.0, p.arrow);
+        }
+        x += *width + step;
+    }
+
+    // The other place, pinned to the right of the trail.
+    if let Some((label, action, w, x)) = other_pill
+        && x > 0.0
+    {
+        widgets::pill_sized(&mut c, f, x, x_top, h, px, m.dp(PILL_PAD_DP), label, p.pill, p.pill_text);
+        hits.push(Hit { rect: Rect::new(x, x_top, w, h), action });
+    }
+    // The order the entries are shown in, under the pills: the key, the side,
+    // and whether folders stay on top. Each is touched where it is written.
+    let Some(order) = order else {
+        return Pinned { canvas: c, top: m.dp(STRIP_TOP_DP), hits };
+    };
+    let row_top = m.dp(PILL_TOP_DP) + m.dp(PILL_DP) + m.dp(7.0);
+    let row_h = m.dp(PILL_DP);
+    let px = m.dp(PILL_TEXT_DP);
+    let widths: Vec<f32> = order.iter().map(|label| c.text_width(&f.value, label, px) + m.dp(PILL_PAD_DP) * 2.0).collect();
+    let mut x = m.dp(SIDE_DP);
+    for ((label, &w), action) in order.iter().zip(&widths).zip([Action::CycleSort, Action::ToggleSortOrder, Action::ToggleFoldersFirst]) {
+        if x + w > m.w as f32 - m.dp(SIDE_DP) {
+            break;
+        }
+        widgets::pill_sized(&mut c, f, x, row_top, row_h, px, m.dp(PILL_PAD_DP), label, p.pill, p.pill_text);
+        hits.push(Hit { rect: Rect::new(x, row_top, w, row_h), action });
+        x += w + m.dp(6.0);
+    }
+    // The way into choosing several, after the order, where a finger looking
+    // for the list's controls already is.
+    // The way into choosing several sits at the right end of its row, under the
+    // other place's pill at the right end of the strip above it, so the two line
+    // up down the page.
+    if let Some((label, action)) = more {
+        let w = c.text_width(&f.value, label, px) + m.dp(PILL_PAD_DP) * 2.0;
+        let right = m.w as f32 - m.dp(SIDE_DP);
+        let left = right - w;
+        // Clear of the sort controls where the row is long: it is dropped
+        // rather than drawn over them.
+        if left >= x {
+            widgets::pill_sized(&mut c, f, left, row_top, row_h, px, m.dp(PILL_PAD_DP), label, p.here, p.here_text);
+            hits.push(Hit { rect: Rect::new(left, row_top, w, row_h), action });
+        }
     }
     Pinned { canvas: c, top: m.dp(STRIP_TOP_DP), hits }
 }
-
 /// What the page says in place of the list, centred below the path, with
 /// the reason under it when there is one.
 pub fn note(c: &mut Canvas, t: &Theme, f: &Fonts, title: &str, why: Option<&str>) {
@@ -612,14 +765,21 @@ mod tests {
     fn the_path_goes_up_by_its_capsules_and_shows_its_end_when_long() {
         let f = crate::font::bundled();
         let t = Theme::light(1440, 3200, 3.5);
-        let path = strip(&t, &f, "根目录", "/system/bin");
-        let ups: Vec<Action> = path.hits.iter().map(|h| h.action).collect();
-        assert_eq!(ups, [Action::OpenAncestor(0), Action::OpenAncestor(1)], "the root and system go up; bin is where we are");
-        let place = strip(&t, &f, "内部存储", "Download");
-        assert_eq!(place.hits.iter().map(|h| h.action).collect::<Vec<_>>(), [Action::OpenAncestor(0)], "a place's top goes up");
-        let deep = strip(&t, &f, "根目录", "/data/media/0/Android/data/com.example.something.long/files/cache/images");
+        let path = strip(&t, &f, "根目录", "/system/bin", Some(ORDER));
+        // The sort row is part of the strip where the page draws one, so only
+        // the capsules above the folder shown are the ones going up.
+        let ups = |p: &Pinned| -> Vec<Action> { p.hits.iter().map(|h| h.action).filter(|a| matches!(a, Action::OpenAncestor(_))).collect() };
+        assert_eq!(ups(&path), [Action::OpenAncestor(0), Action::OpenAncestor(1)], "the root and system go up; bin is where we are");
+        let place = strip(&t, &f, "内部存储", "Download", Some(ORDER));
+        assert_eq!(ups(&place), [Action::OpenAncestor(0)], "a place's top goes up");
+        let deep = strip(&t, &f, "根目录", "/data/media/0/Android/data/com.example.something.long/files/cache/images", Some(ORDER));
         let last = deep.hits.last().expect("the capsules before the folder shown");
         assert!(last.rect.x + last.rect.w < t.m.w as f32, "the end shows");
-        assert!(deep.hits[0].rect.x < 0.0, "the start runs off the left edge");
+        // A trail too long for the strip leaves the middle out rather than
+        // running off the left edge: its first capsule stays on the screen.
+        assert!(deep.hits[0].rect.x >= 0.0, "the start stays on the screen");
+        // And the part left out is still reached: the pill standing for it
+        // climbs past the ones it hid.
+        assert!(deep.hits.iter().any(|h| matches!(h.action, Action::OpenAncestor(k) if k > 0)), "the hidden part is still climbed to");
     }
 }

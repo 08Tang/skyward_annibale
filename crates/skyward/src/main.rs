@@ -14,6 +14,10 @@ mod backup;
 #[cfg(target_os = "android")]
 mod decrypt;
 #[cfg(target_os = "android")]
+mod fetch;
+#[cfg(target_os = "android")]
+mod fileserve;
+#[cfg(target_os = "android")]
 mod filework;
 #[cfg(target_os = "android")]
 mod haptics;
@@ -26,17 +30,22 @@ mod merge;
 #[cfg(target_os = "android")]
 mod partwork;
 #[cfg(target_os = "android")]
+mod portal;
+#[cfg(target_os = "android")]
 mod pty;
 #[cfg(target_os = "android")]
 mod readings;
 #[cfg(target_os = "android")]
 mod relabel;
+mod remember;
 #[cfg(target_os = "android")]
 mod secure;
 #[cfg(target_os = "android")]
 mod services;
 #[cfg(target_os = "android")]
 mod settings;
+#[cfg(target_os = "android")]
+mod sortmem;
 #[cfg(target_os = "android")]
 mod systems;
 #[cfg(target_os = "android")]
@@ -49,6 +58,8 @@ mod waveform;
 mod wipe;
 #[cfg(target_os = "android")]
 mod wlan;
+#[cfg(target_os = "android")]
+mod wlanmem;
 
 #[derive(Parser)]
 #[command(name = "skyward", version, about = "Skyward recovery")]
@@ -228,6 +239,13 @@ enum Cmd {
 fn main() -> Result<()> {
     #[cfg(target_os = "android")]
     install_panic_logger();
+    // A panic ends this process, and init starts it again: what ended it would
+    // be lost with it. It is put in the kernel log as it happens, so the start
+    // that follows can be told why.
+    std::panic::set_hook(Box::new(|info| {
+        let at = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_default();
+        let _ = skyward_sys::kmsg(&format!("the recovery ended on a panic at {at}: {info}"));
+    }));
     // init starts the recovery service by path with no arguments.
     let started_as = std::env::args_os().next().unwrap_or_default();
     let name = Path::new(&started_as).file_name().unwrap_or_default();
@@ -245,11 +263,7 @@ fn main() -> Result<()> {
         Cmd::Modules { source } => modules(&source),
         Cmd::Load { config, names } => {
             let cfg = DeviceConfig::load(&config)?;
-            let names = if names.is_empty() {
-                cfg.modules.load.clone()
-            } else {
-                names
-            };
+            let names = if names.is_empty() { cfg.modules.load.clone() } else { names };
             for path in load_modules(&cfg, &names)? {
                 println!("{}", path.display());
             }
@@ -270,9 +284,7 @@ fn main() -> Result<()> {
         #[cfg(target_os = "android")]
         Cmd::Discard { device } => skyward_block::erase::discard(&device),
         #[cfg(target_os = "android")]
-        Cmd::Mkfs { device, filesystem } => {
-            skyward_block::erase::make(&device, &filesystem, &[], false)
-        }
+        Cmd::Mkfs { device, filesystem } => skyward_block::erase::make(&device, &filesystem, &[], false),
         Cmd::Lp { super_dev, slot } => lp(&super_dev, slot),
         Cmd::Update => update(),
         #[cfg(target_os = "android")]
@@ -290,13 +302,7 @@ fn main() -> Result<()> {
                 println!("damaged: {d}");
             }
             for m in &mounts.partitions {
-                println!(
-                    "{:<14} {:<16} {:<18} {}",
-                    m.partition,
-                    m.device.display(),
-                    m.mount_point.display(),
-                    m.filesystem
-                );
+                println!("{:<14} {:<16} {:<18} {}", m.partition, m.device.display(), m.mount_point.display(), m.filesystem);
             }
             Ok(())
         }
@@ -305,12 +311,7 @@ fn main() -> Result<()> {
         Cmd::Services { config } => {
             let slot = booted_slot()?;
             let props = skyward_info::installed_props(slot)?;
-            let services: Vec<Started> = DeviceConfig::load(&config)?
-                .services
-                .into_iter()
-                .filter(|s| s.runs_on(&props))
-                .map(Started::from)
-                .collect();
+            let services: Vec<Started> = DeviceConfig::load(&config)?.services.into_iter().filter(|s| s.runs_on(&props)).map(Started::from).collect();
             let libraries = secure::libraries()?;
             services::start(&services, libraries.as_deref())?;
             keys::start(&keys::found(slot, libraries.as_deref())?.steps?)?;
@@ -320,9 +321,7 @@ fn main() -> Result<()> {
         }
         #[cfg(target_os = "android")]
         Cmd::Keys => {
-            for line in keys::describe(
-                &keys::found(booted_slot()?, secure::libraries()?.as_deref())?.steps?,
-            ) {
+            for line in keys::describe(&keys::found(booted_slot()?, secure::libraries()?.as_deref())?.steps?) {
                 println!("{line}");
             }
             Ok(())
@@ -333,37 +332,19 @@ fn main() -> Result<()> {
             Ok(())
         }
         #[cfg(target_os = "android")]
-        Cmd::Haptic {
-            config,
-            position,
-            ticks,
-        } => {
-            let haptics = DeviceConfig::load(&config)?
-                .haptics
-                .context("the configuration describes no vibration motor")?;
+        Cmd::Haptic { config, position, ticks } => {
+            let haptics = DeviceConfig::load(&config)?.haptics.context("the configuration describes no vibration motor")?;
             haptics::probe(&haptics, position, ticks)
         }
         #[cfg(target_os = "android")]
-        Cmd::Capture {
-            out,
-            count,
-            interval,
-            card,
-        } => {
+        Cmd::Capture { out, count, interval, card } => {
             std::fs::create_dir_all(&out).with_context(|| format!("create {}", out.display()))?;
             for i in 0..count {
                 let t0 = std::time::Instant::now();
                 let c = skyward_ui::surface::kms::capture(&card)?;
                 let path = out.join(format!("cap-{i:03}.rgba"));
-                std::fs::write(&path, &c.data)
-                    .with_context(|| format!("write {}", path.display()))?;
-                println!(
-                    "{} {}x{} in {} ms",
-                    path.display(),
-                    c.w,
-                    c.h,
-                    t0.elapsed().as_millis()
-                );
+                std::fs::write(&path, &c.data).with_context(|| format!("write {}", path.display()))?;
+                println!("{} {}x{} in {} ms", path.display(), c.w, c.h, t0.elapsed().as_millis());
                 std::thread::sleep(std::time::Duration::from_millis(interval));
             }
             Ok(())
@@ -371,20 +352,13 @@ fn main() -> Result<()> {
         #[cfg(target_os = "android")]
         Cmd::Clock => {
             let ms = skyward_sys::clock::set_from_rtc()?;
-            println!(
-                "{}",
-                skyward_ui::fmt::datetime(skyward_ui::Lang::En, (ms / 1000) as i64, 0)
-            );
+            println!("{}", skyward_ui::fmt::datetime(skyward_ui::Lang::En, (ms / 1000) as i64, 0));
             Ok(())
         }
         #[cfg(target_os = "android")]
         Cmd::Service { name } => {
             let binder = skyward_binder::driver::Binder::open()?;
-            let described = if skyward_binder::service::declared(&binder, &name)? {
-                "described"
-            } else {
-                "not described"
-            };
+            let described = if skyward_binder::service::declared(&binder, &name)? { "described" } else { "not described" };
             let running = match skyward_binder::service::find(&binder, &name)? {
                 Some(_) => "registered",
                 None => "not registered",
@@ -397,15 +371,9 @@ fn main() -> Result<()> {
             let binder = skyward_binder::driver::Binder::open()?;
             let service = skyward_crypto::keymint::KeyMint::open(&binder)?;
             let hw = service.hardware()?;
-            println!(
-                "keymint {} version {} at security level {} by {}",
-                hw.name, hw.version, hw.security_level, hw.author
-            );
+            println!("keymint {} version {} at security level {} by {}", hw.name, hw.version, hw.security_level, hw.author);
             if let Some(alias) = alias {
-                let held = skyward_crypto::keystore2::key_blob(
-                    Path::new(skyward_crypto::keystore2::DATABASE),
-                    &alias,
-                )?;
+                let held = skyward_crypto::keystore2::key_blob(Path::new(skyward_crypto::keystore2::DATABASE), &alias)?;
                 println!("{alias} is a key of {} bytes", held.len());
                 for (tag, value) in service.authorizations(&held, &[])? {
                     println!("  tag {tag} = {value} ({value:#x})");
@@ -426,15 +394,9 @@ fn main() -> Result<()> {
         }
         #[cfg(target_os = "android")]
         Cmd::Gatekeeper => {
-            let (binder, hardware) = (
-                skyward_binder::driver::Binder::open()?,
-                skyward_binder::driver::Binder::hardware()?,
-            );
+            let (binder, hardware) = (skyward_binder::driver::Binder::open()?, skyward_binder::driver::Binder::hardware()?);
             let gatekeeper = skyward_crypto::gatekeeper::Gatekeeper::open(&binder, &hardware)?;
-            println!(
-                "the credential service answers for {}",
-                gatekeeper.serves()?
-            );
+            println!("the credential service answers for {}", gatekeeper.serves()?);
             match gatekeeper.version() {
                 Ok(Some(version)) => println!("it serves version {version} of that interface"),
                 Ok(None) => println!("it numbers its version in its own name"),
@@ -454,10 +416,7 @@ fn main() -> Result<()> {
         Cmd::Weaver => {
             let binder = skyward_binder::driver::Binder::open()?;
             let c = skyward_crypto::weaver::Weaver::open(&binder)?.config()?;
-            println!(
-                "the weaver has {} slots, keeps keys of {} bytes and values of {} bytes",
-                c.slots, c.key_bytes, c.value_bytes
-            );
+            println!("the weaver has {} slots, keeps keys of {} bytes and values of {} bytes", c.slots, c.key_bytes, c.value_bytes);
             Ok(())
         }
         #[cfg(target_os = "android")]
@@ -467,10 +426,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         #[cfg(target_os = "android")]
-        Cmd::Data {
-            credential,
-            close: false,
-        } => {
+        Cmd::Data { credential, close: false } => {
             use skyward_crypto::data;
             let binder = skyward_binder::driver::Binder::open()?;
             let service = skyward_crypto::keymint::KeyMint::open(&binder)?;
@@ -479,18 +435,9 @@ fn main() -> Result<()> {
                 Some(mounted) => {
                     if let Some(checked) = &mounted.checked {
                         print!("{}", checked.said);
-                        println!(
-                            "the check of {} ended with {}",
-                            mounted.mapped.display(),
-                            checked.status
-                        );
+                        println!("the check of {} ended with {}", mounted.mapped.display(), checked.status);
                     }
-                    println!(
-                        "{} holds {} at {}",
-                        mounted.mapped.display(),
-                        mounted.filesystem,
-                        data::MOUNT
-                    );
+                    println!("{} holds {} at {}", mounted.mapped.display(), mounted.filesystem, data::MOUNT);
                 }
                 None => println!("{} is mounted already", data::MOUNT),
             }
@@ -511,38 +458,18 @@ fn main() -> Result<()> {
             Ok(())
         }
         #[cfg(target_os = "android")]
-        Cmd::Ui {
-            config,
-            font,
-            mono,
-            unlock,
-            dump,
-        } => {
+        Cmd::Ui { config, font, mono, unlock, dump } => {
             let cfg = DeviceConfig::load(&config)?;
-            let start = if unlock {
-                skyward_ui::app::Screen::Decrypt
-            } else {
-                skyward_ui::app::Screen::Home
-            };
+            let start = if unlock { skyward_ui::app::Screen::Decrypt } else { skyward_ui::app::Screen::Home };
             // The programs the recovery service started for the phone's
             // keys are read from the partitions again, as it read them;
             // where they do not show, it started none.
             let mut programs = cfg.services.clone();
-            match booted_slot()
-                .and_then(|slot| keys::found(slot, secure::libraries()?.as_deref())?.steps)
-            {
+            match booted_slot().and_then(|slot| keys::found(slot, secure::libraries()?.as_deref())?.steps) {
                 Ok(steps) => programs.extend(keys::programs(&steps)),
                 Err(e) => eprintln!("the programs of the phone's keys are not known: {e:#}"),
             }
-            ui::run(
-                &cfg,
-                &programs,
-                &font,
-                &mono,
-                bcb::Request::default(),
-                start,
-                dump.as_deref(),
-            )
+            ui::run(&cfg, &programs, &font, &mono, bcb::Request::default(), start, dump.as_deref())
         }
     }
 }
@@ -560,32 +487,17 @@ fn install_panic_logger() {
         if WRITING.swap(true, Ordering::SeqCst) {
             return;
         }
-        let when = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or_else(
-                |_| "before 1970".to_string(),
-                |d| format!("{}.{:03} UTC", d.as_secs(), d.subsec_millis()),
-            );
-        let where_ = info.location().map_or_else(
-            || "unknown location".to_string(),
-            |l| format!("{}:{}:{}", l.file(), l.line(), l.column()),
-        );
+        let when = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or_else(|_| "before 1970".to_string(), |d| format!("{}.{:03} UTC", d.as_secs(), d.subsec_millis()));
+        let where_ = info.location().map_or_else(|| "unknown location".to_string(), |l| format!("{}:{}:{}", l.file(), l.line(), l.column()));
         let text = format!("{when}\npanic at {where_}\n{info}\n");
         for path in ["/metadata/skyward/panic.log", "/cache/skyward-panic.log"] {
             let saved = (|| -> Result<()> {
                 let path = Path::new(path);
                 if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)
-                        .with_context(|| format!("create {}", parent.display()))?;
+                    std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
                 }
-                let mut file = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(path)
-                    .with_context(|| format!("open {}", path.display()))?;
-                file.write_all(text.as_bytes())
-                    .and_then(|()| file.sync_all())
-                    .with_context(|| format!("write {}", path.display()))
+                let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path).with_context(|| format!("open {}", path.display()))?;
+                file.write_all(text.as_bytes()).and_then(|()| file.sync_all()).with_context(|| format!("write {}", path.display()))
             })();
             if let Err(e) = saved {
                 let _ = skyward_sys::kmsg(&format!("saving the panic log: {e:#}"));
@@ -608,43 +520,25 @@ fn lp(super_dev: &Path, slot: Option<u32>) -> Result<()> {
     };
     let md = skyward_lp::read(super_dev, slot)?;
     let g = md.geometry;
-    println!(
-        "slot {slot}: version {}.{}, flags {:#x}",
-        md.major_version, md.minor_version, md.header_flags
-    );
-    println!(
-        "geometry: {} metadata slots of {} bytes, logical block {} bytes",
-        g.metadata_slot_count, g.metadata_max_size, g.logical_block_size
-    );
+    println!("slot {slot}: version {}.{}, flags {:#x}", md.major_version, md.minor_version, md.header_flags);
+    println!("geometry: {} metadata slots of {} bytes, logical block {} bytes", g.metadata_slot_count, g.metadata_max_size, g.logical_block_size);
     for d in &md.damaged {
         println!("damaged: {d}");
     }
     for d in &md.block_devices {
-        println!(
-            "device {}: first sector {}, {} bytes, alignment {} offset {}",
-            d.partition_name, d.first_logical_sector, d.size, d.alignment, d.alignment_offset
-        );
+        println!("device {}: first sector {}, {} bytes, alignment {} offset {}", d.partition_name, d.first_logical_sector, d.size, d.alignment, d.alignment_offset);
     }
     for gr in &md.groups {
         println!("group {}: max {} bytes", gr.name, gr.maximum_size);
     }
     for p in &md.partitions {
-        println!(
-            "partition {} group {} attributes {:#x}, {} bytes",
-            p.name,
-            md.groups[p.group].name,
-            p.attributes,
-            p.bytes()
-        );
+        println!("partition {} group {} attributes {:#x}, {} bytes", p.name, md.groups[p.group].name, p.attributes, p.bytes());
         let mut start = 0;
         for e in &p.extents {
             let end = start + e.sectors() - 1;
             match *e {
                 skyward_lp::Extent::Linear { device, sector, .. } => {
-                    println!(
-                        "  {start} .. {end} linear {} {sector}",
-                        md.block_devices[device].partition_name
-                    )
+                    println!("  {start} .. {end} linear {} {sector}", md.block_devices[device].partition_name)
                 }
                 skyward_lp::Extent::Zero { .. } => println!("  {start} .. {end} zero"),
             }
@@ -656,12 +550,7 @@ fn lp(super_dev: &Path, slot: Option<u32>) -> Result<()> {
 
 /// Load `names` from the module sources the configuration lists.
 fn load_modules(cfg: &DeviceConfig, names: &[String]) -> Result<Vec<PathBuf>> {
-    let dirs = cfg
-        .modules
-        .sources
-        .iter()
-        .map(|s| skyward_modules::source_dir(s))
-        .collect::<Result<Vec<_>>>()?;
+    let dirs = cfg.modules.sources.iter().map(|s| skyward_modules::source_dir(s)).collect::<Result<Vec<_>>>()?;
     skyward_modules::load(&dirs, names)
 }
 
@@ -677,11 +566,69 @@ fn load_modules(cfg: &DeviceConfig, names: &[String]) -> Result<Vec<PathBuf>> {
 /// among the phone's partitions: where what the partitions say could not
 /// be made out, the phone's devices are up before that is said.
 #[cfg(target_os = "android")]
+/// How long a page waits for the phone's own parts before it goes ahead.
+const PREPARE_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+struct Gate {
+    done: std::sync::Mutex<bool>,
+    cv: std::sync::Condvar,
+}
+
+static PREPARED: std::sync::OnceLock<Gate> = std::sync::OnceLock::new();
+
+fn gate() -> &'static Gate {
+    PREPARED.get_or_init(|| Gate { done: std::sync::Mutex::new(false), cv: std::sync::Condvar::new() })
+}
+
+/// The WLAN's thread, started by the bringing-up as soon as its driver is
+/// warmed, rather than once the pages are built: the supplicant then scans and
+/// joins while the decrypt page is still being answered, as it did before the
+/// screen was brought up beside the phone's parts (2026-11-15).
+static WLAN: std::sync::OnceLock<std::sync::Mutex<Option<crate::wlan::Worker>>> = std::sync::OnceLock::new();
+
+/// The DNS servers the joined network gave, for looking names up: the WLAN
+/// thread started by the bringing-up fills it, and the pages look through the
+/// same one.
+pub(crate) fn servers() -> skyward_net::http::Servers {
+    SERVERS.get_or_init(|| std::sync::Arc::new(std::sync::Mutex::new(Vec::new()))).clone()
+}
+
+static SERVERS: std::sync::OnceLock<skyward_net::http::Servers> = std::sync::OnceLock::new();
+
+/// Take the WLAN's thread the bringing-up started, if it did.
+pub(crate) fn take_wlan() -> Option<crate::wlan::Worker> {
+    WLAN.get().and_then(|slot| slot.lock().unwrap_or_else(|e| e.into_inner()).take())
+}
+
+/// Say the phone's own parts are up, or that bringing them up failed: either
+/// way nothing is gained by waiting longer.
+fn mark_prepared() {
+    skyward_ui::progress::reached(skyward_ui::progress::READY);
+    let gate = gate();
+    *gate.done.lock().unwrap_or_else(|e| e.into_inner()) = true;
+    gate.cv.notify_all();
+}
+
+/// Wait until the phone's own parts are up, and no longer than [`PREPARE_WAIT`]:
+/// a page that needs the partitions or the phone's services calls this first,
+/// so that the screen can be drawn before any of them are ready.
+pub(crate) fn wait_prepared() {
+    let gate = gate();
+    let done = gate.done.lock().unwrap_or_else(|e| e.into_inner());
+    if !*done {
+        let _ = gate.cv.wait_timeout(done, PREPARE_WAIT);
+    }
+}
+
+/// Whether the phone's own parts are up already, asked without waiting.
+pub(crate) fn prepared() -> bool {
+    *gate().done.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Found>) -> Result<()> {
+    let watched = std::time::Instant::now();
     let nodes = skyward_sys::ueventd::apply()?;
-    skyward_sys::kmsg(&format!(
-        "{nodes} device nodes given the owner their phone describes"
-    ))?;
+    skyward_sys::kmsg(&format!("{nodes} device nodes given the owner their phone describes"))?;
     let props = skyward_info::installed_props(slot)?;
     adopt_installed_version(&props)?;
     // Without logd the phone's own programs still run, and only what they
@@ -691,18 +638,11 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
     {
         skyward_sys::kmsg(&format!("logd not started: {e:#}"))?;
     }
-    let services: Vec<Started> = cfg
-        .services
-        .iter()
-        .filter(|s| s.runs_on(&props))
-        .cloned()
-        .map(Started::from)
-        .collect();
+    let mut services: Vec<Started> = cfg.services.iter().filter(|s| s.runs_on(&props)).cloned().map(Started::from).collect();
     // The drivers ask for their firmware by name, and the kernel looks only
     // in folders of its own unless told to pass on what it does not find
     // there to ueventd, which looks in the recovery's firmware folders.
-    std::fs::write(FIRMWARE_FALLBACK, "1")
-        .with_context(|| format!("write 1 to {FIRMWARE_FALLBACK}"))?;
+    std::fs::write(FIRMWARE_FALLBACK, "1").with_context(|| format!("write 1 to {FIRMWARE_FALLBACK}"))?;
     if let Some(firmware) = &cfg.firmware {
         mount_firmware(&firmware.partition)?;
     }
@@ -710,29 +650,74 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
         let at = skyward_block::fstab::mount(name)?;
         skyward_sys::kmsg(&format!("{name} is mounted on {}", at.display()))?;
     }
-    for path in load_modules(cfg, &cfg.modules.load)? {
-        skyward_sys::kmsg(&format!("loaded {}", path.display()))?;
-    }
-    if !cfg.owners.is_empty() {
-        let handed = hand_over(&cfg.owners)?;
-        skyward_sys::kmsg(&format!(
-            "{handed} of the phone's own files handed to the accounts its init gives them"
-        ))?;
-    }
+    skyward_ui::progress::reached(skyward_ui::progress::PARTITIONS);
     // What the phone describes is known wherever its partitions could be
     // read at all; what they say of its keys may still not be.
     let (described, found) = match found {
         Ok(found) => (found.described, found.steps),
         Err(e) => (Vec::new(), Err(e)),
     };
+    // Two of the programs the partitions name cannot run here, and one of them
+    // holds the phone's devices back twenty seconds while it fails:
+    //  - the secure element's own service ends as it starts in a recovery, and
+    //    the devices wait for a registration that never comes, which leaves the
+    //    keys unusable;
+    //  - the weaver reaches its secure element through the secure element
+    //    service of a running Android, which a recovery does not serve, so the
+    //    user's files are unlocked through the gatekeeper-protected note
+    //    instead (see `weaver_first` in the configuration).
+    // The secure element service the recovery would serve itself is left out
+    // for the same reason.
+    // Which programs these are is read from what each one registers, not from
+    // where its binary lies: a system that renames or moves the weaver or the
+    // secure element service is followed as it is, as a system that keeps the
+    // names is.
+    // Which those are is the phone's to say: the configuration names the
+    // interfaces whose programs cannot run here (pudding: the secure element's
+    // own service and Thales's weaver), and a phone that names none has them all
+    // started as its partitions say.
+    let cannot_run_here = cfg.keys.leave_out.clone();
+    let served = found.as_deref().is_ok_and(keys::serves_elements);
+    let mut left_out: Vec<String> = Vec::new();
+    let found = found.map(|steps| {
+        steps
+            .into_iter()
+            .filter(|step| match step {
+                skyward_programs::secure::Step::ServeElements => false,
+                skyward_programs::secure::Step::Start(program) => {
+                    let serves = program.service.ready_service.iter().chain(&program.service.registers).any(|name| cannot_run_here.iter().any(|prefix| name.starts_with(prefix)));
+                    if serves {
+                        let what = program
+                            .service
+                            .ready_service
+                            .iter()
+                            .chain(&program.service.registers)
+                            .find(|name| cannot_run_here.iter().any(|prefix| name.starts_with(prefix)))
+                            .cloned()
+                            .unwrap_or_else(|| program.service.path.clone());
+                        left_out.push(format!("{} ({what})", program.service.path));
+                    }
+                    !serves
+                }
+            })
+            .collect::<Vec<_>>()
+    });
+    for what in &left_out {
+        skyward_sys::kmsg(&format!("{what} is left out: it cannot run in a recovery on this phone"))?;
+    }
+    if served {
+        skyward_sys::kmsg("the secure element is left to the phone's own system, not served here")?;
+    }
     // What either service directory has to know of, it has to know before
     // anything registers with it, so both are told of the configuration's
     // programs and of those that use the phone's keys together.
+    // The programs that use the phone's keys, as its own partitions describe
+    // them, started below in the order they say.
+    let marking = std::time::Instant::now();
     let key_programs = found.as_deref().map(keys::programs).unwrap_or_default();
+    skyward_sys::kmsg(&format!("the key programs are known at {:.2} s", marking.elapsed().as_secs_f64()))?;
     let programs = || services.iter().map(|p| &p.service).chain(&key_programs);
-    let hardware: Vec<String> = programs()
-        .filter_map(|s| s.ready_hardware_service.clone())
-        .collect();
+    let hardware: Vec<String> = programs().filter_map(|s| s.ready_hardware_service.clone()).collect();
     if !hardware.is_empty() {
         secure::prepare_hardware_directory(&hardware)?;
         skyward_sys::kmsg("the directory for the phone's hardware services can run")?;
@@ -743,45 +728,108 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
     // supplicant registers whenever the WLAN is turned on, and the
     // directory can no longer start again by then: the key service
     // registers with it below, and nothing would register that again.
-    let mut registering: Vec<String> = programs()
-        .flat_map(|s| s.ready_service.iter().chain(&s.registers).cloned())
-        .collect();
+    let mut registering: Vec<String> = programs().flat_map(|s| s.ready_service.iter().chain(&s.registers).cloned()).collect();
     if found.as_deref().is_ok_and(keys::serves_elements) {
         registering.push(skyward_omapi::SERVICE.to_string());
     }
     registering.extend(cfg.wlan.iter().map(|w| w.service.clone()));
-    // A program may register more than the recovery waits for, as the
-    // WLAN's supplicant registers its maker's own service beside
-    // Android's, and ends where the directory turns one of them away. So
-    // the directory is told of all the phone describes, as the phone's
-    // own is.
+    skyward_sys::kmsg(&format!("what to register is worked out at {:.2} s", marking.elapsed().as_secs_f64()))?;
+    let loading = std::time::Instant::now();
+    for path in load_modules(cfg, &cfg.modules.load)? {
+        skyward_sys::kmsg(&format!("loaded {}", path.display()))?;
+    }
+    skyward_sys::kmsg(&format!("the modules are in at {:.2} s", loading.elapsed().as_secs_f64()))?;
+    skyward_ui::progress::reached(skyward_ui::progress::DRIVERS);
+    // The WLAN's driver is started here, without waiting for its interface, so
+    // that the supplicant finds a driver ready when the page asks for the WLAN
+    // rather than one still making it.
+    if let Some(w) = &cfg.wlan {
+        let modules = cfg.modules.sources.iter().map(|s| skyward_modules::source_dir(s)).collect::<Result<Vec<_>>>()?;
+        match wlan::warm_up(w, &modules) {
+            Ok(()) => skyward_sys::kmsg("the WLAN's driver is warmed for the page's asking")?,
+            Err(e) => skyward_sys::kmsg(&format!("the WLAN's driver is not warmed: {e:#}"))?,
+        }
+        // The supplicant starts here, with the driver warm, so that it is
+        // scanning and joining while the decrypt page is answered, rather than
+        // starting once the pages are built.
+        let libraries = secure::libraries().unwrap_or_else(|e| {
+            let _ = skyward_sys::kmsg(&format!("the vendor interface's libraries are not open: {e:#}"));
+            None
+        });
+        let servers = servers();
+        match wlan::Worker::start(w.clone(), modules, libraries, servers) {
+            Ok(worker) => {
+                let _ = skyward_sys::kmsg("the WLAN's supplicant starts with its driver warm");
+                // The radio is turned on here too, where the network kept is
+                // read: asking once the pages are built put the request after
+                // the key programs had come up, and the driver then made its
+                // interface from 8 s rather than from 4 s (2026-11-15).
+                let kept = crate::wlanmem::read();
+                if kept.auto {
+                    worker.send(wlan::Command::On);
+                    let _ = skyward_sys::kmsg(match kept.saved {
+                        Some(_) => "the WLAN is opened for the network kept",
+                        None => "the WLAN is opened as the recovery starts, with no network kept",
+                    });
+                }
+                *WLAN.get_or_init(|| std::sync::Mutex::new(None)).lock().unwrap_or_else(|e| e.into_inner()) = Some(worker);
+            }
+            Err(e) => skyward_sys::kmsg(&format!("the WLAN's supplicant is not started: {e:#}"))?,
+        }
+    }
+    skyward_sys::kmsg(&format!("the drivers came up at {:.2} s", watched.elapsed().as_secs_f64()))?;
+    if !cfg.owners.is_empty() {
+        let handed = hand_over(&cfg.owners)?;
+        skyward_sys::kmsg(&format!("{handed} of the phone's own files handed to the accounts its init gives them"))?;
+    }
+    // The directory is told of the phone's own services as the phone's init
+    // tells it: all of them, not only the recovery's. A program may register
+    // more than its own unit names -- the WLAN's supplicant registers its
+    // maker's service beside Android's, and ends where the directory turns one
+    // of them away -- so narrowing this to the recovery's programs breaks the
+    // WLAN. Narrowing it does not save the time either: that is the directory
+    // starting again, whatever it is told of.
     let mut told = registering.clone();
-    told.extend(
-        described
-            .into_iter()
-            .filter(|name| !registering.contains(name)),
-    );
+    told.extend(described.into_iter().filter(|name| !registering.contains(name)));
     if !told.is_empty() {
         secure::publish_descriptions(&told)?;
-        skyward_sys::kmsg(&format!(
-            "the service directory is told of {} of the phone's own services",
-            told.len()
-        ))?;
+        skyward_sys::kmsg(&format!("the service directory is told of {} of the phone's own services", told.len()))?;
     }
     let libraries = secure::libraries()?;
     if let Some(dir) = &libraries {
-        skyward_sys::kmsg(&format!(
-            "the phone's own libraries are at {}",
-            dir.display()
-        ))?;
+        skyward_sys::kmsg(&format!("the phone's own libraries are at {} ({:.2} s)", dir.display(), watched.elapsed().as_secs_f64()))?;
     }
+    skyward_ui::progress::reached(skyward_ui::progress::SERVICES);
+    let starting = std::time::Instant::now();
     services::start(&services, libraries.as_deref())?;
-    let steps = found.context("make out from the phone's partitions how its keys are used")?;
-    for line in keys::describe(&steps) {
-        skyward_sys::kmsg(&format!(
-            "for the phone's keys: {}",
-            line.replace("\n  ", ", ")
-        ))?;
+    skyward_sys::kmsg(&format!("the configuration's programs came up in {:.2} s", starting.elapsed().as_secs_f64()))?;
+    // Where the partitions say nothing of the keys, the programs the
+    // configuration starts are all there is, and the phone's devices are up
+    // before that is said.
+    match found {
+        Ok(steps) => {
+            for line in keys::describe(&steps) {
+                skyward_sys::kmsg(&format!("for the phone's keys: {}", line.replace("\n  ", ", ")))?;
+            }
+            // The boot control uses no key and nothing below waits for it, so
+            // it is started beside the chain that does rather than ahead of it:
+            // its own readiness costs nothing then.
+            let (beside, chain): (Vec<_>, Vec<_>) = steps.into_iter().partition(|step| match step {
+                skyward_programs::secure::Step::Start(program) => program.service.ready_service.iter().any(|name| name.starts_with("android.hardware.boot.")),
+                skyward_programs::secure::Step::ServeElements => false,
+            });
+            let libraries_beside = libraries.clone();
+            let beside = (!beside.is_empty())
+                .then(|| std::thread::Builder::new().name("beside the keys".into()).spawn(move || keys::start(&beside, libraries_beside.as_deref())))
+                .transpose()
+                .context("start the boot control beside the keys")?;
+            keys::start(&chain, libraries.as_deref())?;
+            skyward_sys::kmsg(&format!("the key programs came up at {:.2} s", watched.elapsed().as_secs_f64()))?;
+            if let Some(beside) = beside {
+                beside.join().map_err(|_| anyhow::anyhow!("the thread the boot control ran on panicked"))??;
+            }
+        }
+        Err(e) => skyward_sys::kmsg(&format!("the phone's partitions say nothing of its keys: {e:#}"))?,
     }
     keys::start(&steps)?;
     agree_on_the_notes_key(&registering)
@@ -803,27 +851,15 @@ const FILES_MADE: std::time::Duration = std::time::Duration::from_secs(5);
 fn hand_over(owners: &[skyward_config::Owners]) -> Result<usize> {
     use skyward_sys::ueventd;
     use std::os::unix::fs::PermissionsExt;
-    let known = ueventd::accounts(
-        &ueventd::PASSWD_FILES
-            .iter()
-            .chain(&ueventd::GROUP_FILES)
-            .copied()
-            .collect::<Vec<_>>(),
-    );
-    let id = |name: &str| {
-        ueventd::account(&known, name)
-            .with_context(|| format!("the phone has no account named {name}"))
-    };
+    let known = ueventd::accounts(&ueventd::PASSWD_FILES.iter().chain(&ueventd::GROUP_FILES).copied().collect::<Vec<_>>());
+    let id = |name: &str| ueventd::account(&known, name).with_context(|| format!("the phone has no account named {name}"));
     let mut handed = 0;
     for run in owners {
         let (uid, gid) = (id(&run.user)?, id(&run.group)?);
         for path in &run.paths {
-            skyward_sys::wait_file(Path::new(path), FILES_MADE)
-                .context("wait for a file the modules just loaded make")?;
-            std::os::unix::fs::chown(path, Some(uid), Some(gid))
-                .with_context(|| format!("give {path} to {}:{}", run.user, run.group))?;
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(run.mode))
-                .with_context(|| format!("give {path} the mode {:o}", run.mode))?;
+            skyward_sys::wait_file(Path::new(path), FILES_MADE).context("wait for a file the modules just loaded make")?;
+            std::os::unix::fs::chown(path, Some(uid), Some(gid)).with_context(|| format!("give {path} to {}:{}", run.user, run.group))?;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(run.mode)).with_context(|| format!("give {path} the mode {:o}", run.mode))?;
             handed += 1;
         }
     }
@@ -848,22 +884,15 @@ const LOGD_READY: std::time::Duration = std::time::Duration::from_secs(5);
 fn start_logd(logd: &skyward_config::Logd) -> Result<()> {
     for library in &logd.libraries {
         let from = Path::new(library);
-        let to = Path::new(RECOVERY_LIBRARIES).join(
-            from.file_name()
-                .expect("the configuration names each library's file"),
-        );
+        let to = Path::new(RECOVERY_LIBRARIES).join(from.file_name().expect("the configuration names each library's file"));
         let mut part = to.clone().into_os_string();
         part.push(".part");
-        std::fs::copy(from, &part)
-            .with_context(|| format!("copy {library} to {}", Path::new(&part).display()))?;
+        std::fs::copy(from, &part).with_context(|| format!("copy {library} to {}", Path::new(&part).display()))?;
         std::fs::rename(&part, &to).with_context(|| format!("put {} in place", to.display()))?;
     }
     skyward_sys::set_prop("ctl.start", "logd")?;
     skyward_sys::wait_prop("logd.ready", "true", LOGD_READY)?;
-    skyward_sys::kmsg(&format!(
-        "logd runs with {} libraries of the installed system",
-        logd.libraries.len()
-    ))
+    skyward_sys::kmsg(&format!("logd runs with {} libraries of the installed system", logd.libraries.len()))
 }
 
 /// Have the parts of the secure world that keep keys agree on the key they
@@ -874,19 +903,13 @@ fn start_logd(logd: &skyward_config::Logd) -> Result<()> {
 #[cfg(target_os = "android")]
 fn agree_on_the_notes_key(registered: &[String]) -> Result<()> {
     let interface = format!("{}/", skyward_crypto::sharedsecret::INTERFACE);
-    let names: Vec<String> = registered
-        .iter()
-        .filter(|n| n.starts_with(&interface))
-        .cloned()
-        .collect();
+    let names: Vec<String> = registered.iter().filter(|n| n.starts_with(&interface)).cloned().collect();
     if names.is_empty() {
         return Ok(());
     }
     let binder = skyward_binder::driver::Binder::open()?;
     let agreed = skyward_crypto::sharedsecret::agree(&binder, &names)?;
-    skyward_sys::kmsg(&format!(
-        "{agreed} of the secure world agreed on the key it signs its notes with"
-    ))
+    skyward_sys::kmsg(&format!("{agreed} of the secure world agreed on the key it signs its notes with"))
 }
 
 /// A slot of the credential service that belongs to no user, which the
@@ -917,11 +940,7 @@ fn mount_firmware(partition: &str) -> Result<()> {
     let at = skyward_block::fstab::mount(partition)?;
     std::fs::create_dir_all(shown).with_context(|| format!("make {}", shown.display()))?;
     skyward_block::mount::bind(&at, shown)?;
-    skyward_sys::kmsg(&format!(
-        "{partition} is mounted on {}, shown at {}",
-        at.display(),
-        shown.display()
-    ))
+    skyward_sys::kmsg(&format!("{partition} is mounted on {}, shown at {}", at.display(), shown.display()))
 }
 
 /// What the phone's own secure services read to tell the secure world which
@@ -931,11 +950,7 @@ fn mount_firmware(partition: &str) -> Result<()> {
 /// made under a build it does not know, and refuses them. The recovery's
 /// property files leave these out so that they can be set here instead.
 #[cfg(target_os = "android")]
-const BUILD_VERSION: [&str; 3] = [
-    "ro.build.version.release",
-    "ro.build.version.security_patch",
-    "ro.vendor.build.security_patch",
-];
+const BUILD_VERSION: [&str; 3] = ["ro.build.version.release", "ro.build.version.security_patch", "ro.vendor.build.security_patch"];
 
 /// Set each of [`BUILD_VERSION`] to the installed system's value. An earlier
 /// run of the recovery service may have set it already, and init sets such
@@ -943,9 +958,7 @@ const BUILD_VERSION: [&str; 3] = [
 #[cfg(target_os = "android")]
 fn adopt_installed_version(props: &std::collections::HashMap<String, String>) -> Result<()> {
     for name in BUILD_VERSION {
-        let value = props
-            .get(name)
-            .with_context(|| format!("the installed system says no {name}"))?;
+        let value = props.get(name).with_context(|| format!("the installed system says no {name}"))?;
         if skyward_sys::prop(name).as_ref() != Some(value) {
             skyward_sys::set_prop(name, value)?;
         }
@@ -967,10 +980,8 @@ fn recovery() -> Result<()> {
     let run = || -> Result<()> {
         // Open to the programs the recovery runs as other users, the
         // supplicant among them, whatever the umask.
-        std::fs::create_dir_all(skyward_sys::RUN)
-            .with_context(|| format!("make {}", skyward_sys::RUN))?;
-        std::fs::set_permissions(skyward_sys::RUN, std::fs::Permissions::from_mode(0o755))
-            .with_context(|| format!("open {} to the recovery's other users", skyward_sys::RUN))?;
+        std::fs::create_dir_all(skyward_sys::RUN).with_context(|| format!("make {}", skyward_sys::RUN))?;
+        std::fs::set_permissions(skyward_sys::RUN, std::fs::Permissions::from_mode(0o755)).with_context(|| format!("open {} to the recovery's other users", skyward_sys::RUN))?;
         skyward_sys::keep_log(Path::new(skyward_sys::LOG))?;
         // A recovery that ended with a function of its own in the port took
         // the port with it; going through "none" takes that function off.
@@ -985,26 +996,16 @@ fn recovery() -> Result<()> {
             bcb::clear(&misc)?;
         }
         let cfg = DeviceConfig::load(Path::new("/").join(ramdisk::CONFIG))?;
-        skyward_sys::kmsg(&format!(
-            "{} {} recovery up, misc command {:?} args {:?}, asking for {:?}",
-            cfg.device.codename,
-            skyward_info::VERSION,
-            message.command,
-            message.args,
-            request.work
-        ))?;
+        // Whether the weaver's own slots are used is read here, before any page
+        // asks for the data partition to be opened.
+        let weaver_first = cfg.data.as_ref().is_some_and(|d| d.weaver_first);
+        skyward_crypto::data::use_weaver_first(weaver_first);
+        skyward_sys::kmsg(&format!("{} {} recovery up, misc command {:?} args {:?}, asking for {:?}", cfg.device.codename, skyward_info::RUNNING, message.command, message.args, request.work))?;
         if !request.unknown.is_empty() {
-            skyward_sys::kmsg(&format!(
-                "misc arguments this recovery does not know: {:?}",
-                request.unknown
-            ))?;
+            skyward_sys::kmsg(&format!("misc arguments this recovery does not know: {:?}", request.unknown))?;
         }
         if request.work == bcb::Work::Exit {
-            return skyward_sys::power(if request.shutdown_after {
-                Power::Off
-            } else {
-                Power::System
-            });
+            return skyward_sys::power(if request.shutdown_after { Power::Off } else { Power::System });
         }
         // An update the system asked for starts counting its starts in misc,
         // as Android's own recovery counts them, so that one a restart cuts
@@ -1022,9 +1023,7 @@ fn recovery() -> Result<()> {
         // real time, so a failure goes to the kernel log.
         #[cfg(target_os = "android")]
         match skyward_sys::clock::set_from_rtc() {
-            Ok(ms) => {
-                skyward_sys::kmsg(&format!("clock set to {} ms from the RTC and persist", ms))?
-            }
+            Ok(ms) => skyward_sys::kmsg(&format!("clock set to {} ms from the RTC and persist", ms))?,
             Err(e) => skyward_sys::kmsg(&format!("clock not set: {e:#}"))?,
         }
         // The kernel starts every core at its top frequency, and keeps idle
@@ -1034,13 +1033,8 @@ fn recovery() -> Result<()> {
         // the kernel log.
         #[cfg(target_os = "android")]
         match skyward_sys::cpu::run_as_system() {
-            Ok(done) => skyward_sys::kmsg(&format!(
-                "the CPUs run as the system runs them: {}",
-                done.join(", ")
-            ))?,
-            Err(e) => {
-                skyward_sys::kmsg(&format!("the CPUs run as the kernel started them: {e:#}"))?
-            }
+            Ok(done) => skyward_sys::kmsg(&format!("the CPUs run as the system runs them: {}", done.join(", ")))?,
+            Err(e) => skyward_sys::kmsg(&format!("the CPUs run as the kernel started them: {e:#}"))?,
         }
         #[cfg(target_os = "android")]
         {
@@ -1051,23 +1045,30 @@ fn recovery() -> Result<()> {
             // partitions the system asks for, as in Android's own recovery:
             // erasing them, which may take super with them, and undoing
             // shared blocks, which writes to the slot's own.
-            let mut programs = cfg.services.clone();
-            if !matches!(
-                request.work,
-                bcb::Work::Fastboot | bcb::Work::WipeAb { .. } | bcb::Work::UnshareBlocks
-            ) {
-                programs.extend(prepare(&cfg, booted_slot()?)?);
+            let programs = cfg.services.clone();
+            // The screen comes up first: mapping super, mounting the slot's
+            // partitions, loading the drivers and starting the phone's own
+            // services takes seconds, and until the screen is drawn the phone
+            // looks stuck. What needs them waits for them instead: a page calls
+            // `wait_prepared` before it does.
+            if !matches!(request.work, bcb::Work::Fastboot | bcb::Work::WipeAb { .. } | bcb::Work::UnshareBlocks) {
+                let prepared_cfg = cfg.clone();
+                let spawned = std::thread::Builder::new().name("prepare".into()).spawn(move || {
+                    let done = booted_slot().map_err(|e| anyhow::anyhow!("{e:#}")).and_then(|slot| prepare(&prepared_cfg, slot));
+                    if let Err(e) = done {
+                        let _ = skyward_sys::kmsg(&format!("devices not brought up: {e:#}"));
+                    }
+                    mark_prepared();
+                });
+                if let Err(e) = spawned {
+                    skyward_sys::kmsg(&format!("the phone's parts are not brought up beside the screen: {e:#}"))?;
+                    mark_prepared();
+                }
+            } else {
+                mark_prepared();
             }
             let root = Path::new("/");
-            ui::run(
-                &cfg,
-                &programs,
-                &root.join(ramdisk::FONT),
-                &root.join(ramdisk::MONO),
-                request,
-                Screen::Home,
-                None,
-            )
+            ui::run(&cfg, &programs, &root.join(ramdisk::FONT), &root.join(ramdisk::MONO), request, Screen::Decrypt, None)
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -1086,31 +1087,39 @@ fn recovery() -> Result<()> {
 /// reason goes to the kernel log instead.
 #[cfg(target_os = "android")]
 fn prepare(cfg: &DeviceConfig, slot: skyward_vab::Slot) -> Result<Vec<skyward_config::Service>> {
+    let started = std::time::Instant::now();
     match skyward_vab::mount_partitions(slot) {
         Ok(mounts) => {
+            skyward_sys::kmsg(&format!("the partitions are mounted at {:.2} s", started.elapsed().as_secs_f64()))?;
             for d in &mounts.damaged {
                 skyward_sys::kmsg(&format!("super: {d}"))?;
             }
             for m in &mounts.partitions {
-                skyward_sys::kmsg(&format!(
-                    "mounted {} on {} ({})",
-                    m.partition,
-                    m.mount_point.display(),
-                    m.filesystem
-                ))?;
+                skyward_sys::kmsg(&format!("mounted {} on {} ({})", m.partition, m.mount_point.display(), m.filesystem))?;
             }
-            let found =
-                secure::libraries().and_then(|libraries| keys::found(slot, libraries.as_deref()));
-            let steps = found
-                .as_ref()
-                .ok()
-                .and_then(|found| found.steps.as_deref().ok());
-            let programs = steps.map(keys::programs).unwrap_or_default();
+            // What the phone's partitions say its keys need is read here, on
+            // the thread the screen does not wait for: the reading parses
+            // every init file, and where a build has no name yet it names it
+            // by starting programs, which costs seconds.
+            let libraries = secure::libraries().unwrap_or_else(|e| {
+                let _ = skyward_sys::kmsg(&format!("the vendor interface's libraries are not open: {e:#}"));
+                None
+            });
+            let reading = std::time::Instant::now();
+            let found = keys::found(slot, libraries.as_deref());
+            skyward_sys::kmsg(&format!("the partitions were read for the keys in {:.2} s", reading.elapsed().as_secs_f64()))?;
+            let mut programs: Vec<skyward_config::Service> = cfg.services.clone();
+            match found.as_ref().map(|f| &f.steps) {
+                Ok(Ok(steps)) => programs.extend(keys::programs(steps)),
+                Ok(Err(e)) => skyward_sys::kmsg(&format!("the phone's partitions do not say how its keys are used: {e:#}"))?,
+                Err(e) => skyward_sys::kmsg(&format!("the phone's partitions are not read for its keys: {e:#}"))?,
+            }
             // Without them the screen still shows and the keys still work,
             // so this reason goes to the kernel log as well.
             if let Err(e) = bring_up(cfg, slot, found) {
                 skyward_sys::kmsg(&format!("devices not brought up: {e:#}"))?;
             }
+            skyward_sys::kmsg(&format!("brought up in {:.2} s", started.elapsed().as_secs_f64()))?;
             Ok(programs)
         }
         Err(e) => {
@@ -1125,10 +1134,7 @@ fn info(config: &str) -> Result<()> {
     let i = skyward_info::collect(&cfg)?;
     println!("model         = {} ({})", i.model, i.codename);
     println!("soc           = {:?}", i.soc);
-    println!(
-        "cpu           = {} cores, max {:?} kHz",
-        i.cpu.cores, i.cpu.max_khz
-    );
+    println!("cpu           = {} cores, max {:?} kHz", i.cpu.cores, i.cpu.max_khz);
     println!("ram           = {} KiB", i.ram_kib);
     println!("panel         = {:?}", i.panel);
     println!("screen        = {:?} in", i.screen);
@@ -1136,13 +1142,10 @@ fn info(config: &str) -> Result<()> {
     println!("android       = {:?}", i.android);
     println!("patch         = {:?}", i.security_patch);
     println!("kernel        = {}", i.kernel);
-    println!(
-        "storage       = {} bytes, free {:?}",
-        i.storage.total, i.storage.free
-    );
+    println!("storage       = {} bytes, free {:?}", i.storage.total, i.storage.free);
     println!("battery       = {:?}", i.battery);
     println!("boot          = {:?}", i.boot);
-    println!("recovery      = {}", skyward_info::VERSION);
+    println!("recovery      = {}", skyward_info::RUNNING);
     match i.slot {
         Some(s) => println!("current_slot  = {}", s.suffix()),
         None => println!("current_slot  = (not A/B)"),
@@ -1157,11 +1160,7 @@ fn info(config: &str) -> Result<()> {
         _ => println!("  -> dynamic-partition writes are refused while a snapshot is outstanding"),
     }
     let parts = skyward_block::list_by_name(skyward_block::BY_NAME)?;
-    println!(
-        "partitions    = {} under {}",
-        parts.len(),
-        skyward_block::BY_NAME
-    );
+    println!("partitions    = {} under {}", parts.len(), skyward_block::BY_NAME);
     Ok(())
 }
 
@@ -1170,22 +1169,9 @@ fn identify(path: &Path) -> Result<()> {
     let file = std::fs::File::open(path).with_context(|| format!("open {}", path.display()))?;
     match package::identify(std::io::BufReader::new(file))? {
         Package::Update(u) => {
-            println!(
-                "an A/B update to {}",
-                u.version().unwrap_or("an unnamed version")
-            );
-            println!(
-                "payload.bin at byte {}, {} bytes",
-                u.payload_offset, u.payload_size
-            );
-            for key in [
-                "ota-type",
-                "pre-device",
-                "post-build",
-                "post-timestamp",
-                "post-security-patch-level",
-                "pre-build",
-            ] {
+            println!("an A/B update to {}", u.version().unwrap_or("an unnamed version"));
+            println!("payload.bin at byte {}, {} bytes", u.payload_offset, u.payload_size);
+            for key in ["ota-type", "pre-device", "post-build", "post-timestamp", "post-security-patch-level", "pre-build"] {
                 if let Some(v) = u.metadata.get(key) {
                     println!("{key:<26} {v}");
                 }
@@ -1197,14 +1183,8 @@ fn identify(path: &Path) -> Result<()> {
         Package::Image(kind) => println!("{kind:?}, for {}", kind.partitions().join(" or ")),
         Package::Script => println!("a zip that installs itself with a script"),
         Package::System(c) => {
-            println!(
-                "the system {} {} ({}), to install beside the installed one",
-                c.manifest.name, c.manifest.version, c.manifest.id
-            );
-            println!(
-                "a boot image of {} bytes, a root image of {} bytes ({}), starting {}",
-                c.boot, c.root, c.manifest.filesystem, c.manifest.init
-            );
+            println!("the system {} {} ({}), to install beside the installed one", c.manifest.name, c.manifest.version, c.manifest.id);
+            println!("a boot image of {} bytes, a root image of {} bytes ({}), starting {}", c.boot, c.root, c.manifest.filesystem, c.manifest.init);
             println!("its root takes at least {} bytes", c.least());
             if c.init_boot {
                 println!("it brings its own init_boot image");
@@ -1223,10 +1203,7 @@ fn slot() -> Result<()> {
     #[cfg(target_os = "android")]
     {
         use skyward_vab::boot::BootControl;
-        let (binder, hardware) = (
-            skyward_binder::driver::Binder::open()?,
-            skyward_binder::driver::Binder::hardware()?,
-        );
+        let (binder, hardware) = (skyward_binder::driver::Binder::open()?, skyward_binder::driver::Binder::hardware()?);
         let opened = BootControl::open(&binder, &hardware);
         match opened {
             Ok(control) => {
@@ -1234,12 +1211,7 @@ fn slot() -> Result<()> {
                 println!("next {}", slots.active.suffix());
                 for slot in [skyward_vab::Slot::A, skyward_vab::Slot::B] {
                     let k = slot.number() as usize;
-                    println!(
-                        "{} bootable {} successful {}",
-                        slot.suffix(),
-                        slots.bootable[k],
-                        slots.successful[k]
-                    );
+                    println!("{} bootable {} successful {}", slot.suffix(), slots.bootable[k], slots.successful[k]);
                 }
                 println!("update {:?}", control.merge_status()?);
             }
@@ -1253,37 +1225,16 @@ fn update() -> Result<()> {
     let slot = booted_slot()?;
     println!("standing {:?}", skyward_vab::standing(slot)?);
     for kind in ["snapshot", "snapshot-merge", "user"] {
-        println!(
-            "target {kind} {:?}",
-            skyward_block::dm::target_version(kind)?
-        );
+        println!("target {kind} {:?}", skyward_block::dm::target_version(kind)?);
     }
     let Some(snaps) = skyward_vab::snapshots::Snapshots::lock(false)? else {
         println!("no update was ever applied");
         return Ok(());
     };
     let u = snaps.update()?;
-    println!(
-        "state {:?} phase {:?} failure {:?}",
-        snaps.state()?,
-        u.merge_phase,
-        u.merge_failure_code
-    );
-    println!(
-        "snapuserd {} userspace {} allocated {} total {} metadata {}",
-        u.using_snapuserd,
-        u.userspace_snapshots,
-        u.sectors_allocated,
-        u.total_sectors,
-        u.metadata_sectors
-    );
-    println!(
-        "from {:?}, {:?} for {}, built {:?}",
-        snaps.source()?,
-        snaps.side(slot)?,
-        slot.suffix(),
-        u.source_build_fingerprint
-    );
+    println!("state {:?} phase {:?} failure {:?}", snaps.state()?, u.merge_phase, u.merge_failure_code);
+    println!("snapuserd {} userspace {} allocated {} total {} metadata {}", u.using_snapuserd, u.userspace_snapshots, u.sectors_allocated, u.total_sectors, u.metadata_sectors);
+    println!("from {:?}, {:?} for {}, built {:?}", snaps.source()?, snaps.side(slot)?, slot.suffix(), u.source_build_fingerprint);
     println!("needed {}", snaps.needed(slot)?);
     for name in snaps.list()? {
         let s = snaps.status(&name)?;
@@ -1299,18 +1250,10 @@ fn update() -> Result<()> {
             s.using_snapuserd,
             s.old_partition_size
         );
-        for dev in [
-            name.clone(),
-            format!("{name}-base"),
-            format!("{name}-cow"),
-            format!("{name}-cow-img"),
-        ] {
+        for dev in [name.clone(), format!("{name}-base"), format!("{name}-cow"), format!("{name}-cow-img")] {
             if skyward_block::dm::status(&dev)?.is_some() {
                 for line in skyward_block::dm::table_status(&dev)? {
-                    println!(
-                        "  {dev}: {} {}+{} {}",
-                        line.kind, line.start, line.sectors, line.text
-                    );
+                    println!("  {dev}: {} {}+{} {}", line.kind, line.start, line.sectors, line.text);
                 }
             }
         }

@@ -1,4 +1,5 @@
 pub mod app;
+pub mod avatar;
 pub mod canvas;
 pub mod charge;
 pub mod color;
@@ -14,6 +15,7 @@ pub mod icons;
 pub mod lang;
 pub mod motion;
 pub mod pages;
+pub mod progress;
 pub mod search;
 pub mod settings;
 pub mod sprite;

@@ -1,5 +1,5 @@
-use crate::waveform::{made, share, ticks, RATE, TICKS_RATE};
-use anyhow::{anyhow, ensure, Context, Result};
+use crate::waveform::{RATE, TICKS_RATE, made, share, ticks};
+use anyhow::{Context, Result, anyhow, ensure};
 use evdev::raw_stream::RawDevice;
 use skyward_config::Strength;
 use std::fs::{self, File, OpenOptions};
@@ -34,6 +34,10 @@ pub struct Haptics {
     click: Click,
     ticks: Click,
     strength: Strength,
+    /// The motor has refused a click: it takes none of the events a click is
+    /// made of, and asking again only fills the log (2026-11-17, this phone's
+    /// qcom-hv-haptics takes neither FF_PERIODIC nor FF_CUSTOM).
+    broken: bool,
     /// The click playing, by its slot and its count, until it is taken
     /// away; a click taken away early by the next is not taken away again.
     playing: Arc<Mutex<Option<(i16, u64)>>>,
@@ -68,13 +72,17 @@ impl Haptics {
             }
         };
         let ticks = Click::Samples { data: ticks(hz), rate: TICKS_RATE };
-        Ok(Haptics { dev, click, ticks, strength: cfg.strength, playing: Arc::new(Mutex::new(None)), clicks: 0 })
+        Ok(Haptics { dev, click, ticks, strength: cfg.strength, broken: false, playing: Arc::new(Mutex::new(None)), clicks: 0 })
     }
 
     /// One short click at the strength the slider's `position` gives, after
     /// taking away one still playing. Gives how long it plays.
     pub fn click(&mut self, position: f32) -> Result<Duration> {
-        self.start(false, share(&self.strength, position))
+        if self.broken {
+            return Ok(Duration::ZERO);
+        }
+        let share = share(&self.strength, position);
+        self.start(false, share).inspect_err(|_| self.broken = true)
     }
 
     /// The ticks of the screen going off, as strong as the phone's own
@@ -121,11 +129,7 @@ impl Haptics {
 /// trying out a motor.
 pub fn probe(cfg: &skyward_config::Haptics, position: f32, ticks: bool) -> Result<()> {
     let mut haptics = Haptics::open(cfg)?;
-    let (what, strength, length) = if ticks {
-        ("ticks", TICKS_STRENGTH, haptics.ticks()?)
-    } else {
-        ("click", share(&cfg.strength, position), haptics.click(position)?)
-    };
+    let (what, strength, length) = if ticks { ("ticks", TICKS_STRENGTH, haptics.ticks()?) } else { ("click", share(&cfg.strength, position), haptics.click(position)?) };
     // Once it has played out, what played goes with the device as the
     // command ends.
     std::thread::sleep(length);
@@ -209,14 +213,7 @@ fn upload(dev: &File, click: &Click, share: f32) -> Result<Loaded> {
         custom_len: len as u32,
         custom_data: data,
     };
-    let mut effect = libc::ff_effect {
-        type_: FF_PERIODIC,
-        id: -1,
-        direction: 0,
-        trigger: libc::ff_trigger { button: 0, interval: 0 },
-        replay: libc::ff_replay { length: 0, delay: 0 },
-        u: [0; 4],
-    };
+    let mut effect = libc::ff_effect { type_: FF_PERIODIC, id: -1, direction: 0, trigger: libc::ff_trigger { button: 0, interval: 0 }, replay: libc::ff_replay { length: 0, delay: 0 }, u: [0; 4] };
     // The union holds the periodic effect; it is exactly as large.
     const _: () = assert!(std::mem::size_of::<libc::ff_periodic_effect>() == std::mem::size_of::<[u64; 4]>());
     effect.u = unsafe { std::mem::transmute::<libc::ff_periodic_effect, [u64; 4]>(periodic) };

@@ -1,6 +1,6 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use skyward_config::DeviceConfig;
-use skyward_sys::{prop, ToldOnce};
+use skyward_sys::{ToldOnce, prop};
 use skyward_vab::{Slot, SnapshotState};
 use std::collections::HashMap;
 use std::ffi::CStr;
@@ -12,7 +12,25 @@ use std::str::FromStr;
 use std::sync::Mutex;
 
 /// Version of this build, shown on the About page.
+/// The crate's own number, which the workspace pins: not what a build answers
+/// with. The pages show [`RUNNING`], the release the build was made for, or
+/// this where it named none.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The release this build was made for, where the build named one: the tag of
+/// the release it is meant to be, so that asking for the newest build knows
+/// whether this one is already it. A build that names none asks by `VERSION`.
+pub const RELEASE: &str = match option_env!("SKYWARD_RELEASE") {
+    Some(tag) => tag,
+    None => "",
+};
+
+/// The version this build answers with, and shows: the release it was made for
+/// where it named one, and its own version otherwise.
+pub const RUNNING: &str = match option_env!("SKYWARD_RELEASE") {
+    Some(tag) => tag,
+    None => VERSION,
+};
 
 const CPU: &str = "/sys/devices/system/cpu";
 const POWER_SUPPLY: &str = "/sys/class/power_supply";
@@ -114,6 +132,9 @@ pub struct Battery {
     pub full: Option<u64>,
     /// Voltage in µV.
     pub voltage: Option<u64>,
+    /// Current in µA, as the kernel signs it: negative while the battery is
+    /// being charged, positive while it is being drained.
+    pub current: Option<i64>,
     /// A charger charging it quickly, as Xiaomi's Qualcomm phones tell
     /// beside their power supplies.
     pub quick: bool,
@@ -123,6 +144,14 @@ pub struct Battery {
 }
 
 impl Battery {
+    /// The power going in or out of the battery, in watts: the current's
+    /// magnitude times the voltage, the current being signed by the kernel and
+    /// negative while the battery is charged. None where either is not told.
+    pub fn watts(&self) -> Option<f32> {
+        let (current, voltage) = (self.current?, self.voltage?);
+        Some((current.unsigned_abs() as f32 * voltage as f32) / 1e12)
+    }
+
     /// Whether it charges, or is full and topped up.
     pub fn charging(&self) -> bool {
         matches!(self.charge, Charge::Charging | Charge::Full)
@@ -181,11 +210,7 @@ pub fn bootloader_unlocked() -> Result<Option<bool>> {
     )
 }
 
-fn unlock_state(
-    flash_locked: Option<&str>,
-    device_state: Option<&str>,
-    verified: Option<&str>,
-) -> Result<Option<bool>> {
+fn unlock_state(flash_locked: Option<&str>, device_state: Option<&str>, verified: Option<&str>) -> Result<Option<bool>> {
     if let Some(locked) = flash_locked {
         return match locked {
             "0" => Ok(Some(true)),
@@ -261,9 +286,7 @@ const BOOT_PROPS: &str = "ro.boot.";
 /// after them, as Xiaomi's odm imports what each hardware version sets; so
 /// they come first here too, the same in a recovery as in the system.
 pub fn installed_props(slot: Slot) -> Result<HashMap<String, String>> {
-    let base = |m: &skyward_vab::Mounted| -> String {
-        m.partition.strip_suffix(slot.suffix()).expect("mounted partitions carry the slot suffix").to_string()
-    };
+    let base = |m: &skyward_vab::Mounted| -> String { m.partition.strip_suffix(slot.suffix()).expect("mounted partitions carry the slot suffix").to_string() };
     let mut parts = skyward_vab::mounted_partitions(slot)?;
     parts.sort_by_key(|m| PROP_ORDER.iter().position(|b| *b == base(m)).unwrap_or(PROP_ORDER.len()));
     let mut props: HashMap<String, String> = skyward_sys::props(BOOT_PROPS).into_iter().collect();
@@ -280,8 +303,7 @@ pub fn installed_props(slot: Slot) -> Result<HashMap<String, String>> {
                 Err(e) => return Err(e).with_context(|| format!("stat {}", path.display())),
                 Ok(_) => {}
             }
-            rsproperties::load_properties_from_file(&path, None, "u:r:init:s0", &mut props)
-                .with_context(|| format!("read {}", path.display()))?;
+            rsproperties::load_properties_from_file(&path, None, "u:r:init:s0", &mut props).with_context(|| format!("read {}", path.display()))?;
         }
     }
     Ok(props)
@@ -347,14 +369,8 @@ fn cpulist(s: &str) -> Result<Vec<u32>> {
 }
 
 fn mem_total(meminfo: &str) -> Result<u64> {
-    let line = meminfo
-        .lines()
-        .find(|l| l.starts_with("MemTotal:"))
-        .ok_or_else(|| anyhow!("MemTotal missing from /proc/meminfo"))?;
-    let kib = line["MemTotal:".len()..]
-        .trim()
-        .strip_suffix("kB")
-        .ok_or_else(|| anyhow!("MemTotal is not in kB: {line:?}"))?;
+    let line = meminfo.lines().find(|l| l.starts_with("MemTotal:")).ok_or_else(|| anyhow!("MemTotal missing from /proc/meminfo"))?;
+    let kib = line["MemTotal:".len()..].trim().strip_suffix("kB").ok_or_else(|| anyhow!("MemTotal is not in kB: {line:?}"))?;
     parse(kib.trim(), "MemTotal")
 }
 
@@ -430,6 +446,7 @@ fn battery(root: &Path) -> Result<Option<Battery>> {
         design: parse_opt(dir.join("charge_full_design"), "charge_full_design")?,
         full: parse_opt(dir.join("charge_full"), "charge_full")?,
         voltage: parse_opt(dir.join("voltage_now"), "voltage_now")?,
+        current: parse_opt(dir.join("current_now"), "current_now")?,
         // How quickly the charger charges: 0 normally, then fast, flash,
         // turbo and super, which the stock SystemUI all counts quick.
         quick: parse_opt::<u8>(root.with_file_name("qcom-battery").join("quick_charge_type"), "quick_charge_type")?.is_some_and(|k| (1..=4).contains(&k)),

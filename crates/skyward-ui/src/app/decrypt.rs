@@ -60,12 +60,48 @@ impl App {
     /// The data partition is open: every user's own files with it, or
     /// those of `waiting`, the user and the control their screen lock is
     /// answered with, still closed.
+    /// The picture the phone shows for its owner has been read, and the name
+    /// it gives itself: the home page shows them over the phone's own row.
+    pub fn set_avatar(&mut self, picture: crate::avatar::Avatar) {
+        self.state.avatar = Some(picture);
+        self.refresh();
+    }
+
+    pub fn set_device_name(&mut self, name: String) {
+        self.state.device_name = Some(name);
+        self.refresh();
+    }
+
     pub fn data_waiting(&mut self, waiting: Option<(u32, Keys)>) {
         self.state.data = match waiting {
             Some((user, keys)) => Data::Locked { user, keys, checking: false },
             None => Data::Open,
         };
         self.state.code.clear();
+        self.refresh();
+    }
+
+    /// The data partition opened with every user's files that the recovery can
+    /// open: the decrypt page is done with, and the pages behind it are what to
+    /// show. Called once what was entered opened the owner's own files, so that
+    /// the page does not stay in front of a partition that is already open.
+    pub fn decrypted(&mut self) {
+        if !matches!(self.state.data, Data::Open) {
+            return;
+        }
+        // The partition is open, so the decrypt page has done its work: the
+        // menu is what to show, whether or not it was this page that opened it
+        // — a start that kept the lock opens it with nobody looking at one.
+        if self.screen() == Screen::Home {
+            self.refresh();
+            return;
+        }
+        self.leave(true);
+        while self.stack.len() > 1 {
+            self.stack.pop();
+        }
+        *self.top_mut() = (Screen::Home, 0.0, Focus::Unset);
+        self.settle_page();
         self.refresh();
     }
 
@@ -159,7 +195,8 @@ mod tests {
     #[test]
     fn the_decrypt_page_opens_the_partition_and_then_asks_with_the_users_own_control() {
         let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Home, W, H, PPD);
+        // The decrypt page is on the advanced page now.
+        let mut app = App::new(Screen::Advanced, W, H, PPD);
         assert_eq!(tap(&mut app, &f, &i, Action::Open(Screen::Decrypt)), vec![Effect::OpenData], "no swipe first");
         assert_eq!(app.state.data, Data::Opening);
         assert!(!keys_shown(&mut app, &f, &i) && app.frame(&f, &i).pattern.is_none(), "nothing to answer yet");

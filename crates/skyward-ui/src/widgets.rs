@@ -1,5 +1,5 @@
 use crate::canvas::Canvas;
-use crate::color::{blend_over, mix, over, Rgba};
+use crate::color::{Rgba, blend_over, mix, over};
 use crate::fmt;
 use crate::font::{Face, Fonts};
 use crate::geom::Rect;
@@ -66,18 +66,7 @@ pub struct Tone {
 impl Tone {
     pub fn page(t: &Theme) -> Tone {
         let p = &t.pal;
-        Tone {
-            card: p.card,
-            text: p.text,
-            sub: p.subtitle,
-            value: p.value,
-            chevron: p.chevron,
-            caption: p.spec_label,
-            faint: p.chevron,
-            round: p.round,
-            round_mark: p.round_mark,
-            updown: p.updown,
-        }
+        Tone { card: p.card, text: p.text, sub: p.subtitle, value: p.value, chevron: p.chevron, caption: p.spec_label, faint: p.chevron, round: p.round, round_mark: p.round_mark, updown: p.updown }
     }
 
     pub fn hero(t: &Theme) -> Tone {
@@ -101,18 +90,7 @@ impl Tone {
     pub fn lit(t: &Theme) -> Tone {
         let (accent, white) = (t.pal.accent, Rgba::rgb(255, 255, 255));
         let at = |k: f32| crate::color::mix(accent, white, k);
-        Tone {
-            card: accent,
-            text: white,
-            sub: at(0.6),
-            value: at(0.6),
-            chevron: white,
-            caption: at(0.6),
-            faint: at(0.35),
-            round: at(0.18),
-            round_mark: white,
-            updown: at(0.6),
-        }
+        Tone { card: accent, text: white, sub: at(0.6), value: at(0.6), chevron: white, caption: at(0.6), faint: at(0.35), round: at(0.18), round_mark: white, updown: at(0.6) }
     }
 }
 
@@ -201,6 +179,8 @@ pub struct Bar<'a> {
     /// The battery's temperature, in tenths of a degree Celsius, which the
     /// bar gives to the tenth.
     pub temp: Option<i32>,
+    /// The power going in or out of the battery, in watts, given beside it.
+    pub watts: Option<f32>,
 }
 
 /// The bolt past the battery while the cable is in, as the stock bar draws
@@ -247,6 +227,8 @@ pub fn status_bar(c: &mut Canvas, t: &Theme, f: &Fonts, bar: &Bar, ink: Rgba) {
         let (art, ox, oy) = battery(t, f, level, charging.is_some(), right, cy);
         c.lay(&art, ox, oy, 1.0);
         right -= m.dp(BATTERY_W_DP + BATTERY_CAP_DP);
+        // No watts here: the bar is crowded already -- the camera's hole took
+        // the end of the network reading (2026-11-17). Watts are on the lock.
     }
     // From the battery leftwards: the network's fan, the data partition's
     // lock, the slot's badge, the temperature, and leftmost, as the stock
@@ -283,11 +265,8 @@ const MARK_GAP_DP: f32 = 4.33;
 /// three cubic pieces, in shares of how far along each side the bend
 /// reaches, in the corner's own frame, the side coming in along x and the
 /// side going out along y. Read off the stock NFC icon.
-const SMOOTH_CORNER: [[(f32, f32); 4]; 3] = [
-    [(-1.0, 0.0), (-0.65, 0.0), (-0.475, 0.0), (-0.341, 0.068)],
-    [(-0.341, 0.068), (-0.2236, 0.128), (-0.128, 0.2236), (-0.068, 0.341)],
-    [(-0.068, 0.341), (0.0, 0.475), (0.0, 0.65), (0.0, 1.0)],
-];
+const SMOOTH_CORNER: [[(f32, f32); 4]; 3] =
+    [[(-1.0, 0.0), (-0.65, 0.0), (-0.475, 0.0), (-0.341, 0.068)], [(-0.341, 0.068), (-0.2236, 0.128), (-0.128, 0.2236), (-0.068, 0.341)], [(-0.068, 0.341), (0.0, 0.475), (0.0, 0.65), (0.0, 1.0)]];
 
 /// Points taken along each cubic piece of a corner.
 const SMOOTH_STEPS: usize = 4;
@@ -304,12 +283,7 @@ fn cubic([p0, p1, p2, p3]: [(f32, f32); 4], s: f32) -> (f32, f32) {
 /// corner: points round it, clockwise, for a convex fill.
 fn smooth_rect(x: f32, y: f32, w: f32, h: f32, bend: f32) -> Vec<(f32, f32)> {
     // Each corner, the way the outline comes into it and the way it leaves.
-    let corners = [
-        ((x + w, y), (1.0, 0.0), (0.0, 1.0)),
-        ((x + w, y + h), (0.0, 1.0), (-1.0, 0.0)),
-        ((x, y + h), (-1.0, 0.0), (0.0, -1.0)),
-        ((x, y), (0.0, -1.0), (1.0, 0.0)),
-    ];
+    let corners = [((x + w, y), (1.0, 0.0), (0.0, 1.0)), ((x + w, y + h), (0.0, 1.0), (-1.0, 0.0)), ((x, y + h), (-1.0, 0.0), (0.0, -1.0)), ((x, y), (0.0, -1.0), (1.0, 0.0))];
     let mut pts = Vec::with_capacity(4 * (3 * SMOOTH_STEPS + 1));
     for ((kx, ky), (ax, ay), (bx, by)) in corners {
         let at = |(u, v): (f32, f32)| (kx + (u * ax + v * bx) * bend, ky + (u * ay + v * by) * bend);
@@ -457,11 +431,7 @@ fn round_triangle(c: &mut Canvas, corners: [(f32, f32); 3], radii: [f32; 3], col
         let len = ex.hypot(ey);
         let n = (ey / len, -ex / len);
         let mid = ((p.0 + q.0) / 2.0 - centre.0, (p.1 + q.1) / 2.0 - centre.1);
-        if n.0 * mid.0 + n.1 * mid.1 < 0.0 {
-            (-n.0, -n.1)
-        } else {
-            n
-        }
+        if n.0 * mid.0 + n.1 * mid.1 < 0.0 { (-n.0, -n.1) } else { n }
     };
     let mut outline = Vec::new();
     for (i, r) in radii.into_iter().enumerate() {
@@ -1080,9 +1050,7 @@ pub fn button_held(c: &mut Canvas, t: &Theme, glyph: Glyph) {
 /// darker and its cross lighter, inked once where its strokes cross.
 pub fn cancel_held(c: &mut Canvas, t: &Theme, r: Rect) {
     draw_disc(c, r, over(t.pal.button_press, t.pal.search));
-    let cross = Sprite::capture(r.x, r.y, r.w.ceil() as u32 + 1, r.h.ceil() as u32 + 1, |c, dx, dy| {
-        draw_cross(c, t, Rect::new(r.x + dx, r.y + dy, r.w, r.h), Rgba::rgb(0, 0, 0))
-    });
+    let cross = Sprite::capture(r.x, r.y, r.w.ceil() as u32 + 1, r.h.ceil() as u32 + 1, |c, dx, dy| draw_cross(c, t, Rect::new(r.x + dx, r.y + dy, r.w, r.h), Rgba::rgb(0, 0, 0)));
     cross.draw(c, 0.0, 0.0, t.pal.text, CANCEL_HELD_ALPHA as f32 / 255.0);
 }
 
@@ -1138,17 +1106,7 @@ pub fn search_field(c: &mut Canvas, t: &Theme, f: &Fonts, x: f32, w: f32, cy: f3
 /// Draw the search field, with its cursor if `caret`; returns where the
 /// field, its clear button and the cursor are.
 #[allow(clippy::too_many_arguments)]
-fn draw_search_field(
-    c: &mut Canvas,
-    t: &Theme,
-    f: &Fonts,
-    x: f32,
-    w: f32,
-    cy: f32,
-    text: &str,
-    placeholder: &str,
-    caret: bool,
-) -> (Rect, Option<Rect>, Rect) {
+fn draw_search_field(c: &mut Canvas, t: &Theme, f: &Fonts, x: f32, w: f32, cy: f32, text: &str, placeholder: &str, caret: bool) -> (Rect, Option<Rect>, Rect) {
     let m = &t.m;
     let h = m.search_h;
     let y = cy - h / 2.0;
@@ -1274,20 +1232,57 @@ pub fn paragraph(c: &mut Canvas, t: &Theme, f: &Fonts, y: f32, text: &str) -> f3
 /// buttons side by side, the last in the accent colour, and room under
 /// them for the gesture area. Returns the bar and where each button is on
 /// it.
-pub fn dock_bar(t: &Theme, f: &Fonts, bg: Rgba, labels: &[&str]) -> (Canvas, Vec<Rect>) {
+/// 文件管理器里那些小按钮的统一尺寸：一个高度、一个内边距、一个字号。
+/// 路径胶囊、排序控件、长按弹出的操作、多选时的底部条，全都用它，免得
+/// 同一个页面上三种大小的圆角按钮（2026-11-17）。
+pub const PILL_DP: f32 = 34.0;
+pub const PILL_PAD_DP: f32 = 15.0;
+pub const PILL_TEXT_DP: f32 = 14.0;
+pub const PILL_GAP_DP: f32 = 9.0;
+
+/// One pill at `x`, `y`: the label centred in a rounded rect as tall as the
+/// pills elsewhere on the page. Returns how wide it was drawn.
+pub fn pill(c: &mut Canvas, t: &Theme, f: &Fonts, x: f32, y: f32, label: &str, fill: Rgba, ink: Rgba) -> f32 {
     let m = &t.m;
-    let (h, pad, gap) = (m.dp(48.0), m.dp(12.0), m.dp(12.0));
-    let mut c = Canvas::new(m.w, (pad + h + m.dp(KEYBOARD_BOTTOM_DP)).ceil() as u32);
+    let (h, pad, px) = (m.dp(PILL_DP), m.dp(PILL_PAD_DP), m.dp(PILL_TEXT_DP));
+    pill_sized(c, f, x, y, h, px, pad, label, fill, ink)
+}
+
+/// The same pill, at a size the caller gives.
+pub fn pill_sized(c: &mut Canvas, f: &Fonts, x: f32, y: f32, h: f32, px: f32, pad: f32, label: &str, fill: Rgba, ink: Rgba) -> f32 {
+    let w = c.text_width(&f.value, label, px) + pad * 2.0;
+    c.fill_round_rect(x, y, w, h, h / 2.0, fill);
+    c.text_center(&f.value, label, x + w / 2.0, y + h / 2.0, px, ink);
+    w
+}
+
+/// How wide [`pill`] would draw `label`, without drawing it.
+pub fn pill_width(c: &Canvas, t: &Theme, f: &Fonts, label: &str) -> f32 {
+    c.text_width(&f.value, label, t.m.dp(PILL_TEXT_DP)) + t.m.dp(PILL_PAD_DP) * 2.0
+}
+
+pub fn dock_bar(t: &Theme, f: &Fonts, bg: Rgba, labels: &[&str]) -> (Canvas, Vec<Rect>) {
+    dock_bar_danger(t, f, bg, labels, None)
+}
+
+/// The same bar, with the button at `danger` painted as one that destroys
+/// something: the entries chosen, say.
+pub fn dock_bar_danger(t: &Theme, f: &Fonts, bg: Rgba, labels: &[&str], danger: Option<usize>) -> (Canvas, Vec<Rect>) {
+    let m = &t.m;
+    let pad = m.dp(12.0);
+    let (h, gap) = (m.dp(PILL_DP), m.dp(PILL_GAP_DP));
+    let mut c = Canvas::new(m.w, (pad * 2.0 + h + m.dp(KEYBOARD_BOTTOM_DP)).ceil() as u32);
     c.clear(bg);
-    let n = labels.len() as f32;
-    let w = (m.w as f32 - m.margin * 2.0 - gap * (n - 1.0)) / n;
     let mut rects = Vec::new();
+    let mut x = m.margin;
     for (k, label) in labels.iter().enumerate() {
-        let x = m.margin + k as f32 * (w + gap);
-        let (fill, ink) = if k + 1 == labels.len() { (t.pal.accent, Rgba::rgb(255, 255, 255)) } else { (t.pal.search, t.pal.text) };
-        c.fill_round_rect(x, pad, w, h, h / 2.0, fill);
-        c.text_center(&f.heading, label, x + w / 2.0, pad + h / 2.0, m.row_title_px, ink);
+        let (fill, ink) = match danger == Some(k) {
+            true => (t.pal.search, t.pal.danger),
+            false => (t.pal.search, t.pal.text),
+        };
+        let w = pill_sized(&mut c, f, x, pad, h, m.dp(PILL_TEXT_DP), m.dp(PILL_PAD_DP), label, fill, ink);
         rects.push(Rect::new(x, pad, w, h));
+        x += w + gap;
     }
     (c, rects)
 }
@@ -1347,7 +1342,9 @@ pub enum Trail<'a> {
     Check(bool),
     /// A WLAN network's padlock, where joining it takes a password, and the
     /// round button that opens its details.
-    Network { locked: bool },
+    Network {
+        locked: bool,
+    },
     /// The value chosen, and the arrows up and down that say the row opens
     /// a list of choices.
     Choice(&'a str),
@@ -1420,19 +1417,13 @@ fn layout(c: &Canvas, t: &Theme, f: &Fonts, r: &Row) -> Layout {
         Trail::Switch(_) => m.inner + m.switch_w + m.value_gap,
         Trail::Badge(_) => m.inner + m.badge_w + m.value_gap,
         Trail::Check(_) => m.inner + m.dp(24.0) + m.value_gap,
-        Trail::Network { locked } => {
-            m.inner + m.dp(ROUND_D) + m.value_gap + if locked { m.dp(LOCK_GAP + LOCK_W) } else { 0.0 }
-        }
+        Trail::Network { locked } => m.inner + m.dp(ROUND_D) + m.value_gap + if locked { m.dp(LOCK_GAP + LOCK_W) } else { 0.0 },
         Trail::Choice(s) => m.dp(UPDOWN_RIGHT + UPDOWN_W + UPDOWN_VALUE_GAP) + m.value_gap + c.text_width(&f.value, s, m.sub_px),
     };
     let text_max = card_w - text_x - trail_w;
     let sub_lines = r.sub.map(|s| wrap(c, &f.body, s, m.sub_px, text_max)).unwrap_or_default();
     let h = if sub_lines.is_empty() {
-        if r.fan.is_some() {
-            m.dp(FAN_ROW_H)
-        } else {
-            m.row_h
-        }
+        if r.fan.is_some() { m.dp(FAN_ROW_H) } else { m.row_h }
     } else {
         let (tt, tb) = f.heading.ink(m.row_title_px);
         let (st, sb) = f.body.ink(m.sub_px);
@@ -1661,6 +1652,56 @@ pub fn list_toned(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, rows: &[Row], 
 
 /// Account-style card: avatar, name and detail, then optional rows. The
 /// first rect returned covers the name row.
+/// The account's own row, above the phone's: its picture, cut to a circle, and
+/// the name the phone gives itself. Shown once the data partition is open,
+/// since both are kept there.
+///
+/// Gives the row's own block, which is the card of one row.
+pub fn account_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, name: &str, sub: Option<&str>, avatar: Option<&crate::avatar::Avatar>) -> Block {
+    let m = &t.m;
+    let (card_x, right) = (m.margin, m.w as f32 - m.margin);
+    let h = m.account_row_h;
+    c.fill_round_rect(card_x, top, right - card_x, h, m.card_radius, t.pal.card);
+    let cy = top + h / 2.0;
+    let av = m.avatar;
+    let acx = card_x + m.avatar_inset + av / 2.0;
+    match avatar {
+        // Laid over the card as it is: what the picture leaves clear is
+        // transparent, and the card shows through where the circle is not.
+        Some(picture) => {
+            let mut small = Canvas::new(picture.size, picture.size);
+            small.data.copy_from_slice(&picture.rgba);
+            c.lay(&small, (acx - av / 2.0) as i32, (cy - av / 2.0) as i32, 1.0);
+        }
+        None => {
+            c.fill_circle(acx, cy, av / 2.0, t.pal.avatar);
+            icons::glyph(c, Icon::Phone, acx, cy, av * 0.86, t.pal.avatar_glyph);
+        }
+    }
+    let tx = card_x + m.inner + m.icon + m.icon_gap;
+    let (tt, tb) = f.heading.ink(m.account_title_px);
+    // The name over what the phone is, where that is known: two lines set in
+    // the middle of the row, as the phone's own settings page shows them.
+    match sub {
+        Some(sub) => {
+            let (st, sb) = f.body.ink(m.sub_px);
+            let block = (tb - tt) + m.sub_gap + (sb - st);
+            let ink_top = cy - block / 2.0;
+            c.text_top(&f.heading, name, tx, ink_top, m.account_title_px, t.pal.text, None);
+            // Kept clear of the chevron: a long name is cut rather than run
+            // under it.
+            let room = right - m.chevron_inset - m.inner - tx;
+            c.text_top(&f.body, sub, tx, ink_top + (tb - tt) + m.sub_gap, m.sub_px, t.pal.subtitle, Some(room));
+        }
+        None => {
+            let ink_top = cy - (tb - tt) / 2.0;
+            c.text_top(&f.heading, name, tx, ink_top, m.account_title_px, t.pal.text, None);
+        }
+    }
+    chevron(c, t, right - m.chevron_inset, cy, t.pal.chevron);
+    Block { bottom: top + h, rows: vec![Rect::new(card_x, top, right - card_x, h)] }
+}
+
 pub fn device_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, title: &str, sub: &str, rows: &[Row]) -> Block {
     let m = &t.m;
     let lays: Vec<Layout> = rows.iter().map(|r| layout(c, t, f, r)).collect();
@@ -1783,10 +1824,62 @@ pub fn slider_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, caption: Capt
 
 /// Swipe-to-confirm control in the thick-slider style; `progress` (0 to 1)
 /// is how far the knob has been dragged. Returns the track.
-pub fn confirm(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, label: &str, danger: bool, progress: f32) -> Rect {
+/// A card over the middle of the page, holding what is about to be done and
+/// the swipe that does it: a finger finds it where it already is, rather than
+/// at the foot of a list it has to scroll to.
+///
+/// Gives the card and the swipe's track.
+pub fn confirm_card(c: &mut Canvas, t: &Theme, f: &Fonts, what: &str, label: &str, danger: bool, progress: f32) -> (Rect, Rect) {
     let m = &t.m;
     let accent = if danger { t.pal.danger } else { t.pal.accent };
-    let (x, w, h) = (m.margin, m.w as f32 - m.margin * 2.0, m.dp(56.0));
+    let w = (m.w as f32 - m.margin * 2.0).min(m.dp(560.0));
+    let x = (m.w as f32 - w) / 2.0;
+    // The words, wrapped to the card, then room for the swipe under them.
+    let lines = wrap(c, &f.value, what, m.sub_px, w - m.dp(56.0));
+    let text_h = m.sub_pitch * lines.len() as f32;
+    let h = m.dp(28.0) + text_h + m.dp(34.0) + m.dp(56.0) + m.dp(24.0);
+    let y = ((m.h as f32 - h) / 2.0).max(bar_bottom(t) + m.dp(12.0));
+    // The page under it is dimmed rather than covered: a finger sees what it
+    // is about to change.
+    c.dim(0.55);
+    c.shadow_round_rect(x, y, w, h, m.dp(22.0), m.dp(24.0), t.pal.shadow);
+    c.fill_round_rect(x, y, w, h, m.dp(22.0), t.pal.card);
+    let mut line_y = y + m.dp(24.0);
+    for line in &lines {
+        c.text_center(&f.value, line, x + w / 2.0, line_y + m.sub_pitch / 2.0, m.sub_px, t.pal.text);
+        line_y += m.sub_pitch;
+    }
+    let track = Rect::new(x + m.dp(24.0), y + h - m.dp(24.0) - m.dp(56.0), w - m.dp(48.0), m.dp(56.0));
+    c.fill_round_rect(track.x, track.y, track.w, track.h, track.h / 2.0, if danger { t.pal.danger_soft } else { t.pal.badge });
+    c.text_center(&f.heading, label, track.x + track.w / 2.0 + track.h / 4.0, track.y + track.h / 2.0, m.row_title_px, accent);
+    let k = track.h - m.dp(8.0);
+    let kcx = track.x + track.h / 2.0 + (track.w - track.h) * progress.clamp(0.0, 1.0);
+    let kcy = track.y + track.h / 2.0;
+    if progress > 0.0 {
+        c.fill_round_rect(track.x, track.y, kcx + track.h / 2.0 - track.x, track.h, track.h / 2.0, accent.with_alpha(60));
+    }
+    c.fill_circle(kcx, kcy, k / 2.0, accent);
+    let s = k * 0.3;
+    c.line(kcx - s * 0.5, kcy, kcx + s * 0.5, kcy, m.stroke, Rgba::rgb(255, 255, 255));
+    c.line(kcx + s * 0.5, kcy, kcx + s * 0.05, kcy - s * 0.45, m.stroke, Rgba::rgb(255, 255, 255));
+    c.line(kcx + s * 0.5, kcy, kcx + s * 0.05, kcy + s * 0.45, m.stroke, Rgba::rgb(255, 255, 255));
+    (Rect::new(x, y, w, h), track)
+}
+
+pub fn confirm(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, label: &str, danger: bool, progress: f32) -> Rect {
+    let m = &t.m;
+    let track = Rect::new(m.margin, top, m.w as f32 - m.margin * 2.0, m.dp(56.0));
+    confirm_in(c, t, f, track, label, danger, progress)
+}
+
+/// The same control drawn in `track` rather than across the page: a lock's
+/// knob is shorter than the screen is wide, and a caller that has already
+/// worked out where its finger has to land draws it there.
+pub fn confirm_in(c: &mut Canvas, t: &Theme, f: &Fonts, track: Rect, label: &str, danger: bool, progress: f32) -> Rect {
+    let m = &t.m;
+    let accent = if danger { t.pal.danger } else { t.pal.accent };
+    let (x, w, h) = (track.x, track.w, track.h);
+    let top = track.y;
     c.fill_round_rect(x, top, w, h, h / 2.0, if danger { t.pal.danger_soft } else { t.pal.badge });
     c.text_center(&f.heading, label, x + w / 2.0 + h / 4.0, top + h / 2.0, m.row_title_px, accent);
     let k = h - m.dp(8.0);
@@ -1872,20 +1965,8 @@ const PAD_TOP_DP: f32 = 10.0;
 const PAD_BOTTOM_DP: f32 = 26.0;
 
 /// What each key of the keypad types, read as rows of three.
-const PAD_KEYS: [Cap; 12] = [
-    Cap::Char('1'),
-    Cap::Char('2'),
-    Cap::Char('3'),
-    Cap::Char('4'),
-    Cap::Char('5'),
-    Cap::Char('6'),
-    Cap::Char('7'),
-    Cap::Char('8'),
-    Cap::Char('9'),
-    Cap::Backspace,
-    Cap::Char('0'),
-    Cap::Enter,
-];
+const PAD_KEYS: [Cap; 12] =
+    [Cap::Char('1'), Cap::Char('2'), Cap::Char('3'), Cap::Char('4'), Cap::Char('5'), Cap::Char('6'), Cap::Char('7'), Cap::Char('8'), Cap::Char('9'), Cap::Backspace, Cap::Char('0'), Cap::Enter];
 
 /// How tall the keypad is on this theme's screen.
 pub fn keypad_height(t: &Theme) -> f32 {
@@ -2110,11 +2191,7 @@ pub fn detail_grid(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, items: &[Deta
     let cols = [card_x + m.inner, card_x + (right - card_x) * 0.5];
     let widths = [cols[1] - cols[0] - m.inner, right - m.inner - cols[1]];
     let (to_title, to_value, after, pitch) = (m.dp(30.0), m.dp(23.3), m.dp(44.0), m.dp(18.7));
-    let cells: Vec<Vec<String>> = items
-        .iter()
-        .enumerate()
-        .map(|(i, d)| d.value.split('\n').flat_map(|l| wrap(c, &f.body, l, m.sub_px, widths[i % 2])).collect())
-        .collect();
+    let cells: Vec<Vec<String>> = items.iter().enumerate().map(|(i, d)| d.value.split('\n').flat_map(|l| wrap(c, &f.body, l, m.sub_px, widths[i % 2])).collect()).collect();
     let mut centres = Vec::new();
     let mut icy = top + m.dp(28.0);
     let mut last = icy;
@@ -2308,11 +2385,7 @@ pub fn spec_grid(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, items: &[Spec])
     let widths = [cols[1] - cols[0] - m.inner, right - m.inner - cols[1]];
     let (value_px, pitch) = (m.dp(16.0), m.dp(21.5));
     let (to_label, to_value) = (m.dp(30.8), m.dp(23.0));
-    let cells: Vec<Vec<String>> = items
-        .iter()
-        .enumerate()
-        .map(|(i, s)| s.value.split('\n').flat_map(|l| wrap(c, &f.heading, l, value_px, widths[i % 2])).collect())
-        .collect();
+    let cells: Vec<Vec<String>> = items.iter().enumerate().map(|(i, s)| s.value.split('\n').flat_map(|l| wrap(c, &f.heading, l, value_px, widths[i % 2])).collect()).collect();
     let mut centres = Vec::new();
     let mut cy = top + m.dp(38.2);
     let mut last = cy;
@@ -2345,8 +2418,7 @@ pub fn info_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, items: &[(&str,
     let width = right - m.inner - x;
     let (ink_top, _) = f.heading.ink(m.row_title_px);
     let (to_value, pitch) = (m.dp(20.2), m.dp(19.0));
-    let blocks: Vec<Vec<String>> =
-        items.iter().map(|(_, v)| v.lines().flat_map(|l| wrap(c, &f.body, l, m.sub_px, width)).collect()).collect();
+    let blocks: Vec<Vec<String>> = items.iter().map(|(_, v)| v.lines().flat_map(|l| wrap(c, &f.body, l, m.sub_px, width)).collect()).collect();
     let mut bases = Vec::new();
     let mut title_top = top + m.dp(23.5);
     let mut last = title_top;
@@ -2554,11 +2626,7 @@ pub fn check_circle(c: &mut Canvas, t: &Theme, cx: f32, cy: f32, on: bool) {
 /// `room`.
 fn fitted_px(c: &Canvas, face: &Face, text: &str, most: f32, least: f32, room: f32) -> f32 {
     let w = c.text_width(face, text, most);
-    if w <= room {
-        most
-    } else {
-        (most * room / w).max(least)
-    }
+    if w <= room { most } else { (most * room / w).max(least) }
 }
 
 /// Which keys the on-screen keyboard shows.
@@ -2699,15 +2767,7 @@ pub fn keyboard(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, top: f32, layer: 
             Cap::Shift => {
                 // An upward arrow, solid while the next letter is a capital.
                 let s = m.dp(9.0);
-                let pts = [
-                    (cx, cy - s),
-                    (cx + s, cy),
-                    (cx + s * 0.45, cy),
-                    (cx + s * 0.45, cy + s * 0.9),
-                    (cx - s * 0.45, cy + s * 0.9),
-                    (cx - s * 0.45, cy),
-                    (cx - s, cy),
-                ];
+                let pts = [(cx, cy - s), (cx + s, cy), (cx + s * 0.45, cy), (cx + s * 0.45, cy + s * 0.9), (cx - s * 0.45, cy + s * 0.9), (cx - s * 0.45, cy), (cx - s, cy)];
                 if layer == Layer::Shifted {
                     c.fill_convex(&pts[..3], ink);
                     c.fill_convex(&[pts[0], pts[6], pts[5]], ink);
@@ -2824,7 +2884,7 @@ mod tests {
         let f = crate::font::bundled();
         let draw = |mark: WlanMark| {
             let mut c = Canvas::filled(1200, 160, t.pal.bg);
-            let bar = Bar { clock: "01:27", battery: Some((40, Some(Bolt::Charging))), wlan: Some(mark), data: None, slot: None, temp: None };
+            let bar = Bar { clock: "01:27", battery: Some((40, Some(Bolt::Charging))), wlan: Some(mark), data: None, slot: None, temp: None, watts: None };
             status_bar(&mut c, &t, &f, &bar, t.pal.status);
             c
         };
@@ -2862,7 +2922,7 @@ mod tests {
         let f = crate::font::bundled();
         let mut c = Canvas::filled(1200, 160, t.pal.bg);
         let wlan = Some(WlanMark { level: 3, receiving: true, sending: true, speed: "0.00".into(), unit: "KB/s" });
-        let bar = Bar { clock: "01:27", battery: Some((40, None)), wlan, data: Some(false), slot: Some("B"), temp: Some(362) };
+        let bar = Bar { clock: "01:27", battery: Some((40, None)), wlan, data: Some(false), slot: Some("B"), temp: Some(362), watts: None };
         status_bar(&mut c, &t, &f, &bar, t.pal.status);
         // Runs of inked columns on the bar's right half, those a few pixels
         // apart taken as one mark.
@@ -2934,7 +2994,7 @@ mod tests {
         let f = crate::font::bundled();
         let draw = |kind| {
             let mut c = Canvas::filled(1200, 160, Rgba::rgb(0, 0, 0));
-            let bar = Bar { clock: "01:27", battery: Some((64, Some(kind))), wlan: None, data: None, slot: None, temp: None };
+            let bar = Bar { clock: "01:27", battery: Some((64, Some(kind))), wlan: None, data: None, slot: None, temp: None, watts: None };
             status_bar(&mut c, &t, &f, &bar, t.pal.status);
             c
         };
@@ -2942,9 +3002,7 @@ mod tests {
         // edge steps right, each the top of a step.
         let cover = |p: &[u8]| p[0] as f32 / t.pal.battery.bolt.a as f32;
         let steps = |c: &Canvas| -> Vec<u32> {
-            let lefts: Vec<(u32, u32)> = (40..120)
-                .filter_map(|y| (1064..1100).find(|&x| cover(&c.data[((y * 1200 + x) * 4) as usize..]) > 0.6).map(|x| (y, x)))
-                .collect();
+            let lefts: Vec<(u32, u32)> = (40..120).filter_map(|y| (1064..1100).find(|&x| cover(&c.data[((y * 1200 + x) * 4) as usize..]) > 0.6).map(|x| (y, x))).collect();
             lefts.windows(2).filter(|w| w[1].1 >= w[0].1 + 3).map(|w| w[1].0).collect()
         };
         let quick = draw(Bolt::Quick);

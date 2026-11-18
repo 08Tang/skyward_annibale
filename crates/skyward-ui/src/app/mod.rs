@@ -45,6 +45,7 @@ mod input;
 mod install;
 mod keys;
 mod manager;
+mod modules;
 mod mount;
 mod nav;
 mod power;
@@ -115,7 +116,14 @@ pub enum Screen {
     BackupJob,
     /// Tools for the experienced: files, a terminal, the logs.
     Advanced,
+    /// The modules installed for the phone's own system (KernelSU's and
+    /// Magisk's), and whether each is switched on.
+    Modules,
+    /// One module: what it is, and what can be done with it.
+    ModuleInfo,
     Files,
+    /// The files on the OTG drive, all of them.
+    FilesOtg,
     /// One file, and what can be done with it.
     FileInfo,
     /// The permission bits of the entry the file page shows, a switch each.
@@ -144,6 +152,15 @@ pub enum Screen {
     /// Where an update the system installed stands, and merging it into
     /// the slot it went to.
     Update,
+    /// The files of a folder served to a browser on the network the phone is
+    /// on, so a computer moves them in and out without a cable.
+    Serve,
+    /// A file taken from an address typed on the page's keyboard, or handed
+    /// over by a page another device opens.
+    Fetch,
+    /// Verified boot's two checks in the slot the phone runs from, turned on
+    /// or off with a swipe.
+    Avb,
     /// Skyward's newest release, and updating to it: its build for the
     /// phone downloaded and written into the recovery partitions.
     SkywardUpdate,
@@ -208,6 +225,11 @@ pub enum Confirm {
     DeleteEntry,
     /// Delete the backup the restore page shows.
     DeleteBackup,
+    /// Keep the screen lock for the starts that follow, with the risk of it
+    /// said first.
+    KeepLock,
+    /// Write the verified boot checks the avb page has turned.
+    Avb,
     /// Install the update that waits to be agreed to.
     Install,
     /// Install an update that erases all user data after it.
@@ -234,6 +256,25 @@ pub enum Confirm {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Action {
     Open(Screen),
+    /// Change what the file manager sorts by, how, and whether folders stay on
+    /// top.
+    CycleSort,
+    ToggleSortOrder,
+    ToggleFoldersFirst,
+    /// Turn one of verified boot's checks: `false` is dm-verity, `true` is
+    /// the bootloader's own verification.
+    Avb(bool),
+    /// Start the download the address typed is of, and stop the one under way.
+    FetchStart,
+    FetchStop,
+    /// Take the address from a small file a computer put in Downloads.
+    FetchFromFile,
+    /// Start serving the folder the file manager shows, or stop.
+    ServeToggle,
+    /// Choose the folder served: the file manager's, which is opened for it,
+    /// and this is the bar it is taken from.
+    ServePick,
+    ServeUseHere,
     /// Leave the decrypt page for the page it was opened from; the page
     /// the recovery started on, for the home page without keeping it
     /// behind.
@@ -311,6 +352,27 @@ pub enum Action {
     /// Open the file manager's entry at this place in the folder: a folder
     /// to look in, a text file to edit, or what can be done with any other.
     OpenEntry(usize),
+    /// Copy or move the entry the file page shows onto the OTG drive, or off
+    /// it onto the owner's storage.
+    ToDrive(FileOp),
+    ToPhone(FileOp),
+    /// Ask where a copy or a move goes: the phone's own storage or the drive.
+    AskPlace(FileOp),
+    /// Switch a module on or off, by its place in the list the page shows.
+    ModuleToggle(usize),
+    /// Mark the module at this place in the list to go at the next start, or
+    /// take that mark off.
+    ModuleRemove(usize),
+    /// Install the zip the file page shows as a module.
+    InstallAsModule,
+    /// Open the module at this place in the list.
+    ModuleOpen(usize),
+    /// Put the question away without doing anything.
+    DismissPlace,
+    /// Look at the files on the OTG drive.
+    FilesOtg,
+    /// Open the OTG entry at this place.
+    OpenOtgEntry(usize),
     /// Open the terminal in the folder the file manager shows.
     TerminalHere,
     /// Open the entry at this place in a place's folder: a folder to look
@@ -341,6 +403,18 @@ pub enum Action {
     /// Ask to delete the entry the file page shows, or the backup the
     /// restore page shows; a swipe then confirms.
     AskDelete,
+    /// Put the asking away, leaving the entry as it was.
+    CancelDelete,
+    /// Start choosing several entries of the folder shown, or stop.
+    ChooseMany(bool),
+    /// Tick or untick the entry at this place in the folder shown.
+    ChooseEntryAt(usize),
+    /// Tick or untick every entry of the folder shown.
+    ChooseAll,
+    /// Copy or move the entries chosen into the folder shown.
+    PasteChosen(FileOp),
+    /// Ask to delete the entries chosen; a swipe then confirms.
+    AskDeleteChosen,
     /// How to go on when a name is taken where an entry goes.
     Resolve(ClashChoice),
     /// Stop giving the data partition's files their labels.
@@ -465,6 +539,16 @@ pub enum Effect {
     Cancel,
     /// Read the slot's partitions for the mount page, which has just opened.
     ReadMounts,
+    /// Read the modules installed for the phone's own system.
+    ReadModules,
+    /// Have the module in this folder switched on or off: the folder's name,
+    /// and whether it is to be on.
+    ModuleSwitch(String, bool),
+    /// Have the module in this folder removed at the next start, or keep it:
+    /// the folder's name, and whether it is to go.
+    ModuleRemove(String, bool),
+    /// Install, or install over, the module the zip at this path carries.
+    ModuleInstall(String),
     /// Read what the boot control holds of the slots, telling it with
     /// [`App::set_boot_slots`].
     ReadSlots,
@@ -539,6 +623,16 @@ pub enum Effect {
         into: String,
         clash: Option<ClashChoice>,
     },
+    /// Copy or move these, or delete them.
+    PasteMany {
+        op: FileOp,
+        paths: Vec<String>,
+        into: String,
+        clash: Option<ClashChoice>,
+    },
+    DeleteMany(Vec<String>),
+    /// Read the folder at this path on the OTG drive.
+    ReadOtg(String),
     /// Give an entry a new name; how it went comes back with
     /// [`App::renamed`].
     Rename {
@@ -628,7 +722,24 @@ pub enum Effect {
     ReadUpdate,
     /// Turn the WLAN on or off; how it stands comes back with
     /// [`App::set_wlan`].
+    /// Keep the screen lock that opens the user's files, or stop keeping it.
+    Remember(bool),
+    /// Serve the folder the file manager shows on the network, or stop.
+    Serve(bool),
+    /// Take `url` into Downloads, and stop the one under way.
+    Fetch(String),
+    StopFetch,
+    /// Keep the file manager's order for the starts that follow.
+    KeepSort(SortKey, bool, bool),
+    /// Read verified boot's checks in the slot the phone runs from.
+    AvbRead,
+    /// Write both checks as the page has them.
+    AvbSet(bool, bool),
     Wlan(bool),
+    /// Keep the WLAN open as the recovery starts, or stop keeping it so.
+    WlanAuto(bool),
+    /// Keep the password of the network joined last, or forget it.
+    WlanKeep(bool),
     ScanWlan,
     JoinWlan {
         ssid: Vec<u8>,
@@ -699,6 +810,11 @@ enum Drag {
         cy: f32,
     },
     Slider(Slider, Rect),
+    /// Pulling the control centre: where it began, and how far out it was then.
+    Shade {
+        start: f32,
+        from: f32,
+    },
     Confirm {
         which: Confirm,
         track: Rect,
@@ -742,11 +858,7 @@ enum Press {
     /// The power key on a swipe-to-confirm control, whose knob slides along
     /// its track at `track` from `at` while the key is held; let go once
     /// it has slid far enough, the control confirms.
-    Slide {
-        which: Confirm,
-        track: Rect,
-        at: u64,
-    },
+    Slide { which: Confirm, track: Rect, at: u64 },
     /// Done with: nothing more comes of it until it is let go.
     Spent,
 }
@@ -862,6 +974,22 @@ const REPEAT_MS: u64 = 50;
 /// the two waits this long, or until it is let go, before it does what it
 /// does alone.
 const CHORD_MS: u64 = 150;
+
+/// How long the ring about the sign on the decrypt page takes to turn once.
+const RING_MS: u64 = 1500;
+
+/// How much of the bar on the decrypt page a millisecond of waiting puts in: it
+/// runs its whole length in about two and a half seconds -- about as long as
+/// the phone's own parts take to come up -- and waits there, full, until the
+/// opening is done. What it says is how long the page has been at the work, not
+/// how much of the work is behind, so a page that is waiting is never shown
+/// standing still.
+///
+/// It was 0.00017, which filled the bar in about six seconds, for parts that
+/// took 5.5 s to come up. The directory was made to start again by hand rather
+/// than through init's restart, which took 3.6 s out of that, and the bar was
+/// left filling for a wait that no longer existed: it was a little over a third
+/// of the way along when the page went (2026-11-15).
 /// How far along its track the knob of a swipe-to-confirm control has to
 /// be let go to confirm.
 const SLID: f32 = 0.9;
@@ -933,32 +1061,16 @@ struct Fade {
 
 impl Fade {
     fn hidden(show: Ease, hide: Ease) -> Fade {
-        Fade {
-            on: false,
-            since: 0,
-            from: 0.0,
-            show,
-            hide,
-        }
+        Fade { on: false, since: 0, from: 0.0, show, hide }
     }
 
     fn shown(show: Ease, hide: Ease) -> Fade {
-        Fade {
-            on: true,
-            since: 0,
-            from: 1.0,
-            show,
-            hide,
-        }
+        Fade { on: true, since: 0, from: 1.0, show, hide }
     }
 
     /// How far in, 0 to 1, at `now`.
     fn level(&self, now: u64) -> f32 {
-        let (target, ease) = if self.on {
-            (1.0, self.show)
-        } else {
-            (0.0, self.hide)
-        };
+        let (target, ease) = if self.on { (1.0, self.show) } else { (0.0, self.hide) };
         self.from + (target - self.from) * ease.progress(now.saturating_sub(self.since))
     }
 
@@ -985,19 +1097,11 @@ impl Fade {
 /// blurring away on a quicker one, or on the About page, fading in a
 /// straight line together with the bar.
 fn title_fade(hero: bool) -> Fade {
-    if hero {
-        Fade::hidden(Ease::Linear(150), Ease::Linear(150))
-    } else {
-        Fade::hidden(Ease::Spring(0.3), Ease::Spring(0.15))
-    }
+    if hero { Fade::hidden(Ease::Linear(150), Ease::Linear(150)) } else { Fade::hidden(Ease::Spring(0.3), Ease::Spring(0.15)) }
 }
 
 fn bar_fade(hero: bool) -> Fade {
-    if hero {
-        Fade::hidden(Ease::Linear(150), Ease::Linear(150))
-    } else {
-        Fade::hidden(Ease::Linear(100), Ease::Linear(100))
-    }
+    if hero { Fade::hidden(Ease::Linear(150), Ease::Linear(150)) } else { Fade::hidden(Ease::Linear(100), Ease::Linear(100)) }
 }
 
 /// The panel at full brightness: it dims over half a second and comes
@@ -1009,9 +1113,7 @@ fn full_brightness() -> Fade {
 /// The level the panel dims to shortly before it goes off, for the
 /// brightness set.
 fn dim_level(full: f32) -> f32 {
-    (full - DIM_DROP)
-        .clamp(MIN_BRIGHTNESS, DIM_CEILING)
-        .min(full)
+    (full - DIM_DROP).clamp(MIN_BRIGHTNESS, DIM_CEILING).min(full)
 }
 
 /// How long the panel stays dim before going off, for a screen-off time.
@@ -1032,15 +1134,7 @@ fn within(r: Rect, (top, bottom): (f32, f32)) -> bool {
 
 /// Lay the sprite `blurs` keeps, moved by (`dx`, `dy`), in `color` at
 /// `level` of its strength, blurred by `blur` pixels.
-fn draw_faded(
-    out: &mut Canvas,
-    blurs: &mut Blurs,
-    dx: f32,
-    dy: f32,
-    color: Rgba,
-    level: f32,
-    blur: f32,
-) {
+fn draw_faded(out: &mut Canvas, blurs: &mut Blurs, dx: f32, dy: f32, color: Rgba, level: f32, blur: f32) {
     if level > 0.0 {
         blurs.get(blur).draw(out, dx, dy, color, level);
     }
@@ -1098,24 +1192,19 @@ impl RowPress {
         }
         let up = |t: u64| motion::settle(t - self.rise, ROW_PRESS_PERIOD);
         match self.fall {
-            Some(fall) if now >= fall => {
-                up(fall) * (1.0 - motion::settle(now - fall, ROW_PRESS_PERIOD))
-            }
+            Some(fall) if now >= fall => up(fall) * (1.0 - motion::settle(now - fall, ROW_PRESS_PERIOD)),
             _ => up(now),
         }
     }
 
     /// Whether it has faded back after being let go.
     fn gone(&self, now: u64) -> bool {
-        self.fall
-            .is_some_and(|fall| now >= fall && motion::settle(now - fall, ROW_PRESS_PERIOD) == 1.0)
+        self.fall.is_some_and(|fall| now >= fall && motion::settle(now - fall, ROW_PRESS_PERIOD) == 1.0)
     }
 
     /// Whether it is darkening or fading back at `now`.
     fn changing(&self, now: u64) -> bool {
-        let dark = self.fall.is_none()
-            && now >= self.rise
-            && motion::settle(now - self.rise, ROW_PRESS_PERIOD) == 1.0;
+        let dark = self.fall.is_none() && now >= self.rise && motion::settle(now - self.rise, ROW_PRESS_PERIOD) == 1.0;
         now >= self.rise && !dark && !self.gone(now)
     }
 
@@ -1175,10 +1264,7 @@ fn row_wide(t: &Theme, r: Rect) -> bool {
 /// left, top, width and height.
 fn row_part(r: Rect, canvas: &Canvas) -> (u32, u32, u32, u32) {
     let (x0, y0) = (r.x.floor().max(0.0) as u32, r.y.floor().max(0.0) as u32);
-    let (x1, y1) = (
-        ((r.x + r.w).ceil() as u32).min(canvas.w),
-        ((r.y + r.h).ceil() as u32).min(canvas.h),
-    );
+    let (x1, y1) = (((r.x + r.w).ceil() as u32).min(canvas.w), ((r.y + r.h).ceil() as u32).min(canvas.h));
     (x0, y0, x1 - x0, y1 - y0)
 }
 
@@ -1190,11 +1276,80 @@ fn keyboard_strip(t: &Theme, frame: &Frame) -> (Canvas, i32) {
     (strip, top)
 }
 
+/// How far the control centre has to be pulled, in dp, for it to stay open
+/// once let go, and how long its settling takes.
+const SHADE_PULL_DP: f32 = 110.0;
+const SHADE_PERIOD: f32 = 1.8;
+/// The share of the pull past which letting go opens the sheet.
+const SHADE_KEEPS: f32 = 0.36;
+/// How tall the control centre's sheet is, in dp, at full pull: the tiles and
+/// the two capsules, a little air under them, and the rounded foot with the
+/// grabber. It was 508 dp, which left a hand's width of empty sheet under the
+/// capsules; below about 460 dp the capsules' own feet are cut by the sheet's.
+const SHADE_HEIGHT_DP: f32 = 474.0;
+
+/// What a finger can press in the control centre.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShadeHit {
+    Wlan,
+    Screenshot,
+    Reboot,
+    Sleep,
+    Brightness,
+    Vibration,
+}
+
+/// What a locked screen holds: when the panel went dark, and how far the knob
+/// has been slid along.
+struct Lock {
+    since: u64,
+    drag: f32,
+    /// Whether the finger went down on the knob rather than elsewhere.
+    held: bool,
+}
+
+/// How much of the track the knob must reach for the lock to give way.
+const UNLOCK_AT: f32 = 0.96;
+
+/// How long the power key is held on the lock for the reboot page to open.
+const POWER_HOLD_MS: u64 = 1200;
+
+/// How close together two taps on the dark panel have to be for it to light.
+const DOUBLE_TAP_MS: u64 = 600;
+
 pub struct App {
+    /// The two answers the place question offers, where they were drawn.
+    pub(super) place_hits: Vec<(crate::geom::Rect, Action)>,
     pub state: State,
     /// The pages open, the one shown last: each with how far it is
     /// scrolled and where the keys are on it.
     stack: Vec<(Screen, f32, Focus)>,
+    /// The lock over the page once the panel went dark, until its knob is slid
+    /// along; and when the power key went down on it.
+    lock: Option<Lock>,
+    lock_press: Option<u64>,
+    /// Where the lock's knob was last drawn, which is where a finger finds it,
+    /// and when the dark panel was last tapped.
+    lock_rect: Option<Rect>,
+    tap_at: Option<u64>,
+    /// The control centre: how far it is pulled out, the pull it settles from,
+    /// the finger that started it, and what can be pressed on it.
+    /// The card asking to delete, and the swipe on it, as last drawn: a finger
+    /// finds them where they are, not where the page has scrolled to.
+    asking: Option<(Rect, Confirm)>,
+    asking_track: Option<Rect>,
+    shade: f32,
+    /// Where a finger that came down near the top edge started: it becomes a
+    /// pull only once it moves down, so a tap up there still reaches the page.
+    shade_from: Option<f32>,
+    shade_settle: Option<(u64, f32, f32, f32, f32)>,
+    shade_last: Option<(u64, f32)>,
+    shade_speed: f32,
+    shade_press: Option<(ShadeHit, f32)>,
+    shade_hits: Vec<(Rect, ShadeHit)>,
+    /// When to take the screenshot a tile asked for, once the page under the
+    /// sheet has been drawn without it.
+    shot_when: Option<u64>,
     frame: Option<Frame>,
     /// The controls of the page drawn, in the order the keys go through
     /// them.
@@ -1256,6 +1411,10 @@ pub struct App {
     /// How far a dragging finger has pulled the page past an end:
     /// negative past the top, positive past the bottom.
     pull: f32,
+    /// When the decrypt page was shown, from which its bar runs: cleared off
+    /// the page, so that the bar runs its length the next time it is shown
+    /// rather than jumping to where it was.
+    data_started: Option<u64>,
     /// The page springing back after being pulled or thrown past an end.
     bounce: Option<Spring>,
     /// The back cue shrinking away after a swipe that did not go back:
@@ -1338,6 +1497,21 @@ impl App {
         App {
             state: State::default(),
             stack: vec![(start, 0.0, Focus::Unset)],
+            lock: None,
+            lock_press: None,
+            lock_rect: None,
+            tap_at: None,
+            asking: None,
+            asking_track: None,
+            place_hits: Vec::new(),
+            shade: 0.0,
+            shade_from: None,
+            shade_settle: None,
+            shade_last: None,
+            shade_speed: 0.0,
+            shade_press: None,
+            shade_hits: Vec::new(),
+            shot_when: None,
             frame: None,
             spots: None,
             // The touchscreen may run from the partitions fastboot leaves
@@ -1364,6 +1538,7 @@ impl App {
             fling: None,
             glide: None,
             pull: 0.0,
+            data_started: None,
             bounce: None,
             cue: None,
             title: title_fade(start == Screen::About),
@@ -1407,11 +1582,13 @@ impl App {
     }
 
     pub fn theme(&self) -> Theme {
-        if self.state.dark {
-            Theme::dark(self.w, self.h, self.px_per_dp)
-        } else {
-            Theme::light(self.w, self.h, self.px_per_dp)
-        }
+        if self.state.dark { Theme::dark(self.w, self.h, self.px_per_dp) } else { Theme::light(self.w, self.h, self.px_per_dp) }
+    }
+
+    /// Whether a download asked for on the download page is under way, which
+    /// the page stops rather than starts.
+    pub fn fetching(&self) -> bool {
+        matches!(self.state.fetch, Fetch::Running { .. })
     }
 
     pub fn screen(&self) -> Screen {
@@ -1419,15 +1596,11 @@ impl App {
     }
 
     fn top(&self) -> &(Screen, f32, Focus) {
-        self.stack
-            .last()
-            .expect("the page stack always holds a page")
+        self.stack.last().expect("the page stack always holds a page")
     }
 
     fn top_mut(&mut self) -> &mut (Screen, f32, Focus) {
-        self.stack
-            .last_mut()
-            .expect("the page stack always holds a page")
+        self.stack.last_mut().expect("the page stack always holds a page")
     }
 
     /// Whether the panel needs a new frame since the last call.
@@ -1440,8 +1613,7 @@ impl App {
     /// backlight eases, else when a shown message should disappear or the
     /// panel should dim or go off.
     pub fn deadline(&self, now: u64) -> Option<u64> {
-        let sliding =
-            matches!(self.button, Some((_, Press::Slide { .. }))) && self.state.confirm < 1.0;
+        let sliding = matches!(self.button, Some((_, Press::Slide { .. }))) && self.state.confirm < 1.0;
         let moving = self.display_on
             && (self.fling.is_some()
                 || self.glide.is_some()
@@ -1453,9 +1625,10 @@ impl App {
                 || self.bar.moving(now)
                 || self.morph.is_some()
                 || self.turn.is_some()
-                || self
-                    .row_press
-                    .is_some_and(|p| p.changing(now) || p.gone(now))
+                || self.row_press.is_some_and(|p| p.changing(now) || p.gone(now))
+                || self.turning()
+                || self.shade_busy()
+                || self.shot_when.is_some()
                 || self.glowing());
         // The content going dark or coming up, and the charging screen's
         // tide, move a frame at a time while the panel is lit.
@@ -1466,46 +1639,36 @@ impl App {
         let darkens = self.row_press.map(|p| p.rise).filter(|&rise| rise > now);
         let easing = self.bright.moving(now).then_some(now + BACKLIGHT_STEP_MS);
         let held = match self.drag {
-            Drag::Press {
-                action: Some(Action::OpenEntry(_)),
-                at,
-                ..
-            } => Some(at + LONG_PRESS_MS),
+            Drag::Press { action: Some(Action::OpenEntry(_)), at, .. } => Some(at + LONG_PRESS_MS),
             _ => None,
         };
         let repeat = match self.button {
             Some((_, Press::Volume { next, .. })) => Some(next),
-            Some((
-                _,
-                Press::Power {
-                    spot:
-                        Spot {
-                            stop: Stop::Hit(Action::OpenEntry(_)),
-                            ..
-                        },
-                    at,
-                },
-            )) => Some(at + LONG_PRESS_MS),
+            Some((_, Press::Power { spot: Spot { stop: Stop::Hit(Action::OpenEntry(_)), .. }, at })) => Some(at + LONG_PRESS_MS),
             _ => None,
         };
-        let blink = self
-            .blink_at(now)
-            .filter(|_| self.display_on)
-            .map(|(_, next)| next);
+        let blink = self.blink_at(now).filter(|_| self.display_on).map(|(_, next)| next);
         let chord = self.chord.map(|(_, at)| at + CHORD_MS);
-        [
-            self.toast.as_ref().map(|t| t.1),
-            easing,
-            self.idle_due(),
-            held,
-            repeat,
-            blink,
-            darkens,
-            chord,
-        ]
-        .into_iter()
-        .flatten()
-        .min()
+        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, blink, darkens, chord].into_iter().flatten().min()
+    }
+
+    /// Whether the ring about the sign on the decrypt page is turning, which
+    /// asks the loop for a frame every turn rather than a second apart.
+    fn turning(&self) -> bool {
+        self.display_on && self.screen() == Screen::Decrypt && matches!(self.state.data, Data::Closed | Data::Opening)
+    }
+
+    /// Whether the lock is over the page, waiting for the knob: the panel must
+    /// keep its touch controller awake then, or the taps that would light it
+    /// are never reported.
+    pub fn locked(&self) -> bool {
+        self.lock.is_some()
+    }
+
+    /// Whether the control centre is out, on its way out or being pulled, which
+    /// the loop asks for a frame a turn while.
+    pub fn shade_busy(&self) -> bool {
+        self.shade > 0.0 || self.shade_settle.is_some() || matches!(self.drag, Drag::Shade { .. })
     }
 
     /// Whether a text field's cursor shows at `now`, and when it next turns;
@@ -1523,11 +1686,7 @@ impl App {
         if !self.display_on {
             return None;
         }
-        Some(if self.bright.on {
-            active + after - dim_span(after)
-        } else {
-            active + after
-        })
+        Some(if self.bright.on { active + after - dim_span(after) } else { active + after })
     }
 
     /// Let time pass: the panel dims and goes off once left alone long
@@ -1536,35 +1695,68 @@ impl App {
     /// deadline goes away.
     pub fn tick(&mut self, now: u64) -> Vec<Effect> {
         let mut fx = Vec::new();
+        // The control centre, let go, settles into place in one move, easing
+        // out rather than swinging about where it is headed for.
+        if let Some((at, from, _speed, period, target)) = self.shade_settle {
+            let t = now.saturating_sub(at) as f32 / 1000.0;
+            let k = (t / period).clamp(0.0, 1.0);
+            let eased = k * k * (3.0 - 2.0 * k);
+            self.shade = ((target + from * (1.0 - eased)) / SHADE_PULL_DP).clamp(0.0, 1.0);
+            if k >= 1.0 {
+                self.shade_settle = None;
+                self.shade = (target / SHADE_PULL_DP).clamp(0.0, 1.0);
+            }
+            self.dirty = true;
+        }
+        // The decrypt page while the partition is being opened, and while it
+        // waits for the phone's own parts to come up: its ring turns every
+        // frame, and its bar runs its length once from the moment the page is
+        // shown.
+        if self.screen() == Screen::Decrypt && matches!(self.state.data, Data::Closed | Data::Opening) {
+            self.state.data_phase = (now % RING_MS) as f32 / RING_MS as f32;
+            let started = *self.data_started.get_or_insert(now);
+            // Nothing is measured any more: the page turns its ring and says
+            // which part of the work it is at, without a bar drawn to a guess.
+            let _ = started;
+            // The frame drawn is the page as it stood: without letting it go,
+            // the ring is drawn once and never turns again.
+            self.frame = None;
+            self.dirty = true;
+        } else {
+            self.data_started = None;
+        }
         // The key waiting for its partner in a screenshot, left alone long
         // enough, does what it does alone.
+        // The sheet goes first, and the shot is taken a few frames later, once
+        // the page under it has been drawn: taken at once, the sheet would be
+        // in it.
+        if let Some(at) = self.shot_when
+            && now >= at
+        {
+            self.shot_when = None;
+            fx.push(Effect::Screenshot { storage: self.state.place_open(Place::Storage) });
+        }
         if self.chord.is_some_and(|(_, at)| now >= at + CHORD_MS) {
             fx.extend(self.let_chord_go(now));
         }
         // An entry of the file manager held long enough, under a finger or
         // the power key, opens what can be done with it, a folder as much as
         // a file, with a tap of the motor.
-        if let Drag::Press {
-            action: Some(Action::OpenEntry(i)),
-            at,
-            ..
-        } = self.drag
+        if let Drag::Press { action: Some(Action::OpenEntry(i)), at, .. } = self.drag
             && now >= at + LONG_PRESS_MS
         {
             self.drag = Drag::Held;
             fx.extend(self.held_entry(i));
         }
-        if let Some((
-            key,
-            Press::Power {
-                spot:
-                    Spot {
-                        stop: Stop::Hit(Action::OpenEntry(i)),
-                        ..
-                    },
-                at,
-            },
-        )) = self.button
+        // 模块长按 = 标记下次启动时移除（再长按一次取消），和 KSU 的做法一致。
+        if let Drag::Press { action: Some(Action::ModuleToggle(i)), at, .. } = self.drag
+            && now >= at + LONG_PRESS_MS
+        {
+            self.drag = Drag::Held;
+            fx.push(Effect::Haptic);
+            fx.extend(self.act(Action::ModuleRemove(i), now));
+        }
+        if let Some((key, Press::Power { spot: Spot { stop: Stop::Hit(Action::OpenEntry(i)), .. }, at })) = self.button
             && now >= at + LONG_PRESS_MS
         {
             self.button = Some((key, Press::Spent));
@@ -1581,12 +1773,7 @@ impl App {
         }
         // The charging screen goes once it has shown long enough: on a
         // panel lit for it, with the panel, else for the page.
-        if self.display_on
-            && self
-                .charging
-                .as_ref()
-                .is_some_and(|c| c.shown.on && now >= c.since + CHARGE_MS)
-        {
+        if self.display_on && self.charging.as_ref().is_some_and(|c| c.shown.on && now >= c.since + CHARGE_MS) {
             let c = self.charging.as_mut().expect("the charging screen shows");
             if c.dark_after {
                 self.sleep(now);
@@ -1594,11 +1781,7 @@ impl App {
                 c.shown.set(false, now);
             }
         }
-        if self
-            .charging
-            .as_ref()
-            .is_some_and(|c| !c.shown.on && !c.shown.moving(now))
-        {
+        if self.charging.as_ref().is_some_and(|c| !c.shown.on && !c.shown.moving(now)) {
             self.end_charging();
         }
         // Once the content is dark, the panel is off, and what showed goes
@@ -1614,12 +1797,7 @@ impl App {
             self.toast = None;
             self.dirty = true;
         }
-        if self
-            .blink_at(now)
-            .is_some_and(|(on, _)| on != self.caret_shown)
-            || self.morph.is_some()
-            || self.turn.is_some()
-        {
+        if self.blink_at(now).is_some_and(|(on, _)| on != self.caret_shown) || self.morph.is_some() || self.turn.is_some() {
             self.dirty = true;
         }
         if let Some(p) = self.row_press {
@@ -1643,11 +1821,7 @@ impl App {
                 // The glide ran into an end: the speed it had left throws
                 // the page past it, and it springs back.
                 let speed = fling.velocity(now);
-                let period = if speed.abs() <= self.theme().m.dp(HARD_BOUNCE_DP) {
-                    0.4
-                } else {
-                    0.55
-                };
+                let period = if speed.abs() <= self.theme().m.dp(HARD_BOUNCE_DP) { 0.4 } else { 0.55 };
                 self.bounce = Some(Spring::new(now, 0.0, speed, period));
                 self.fling = None;
             } else if done {
@@ -1661,11 +1835,7 @@ impl App {
             if rows != scrolled {
                 self.scroll_rows(rows - scrolled);
             }
-            self.glide = if done {
-                None
-            } else {
-                Some((glide, pitch, rows))
-            };
+            self.glide = if done { None } else { Some((glide, pitch, rows)) };
         }
         if let Some(b) = self.bounce {
             self.dirty = true;
@@ -1675,11 +1845,7 @@ impl App {
         }
         if let Some((target, spring)) = self.seek {
             let (off, done) = spring.at(now);
-            let at = if done {
-                target
-            } else {
-                (target + off).clamp(0.0, self.max_scroll())
-            };
+            let at = if done { target } else { (target + off).clamp(0.0, self.max_scroll()) };
             let top = self.top_mut();
             if top.1 != at {
                 top.1 = at;
@@ -1704,13 +1870,7 @@ impl App {
             && now >= next
             && self.frame.is_some()
         {
-            self.button = Some((
-                key,
-                Press::Volume {
-                    down,
-                    next: now + REPEAT_MS,
-                },
-            ));
+            self.button = Some((key, Press::Volume { down, next: now + REPEAT_MS }));
             fx.extend(self.volume(down, now));
         }
         if let Some((_, _, s)) = self.cue {
@@ -1751,10 +1911,7 @@ impl App {
             (gone, gone)
         } else {
             let under = (fr.content_top - widgets::bar_bottom(&t) - t.m.dp(20.0)).max(0.0);
-            (
-                fr.header && fr.title_lift(scroll) >= t.m.dp(TITLE_FADE_DP),
-                scroll > under,
-            )
+            (fr.header && fr.title_lift(scroll) >= t.m.dp(TITLE_FADE_DP), scroll > under)
         })
     }
 
@@ -1773,11 +1930,7 @@ impl App {
     /// How far past its end the page shows at `now`: negative past the
     /// top, positive past the bottom.
     fn overscroll(&self, now: u64) -> f32 {
-        if self.pull != 0.0 {
-            motion::rubber(self.pull, self.h as f32)
-        } else {
-            self.bounce.map_or(0.0, |b| b.at(now).0)
-        }
+        if self.pull != 0.0 { motion::rubber(self.pull, self.h as f32) } else { self.bounce.map_or(0.0, |b| b.at(now).0) }
     }
 
     /// Something laid over the page changed (the clock): compose again.

@@ -1,4 +1,4 @@
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -26,8 +26,7 @@ pub mod ramdisk {
     /// stock recovery does not carry, and unzip, whose stock version holds
     /// all that `-p` takes out in memory. Each is a link to the recovery
     /// service binary beside it, which runs the command it is started as.
-    pub const COMMANDS: [&str; 5] =
-        ["system/bin/7za", "system/bin/avbctl", "system/bin/resetprop", "system/bin/unzip", "system/bin/zstd"];
+    pub const COMMANDS: [&str; 5] = ["system/bin/7za", "system/bin/avbctl", "system/bin/resetprop", "system/bin/unzip", "system/bin/zstd"];
     /// The first property file init loads in recovery mode.
     pub const PROP_DEFAULT: &str = "prop.default";
     /// The scheduling profiles libprocessgroup reads.
@@ -39,6 +38,32 @@ pub mod ramdisk {
     pub fn in_recovery() -> bool {
         std::path::Path::new("/").join(CONFIG).exists()
     }
+}
+
+/// Programs the phone's partitions name for its keys that a recovery of this
+/// phone cannot run: they are left out of the steps the partitions give.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Keys {
+    /// Interfaces whose programs are left out, each a prefix: a phone whose
+    /// secure element service ends as it starts in a recovery names
+    /// `android.hardware.secure_element.` here, and one whose weaver reaches
+    /// its secure element through a running Android names
+    /// `android.hardware.weaver.`. Left out, every program the partitions name
+    /// is started as they say.
+    #[serde(default)]
+    pub leave_out: Vec<String>,
+}
+
+/// How the data partition is opened: the weaver keeps every user's secret in a
+/// slot of the secure element, and where its service answers a recovery can use
+/// those slots as the phone does. Where it does not, the blob the credential
+/// service guards is taken instead.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Data {
+    /// Whether the weaver's own slots are used. Left out, the other blob is
+    /// taken, which is what a phone whose weaver cannot be reached needs.
+    #[serde(default)]
+    pub weaver_first: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -70,6 +95,12 @@ pub struct DeviceConfig {
     /// boot actions.
     #[serde(default)]
     pub owners: Vec<Owners>,
+    /// How the data partition is opened, where the phone's configuration says.
+    #[serde(default)]
+    pub data: Option<Data>,
+    /// Which of the programs the partitions name for the keys are left out.
+    #[serde(default)]
+    pub keys: Keys,
     #[serde(default)]
     pub wipe: Wipe,
     #[serde(default)]
@@ -284,6 +315,11 @@ pub struct Device {
     /// System property that carries the vendor OS version.
     #[serde(default = "default_os_version_prop")]
     pub os_version_prop: String,
+    /// Whether this build offers to update itself in place. A build made for
+    /// one phone is not another's: a phone whose releases are not its own
+    /// turns this off, so the page never pulls another phone's image here.
+    #[serde(default = "default_true")]
+    pub update: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -504,8 +540,7 @@ pub fn codename(text: &str) -> Result<String> {
 impl DeviceConfig {
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         let p = path.as_ref();
-        let text = std::fs::read_to_string(p)
-            .with_context(|| format!("read config {}", p.display()))?;
+        let text = std::fs::read_to_string(p).with_context(|| format!("read config {}", p.display()))?;
         Self::parse(&text)
     }
 
@@ -514,10 +549,7 @@ impl DeviceConfig {
         for log in &cfg.wipe.logs {
             let path = Path::new(log);
             let plain = path.components().all(|c| matches!(c, std::path::Component::RootDir | std::path::Component::Normal(_)));
-            ensure!(
-                path.is_absolute() && plain && path.starts_with(DATA) && path != Path::new(DATA),
-                "[wipe] logs: {log} is not a folder inside {DATA}"
-            );
+            ensure!(path.is_absolute() && plain && path.starts_with(DATA) && path != Path::new(DATA), "[wipe] logs: {log} is not a folder inside {DATA}");
         }
         for name in &cfg.backup.efs {
             ensure!(!name.is_empty() && !name.contains('/'), "[backup] efs: {name} is not a partition's name");
@@ -531,11 +563,7 @@ impl DeviceConfig {
         }
         for s in cfg.services.iter().filter(|s| s.oneshot) {
             let waits = s.ready_property.is_some() || s.ready_service.is_some() || s.ready_hardware_service.is_some();
-            ensure!(
-                !waits && s.registers.is_empty(),
-                "[[service]] {}: a program run once is ready when it ends, and registers nothing",
-                s.path
-            );
+            ensure!(!waits && s.registers.is_empty(), "[[service]] {}: a program run once is ready when it ends, and registers nothing", s.path);
         }
         for s in &cfg.services {
             ensure!(s.user.is_none() || !s.groups.is_empty(), "[[service]] {}: a program given a user is given its group too", s.path);
@@ -555,10 +583,7 @@ impl DeviceConfig {
             let file = &haptics.resonance;
             ensure!(Path::new(file).is_absolute(), "[haptics] resonance: {file} is not an absolute path");
             let Strength { lightest, strongest } = haptics.strength;
-            ensure!(
-                0.0 < lightest && lightest < strongest && strongest <= 1.0,
-                "[haptics] strength: {lightest} and {strongest} are not shares rising from above 0 to at most 1"
-            );
+            ensure!(0.0 < lightest && lightest < strongest && strongest <= 1.0, "[haptics] strength: {lightest} and {strongest} are not shares rising from above 0 to at most 1");
         }
         if let Some(logd) = &cfg.logd {
             for library in &logd.libraries {
@@ -584,11 +609,7 @@ impl DeviceConfig {
             let name = path.rsplit('/').next().unwrap_or_default();
             let package_version = stock.package_version.as_deref().unwrap_or(&stock.version);
             ensure!(
-                stock.package.starts_with("https://")
-                    && name.ends_with(".zip")
-                    && !package_version.is_empty()
-                    && name.contains(package_version)
-                    && !stock.version.is_empty(),
+                stock.package.starts_with("https://") && name.ends_with(".zip") && !package_version.is_empty() && name.contains(package_version) && !stock.version.is_empty(),
                 "[stock] package: {} is not an HTTPS address of the full package of {}",
                 stock.package,
                 package_version
@@ -610,10 +631,7 @@ impl DeviceConfig {
                     match &file.partition {
                         Some(partition) => {
                             let plain = path.components().all(|c| matches!(c, std::path::Component::Normal(_)));
-                            ensure!(
-                                !partition.is_empty() && !partition.contains('/'),
-                                "[wlan] firmware: {partition} is not a partition's name"
-                            );
+                            ensure!(!partition.is_empty() && !partition.contains('/'), "[wlan] firmware: {partition} is not a partition's name");
                             ensure!(plain && !source.is_empty(), "[wlan] firmware: {source} is not a path from the top of {partition}");
                         }
                         None => ensure!(path.is_absolute(), "[wlan] firmware: {source} is not an absolute path"),
@@ -715,11 +733,7 @@ mod tests {
         assert_eq!(cfg.display.width, 1200);
         assert_eq!(cfg.display.diagonal, Some(6.9));
         assert_eq!(cfg.modules.load, ["synaptics_tcm2"]);
-        assert_eq!(
-            cfg.touch.writes,
-            [Write { path: "/sys/class/touch/touch_dev/enable_touch_raw".into(), value: "0".into() }],
-            "its controller reports positions itself"
-        );
+        assert_eq!(cfg.touch.writes, [Write { path: "/sys/class/touch/touch_dev/enable_touch_raw".into(), value: "0".into() }], "its controller reports positions itself");
         assert_eq!(cfg.firmware, Some(FirmwarePartition { partition: "modem".into() }));
         assert_eq!(cfg.partitions.mounted, ["persist"], "the secure world keeps its own files there");
         let [post_boot] = &cfg.services[..] else { panic!("one program: those that use the phone's keys are read from the phone's own partitions") };
@@ -791,6 +805,16 @@ mod tests {
         assert_eq!((post_boot.user.as_deref(), &post_boot.groups[..]), (Some("root"), &["root", "system", "wakelock", "graphics"].map(str::to_string)[..]));
         let touch = find(&ishtar, "/odm/bin/touch_report");
         assert_eq!((touch.user.as_deref(), &touch.capabilities[..]), (Some("system"), &["SYS_NICE".to_string()][..]));
+    }
+
+    #[test]
+    fn a_phone_whose_releases_are_not_its_own_does_not_offer_to_update_itself() {
+        // 构建自己更新自己这件事由配置说：认领本仓 release 的机型默认开，
+        // 不认领的（例如另仓发布的机型）写 false。
+        let off = "[device]\ncodename = \"x\"\nupdate = false\n[display]\nwidth = 1\nheight = 1\ndensity = 1\n";
+        assert!(!DeviceConfig::parse(off).unwrap().device.update);
+        let on = "[device]\ncodename = \"x\"\n[display]\nwidth = 1\nheight = 1\ndensity = 1\n";
+        assert!(DeviceConfig::parse(on).unwrap().device.update, "left on by default");
     }
 
     #[test]
@@ -870,10 +894,7 @@ mod tests {
         assert!(cfg.touch.writes.is_empty(), "its own touch processing runs");
         let [touch_owners] = &cfg.owners[..] else { panic!("one run of the touch layer's files") };
         assert_eq!((touch_owners.user.as_str(), touch_owners.group.as_str(), touch_owners.mode), ("system", "system", 0o664));
-        assert!(
-            touch_owners.paths.iter().any(|p| p == "/dev/xiaomi-touch"),
-            "the touch processing, run as system, opens the touch layer's node"
-        );
+        assert!(touch_owners.paths.iter().any(|p| p == "/dev/xiaomi-touch"), "the touch processing, run as system, opens the touch layer's node");
         assert!(cfg.firmware.is_none(), "its recovery mounts the modem partition itself");
         let paths: Vec<&str> = cfg.services.iter().map(|s| s.path.as_str()).collect();
         assert_eq!(paths, ["/odm/bin/touch_report", "/odm/bin/touchsensor"], "the touch processing: the programs that use the phone's keys are read from the phone's own partitions");
@@ -968,7 +989,9 @@ mod tests {
     #[test]
     fn firmware_alternatives_use_the_same_path_rules() {
         let base = "[device]\ncodename = \"x\"\n[wlan]\nmodules = []\ninterface = \"wlan0\"\nsupplicant = \"/s\"\nservice = \"a/b\"\nprobe = \"http://p/\"\n";
-        let with = |source: &str| DeviceConfig::parse(&format!("{base}firmware = [{{ name = \"wlan/mac.bin\", partition = \"persist\", path = \"wlan/mac.bin\", alternatives = [\"{source}\"], optional = true }}]\n"));
+        let with = |source: &str| {
+            DeviceConfig::parse(&format!("{base}firmware = [{{ name = \"wlan/mac.bin\", partition = \"persist\", path = \"wlan/mac.bin\", alternatives = [\"{source}\"], optional = true }}]\n"))
+        };
         let cfg = with("kiwi_v2/wlan_mac.bin").unwrap();
         let file = &cfg.wlan.unwrap().firmware[0];
         assert_eq!(file.alternatives, ["kiwi_v2/wlan_mac.bin"]);

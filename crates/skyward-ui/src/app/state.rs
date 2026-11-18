@@ -2,6 +2,57 @@
 
 use super::*;
 
+/// The folder served to the network the phone is on: not served, served and
+/// where, or why it could not be served.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Serving {
+    #[default]
+    Off,
+    Running {
+        /// The address a browser on the same network opens.
+        at: String,
+        /// How many requests it has answered, so the page shows it is alive.
+        served: u64,
+    },
+    Failed(String),
+}
+
+/// How a download asked for on the download page stands.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Fetch {
+    /// Nothing asked for yet.
+    #[default]
+    Idle,
+    /// How many bytes have come, and how many the server named where it did.
+    Running {
+        done: u64,
+        total: Option<u64>,
+    },
+    Done {
+        path: String,
+        bytes: u64,
+    },
+    Failed(String),
+    Stopped,
+}
+
+/// One module the phone's own system would load: KernelSU's and Magisk's keep
+/// them the same way, a folder each with a `module.prop` beside it, and a
+/// `disable` file inside a folder that is switched off.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModuleRow {
+    /// The folder's name, which is how the module is known.
+    pub id: String,
+    pub name: String,
+    /// What module.prop says of it: its version and who made it.
+    pub note: String,
+    /// Its own words about what it does.
+    pub about: String,
+    pub enabled: bool,
+    /// Marked to be removed the next time the phone starts.
+    pub removing: bool,
+}
+
 /// Choices the pages show and the user changes, and where installing
 /// stands.
 #[derive(Clone, Debug, PartialEq)]
@@ -87,6 +138,17 @@ pub struct State {
     /// partitions in both slots, which a switch writes, and recovery
     /// partitions apart from them, which keep Skyward through it.
     pub dual_boot: bool,
+    /// Whether this build offers to update itself, as its device says.
+    pub updates: bool,
+    /// The modules installed for the phone's own system, read when the page
+    /// opens: the folder each sits in, what its module.prop says of it, and
+    /// whether it is switched on.
+    pub modules: Option<Result<Vec<ModuleRow>, String>>,
+    /// The module the detail page shows, by its place in the list.
+    pub module_at: Option<usize>,
+    /// A copy or a move waiting to be told where it goes: the phone or the
+    /// drive, asked before the folder it lands in is walked to.
+    pub place_ask: Option<crate::app::FileOp>,
     /// The systems, as the runtime last read them, or why it could not;
     /// none until it has.
     pub systems: Option<Result<Overview, String>>,
@@ -101,6 +163,14 @@ pub struct State {
     /// Where the data partition stands, and what is typed at the screen
     /// lock its users' own files wait on.
     pub data: Data,
+    /// How far opening the data partition has come, 0 to 1, which the bar on
+    /// the decrypt page runs toward, and how far the ring about its sign has
+    /// turned.
+    pub data_phase: f32,
+    /// Whether the phone's own parts -- its partitions, its drivers and its
+    /// services -- are up. The decrypt page says it waits for them until they
+    /// are, rather than that it is at the partition.
+    pub prepared: bool,
     pub code: String,
     /// What is typed in the search field.
     pub search: String,
@@ -111,6 +181,21 @@ pub struct State {
     pub held: Option<Action>,
     /// The folder the file manager shows.
     pub files: Folder,
+    /// The folder the OTG page shows.
+    pub otg: Folder,
+    /// The screen lock is about to be kept, and the risk of keeping it is
+    /// shown before it is.
+    pub asking_remember: bool,
+    /// The entry the file page shows was opened on the OTG page, so its path
+    /// is measured from the top of the drive rather than the owner's storage.
+    pub file_on_drive: bool,
+    /// The date the lock screen shows under the clock, as the phone's own
+    /// lock screen shows it.
+    pub date: String,
+    /// The order the file manager shows entries in, kept between starts.
+    pub sort: SortKey,
+    pub sort_desc: bool,
+    pub folders_first: bool,
     /// The folder of internal storage a file to install is chosen in, its
     /// path from the top of the storage.
     pub storage: Folder,
@@ -134,6 +219,18 @@ pub struct State {
     /// Deleting the entry the file page shows, or the backup the restore
     /// page shows, was asked for; a swipe confirms it.
     pub asking_delete: bool,
+    /// The picture the phone shows for its owner, and the name it gives
+    /// itself: both are on the encrypted data partition, so they come once it
+    /// is open, and the home page shows a row of them once they do.
+    pub avatar: Option<crate::avatar::Avatar>,
+    pub device_name: Option<String>,
+    /// The file manager is choosing several entries: the names it has chosen,
+    /// in the folder it shows.
+    pub choosing: bool,
+    pub chosen: std::collections::BTreeSet<String>,
+    /// Deleting the entries chosen was asked for: their full paths, waiting on
+    /// the swipe that confirms it.
+    pub asking_many: Option<Vec<String>>,
     /// A copy or move waiting on what to do with the names taken where it
     /// goes, and those names.
     pub clash: Option<(Clip, String, Vec<String>)>,
@@ -158,6 +255,29 @@ pub struct State {
     /// The WLAN, as the runtime last told it; none on a phone whose WLAN the
     /// recovery does not bring up.
     pub wlan: Option<Wlan>,
+    /// Whether the screen lock that opened the user's files is kept for the
+    /// starts that follow, so the decrypt page needs nothing typed.
+    pub remember: bool,
+    /// The folder served to the network, where it is served and how many
+    /// requests it has answered; and whether it is being chosen, the file
+    /// manager shown for it.
+    pub serving: Serving,
+    pub picking: bool,
+    /// Both of verified boot's checks in the slot the phone runs from, as
+    /// read, as the page has turned them before the swipe, and what the last
+    /// write said.
+    pub avb: Option<Result<(bool, bool), String>>,
+    pub avb_pending: Option<(bool, bool)>,
+    pub avb_notice: Option<String>,
+    /// The address typed on the download page, how its download stands, and
+    /// where the page another device types an address for it is.
+    pub fetch_url: String,
+    pub fetch: Fetch,
+    pub fetch_portal: Option<String>,
+    /// Whether the WLAN opens as the recovery starts, and whether the
+    /// password of the network joined last is kept with the network itself.
+    pub wlan_auto: bool,
+    pub wlan_keep: bool,
     /// The network the password page is for, and what is typed there.
     pub joining: Option<Network>,
     /// The network the details page is of, as it was found.
@@ -229,30 +349,45 @@ impl Default for State {
             boot_slots: None,
             next_slot: None,
             dual_boot: false,
+            updates: true,
+            modules: None,
+            module_at: None,
+            place_ask: None,
             systems: None,
             system_pick: None,
             systems_work: None,
             system_notice: None,
             data: Data::Closed,
+            data_phase: 0.0,
+            prepared: false,
             code: String::new(),
             search: String::new(),
             layer: Layer::Letters,
             held: None,
             files: Folder::new("/"),
+            otg: Folder::new(""),
+            asking_remember: false,
+            file_on_drive: false,
+            date: String::new(),
+            sort: SortKey::Name,
+            sort_desc: false,
+            folders_first: true,
             storage: Folder::new(""),
             usb_drive: None,
             drive: Folder::new(""),
             file: None,
-            fastboot: Fastboot {
-                running: false,
-                link: UsbLink::Unplugged,
-            },
+            fastboot: Fastboot { running: false, link: UsbLink::Unplugged },
             erase: Erase::default(),
             asked: Asked::default(),
             clip: None,
             new_name: String::new(),
             editor: None,
             asking_delete: false,
+            avatar: None,
+            device_name: None,
+            choosing: false,
+            chosen: std::collections::BTreeSet::new(),
+            asking_many: None,
             clash: None,
             job: None,
             relabel: None,
@@ -262,6 +397,17 @@ impl Default for State {
             part_work: None,
             update: Standing::None,
             wlan: None,
+            remember: false,
+            serving: Serving::Off,
+            picking: false,
+            avb: None,
+            avb_pending: None,
+            avb_notice: None,
+            fetch_url: String::new(),
+            fetch: Fetch::Idle,
+            fetch_portal: None,
+            wlan_auto: false,
+            wlan_keep: false,
             joining: None,
             details: None,
             adding: None,
@@ -294,6 +440,7 @@ impl State {
     pub fn folder(&self, screen: Screen) -> &Folder {
         match screen {
             Screen::Files => &self.files,
+            Screen::FilesOtg => &self.otg,
             Screen::Choose(Place::Storage) => &self.storage,
             Screen::Choose(Place::UsbDrive) => &self.drive,
             other => unreachable!("{other:?} lists no folder"),
@@ -303,6 +450,7 @@ impl State {
     pub(super) fn folder_mut(&mut self, screen: Screen) -> &mut Folder {
         match screen {
             Screen::Files => &mut self.files,
+            Screen::FilesOtg => &mut self.otg,
             Screen::Choose(Place::Storage) => &mut self.storage,
             Screen::Choose(Place::UsbDrive) => &mut self.drive,
             other => unreachable!("{other:?} lists no folder"),
@@ -311,6 +459,28 @@ impl State {
 
     /// Whether the files of `place` can be read: internal storage once it
     /// is open, a USB drive once the runtime shows it.
+    /// The folder the page shows, as the phone knows it: the OTG page keeps
+    /// the folder it shows from the top of the drive, and the file manager the
+    /// whole of the path.
+    pub fn folder_here(&self, screen: Screen) -> String {
+        match screen {
+            Screen::FilesOtg => {
+                let at = self.otg.path.trim_matches('/');
+                match at.is_empty() {
+                    true => super::USB_DRIVE.to_string(),
+                    false => format!("{}/{}", super::USB_DRIVE, at),
+                }
+            }
+            // A page that lists no folder has nothing to paste into.
+            other => match other {
+                Screen::Files => self.files.path.clone(),
+                Screen::Choose(Place::Storage) => self.storage.path.clone(),
+                Screen::Choose(Place::UsbDrive) => self.drive.path.clone(),
+                _ => String::new(),
+            },
+        }
+    }
+
     pub fn place_open(&self, place: Place) -> bool {
         match place {
             Place::Storage => self.data.storage_open(),
@@ -346,18 +516,21 @@ impl State {
 
     /// Whether Skyward is being updated.
     pub fn updating_skyward(&self) -> bool {
-        self.skyward_job
-            .as_ref()
-            .is_some_and(|j| j.outcome.is_none())
+        self.skyward_job.as_ref().is_some_and(|j| j.outcome.is_none())
     }
 
     /// Whether the phone has the page `screen`: the WLAN page where the
     /// recovery brings the phone's WLAN up, and updating Skyward where the
     /// phone also keeps its recovery in a partition of each slot.
+    /// The modules read for the page, or why they could not be.
+    pub fn set_modules(&mut self, rows: Result<Vec<ModuleRow>, String>) {
+        self.modules = Some(rows);
+    }
+
     pub fn offers(&self, screen: Screen) -> bool {
         match screen {
             Screen::Wlan => self.wlan.is_some(),
-            Screen::SkywardUpdate => self.wlan.is_some() && self.recovery_partitions,
+            Screen::SkywardUpdate => self.updates && self.wlan.is_some() && self.recovery_partitions,
             Screen::Systems => self.dual_boot,
             _ => true,
         }

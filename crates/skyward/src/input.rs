@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use evdev::raw_stream::RawDevice;
 use evdev::{AbsoluteAxisCode, EventSummary, InputEvent, KeyCode, PropType, SynchronizationCode};
 use skyward_config::Write;
@@ -124,13 +124,12 @@ impl Panel {
             return Err(io::Error::last_os_error()).context("stamp touch events with the monotonic clock");
         }
         set_nonblocking(dev.as_raw_fd()).context("make touch non-blocking")?;
-        let mut panel =
-            Panel { dev, path, x_range, y_range, slots, slot: 0, down: false, was_down: false, raw: (0, 0), moved: false, dropped: false };
+        let mut panel = Panel { dev, path, x_range, y_range, slots, slot: 0, down: false, was_down: false, raw: (0, 0), moved: false, dropped: false };
         // The kernel drops a position equal to the one a slot already holds,
         // so a touch landing where the last one lifted carries no position;
         // start from what the panel holds now.
         panel.resync().context("read the touch state")?;
-        eprintln!("touch {:?}: x {:?} y {:?}, {slots} slots, slot 0 at {:?}", panel.dev.name().unwrap_or("?"), x_range, y_range, panel.raw);
+        let _ = skyward_sys::kmsg(&format!("touch {:?}: x {:?} y {:?}, {slots} slots, slot 0 at {:?}", panel.dev.name().unwrap_or("?"), x_range, y_range, panel.raw));
         Ok(panel)
     }
 
@@ -138,10 +137,7 @@ impl Panel {
     fn resync(&mut self) -> io::Result<()> {
         self.slot = self.dev.get_abs_state()?[usize::from(AbsoluteAxisCode::ABS_MT_SLOT.0)].value;
         self.down = slot0_value(&self.dev, AbsoluteAxisCode::ABS_MT_TRACKING_ID, self.slots)? >= 0;
-        self.raw = (
-            slot0_value(&self.dev, AbsoluteAxisCode::ABS_MT_POSITION_X, self.slots)?,
-            slot0_value(&self.dev, AbsoluteAxisCode::ABS_MT_POSITION_Y, self.slots)?,
-        );
+        self.raw = (slot0_value(&self.dev, AbsoluteAxisCode::ABS_MT_POSITION_X, self.slots)?, slot0_value(&self.dev, AbsoluteAxisCode::ABS_MT_POSITION_Y, self.slots)?);
         self.moved = true;
         Ok(())
     }
@@ -201,6 +197,8 @@ pub struct Inputs {
     /// the phone awake until it is read.
     wakeful: Wakeful,
     panel: Option<Panel>,
+    /// A multitouch device not marked direct, kept in case no direct one comes.
+    spare_panel: Option<(PathBuf, RawDevice)>,
     buttons: Vec<(PathBuf, RawDevice)>,
     seen: HashSet<PathBuf>,
     /// What the touchscreen is told each time its panel is taken in.
@@ -224,19 +222,10 @@ impl Inputs {
         }
         let wakeful = Wakeful::new()?;
         wakeful.add(fd)?;
-        let mut inputs = Inputs {
-            watch,
-            wakeful,
-            panel: None,
-            buttons: Vec::new(),
-            seen: HashSet::new(),
-            touch_writes,
-            w: w as f32,
-            h: h as f32,
-        };
+        let mut inputs = Inputs { watch, wakeful, panel: None, spare_panel: None, buttons: Vec::new(), seen: HashSet::new(), touch_writes, w: w as f32, h: h as f32 };
         inputs.scan()?;
         if inputs.panel.is_none() {
-            eprintln!("no touch panel yet; waiting for one to appear under /dev/input");
+            let _ = skyward_sys::kmsg("no touch panel yet; waiting for one to appear under /dev/input");
         }
         inputs.keep_touch_told();
         Ok(inputs)
@@ -282,17 +271,18 @@ impl Inputs {
                 continue;
             }
             let direct = dev.properties().contains(PropType::DIRECT);
-            let mt = dev
-                .supported_absolute_axes()
-                .is_some_and(|a| a.contains(AbsoluteAxisCode::ABS_MT_POSITION_X) && a.contains(AbsoluteAxisCode::ABS_MT_POSITION_Y));
+            let mt = dev.supported_absolute_axes().is_some_and(|a| a.contains(AbsoluteAxisCode::ABS_MT_POSITION_X) && a.contains(AbsoluteAxisCode::ABS_MT_POSITION_Y));
             let keys = dev.supported_keys().is_some_and(|k| KEYS.iter().any(|c| k.contains(*c)));
-            eprintln!("input {}: {:?} direct={direct} multitouch={mt} keys={keys}", path.display(), dev.name().unwrap_or("?"));
-            if direct && mt && self.panel.is_none() {
-                self.wakeful.add(dev.as_raw_fd())?;
-                self.panel = Some(Panel::new(path, dev)?);
-                for w in &self.touch_writes {
-                    fs::write(&w.path, &w.value).with_context(|| format!("write {} to {}", w.value, w.path))?;
-                    skyward_sys::kmsg(&format!("wrote {} to {} for the touchscreen", w.value, w.path))?;
+            let _ = skyward_sys::kmsg(&format!("input {}: {:?} direct={direct} multitouch={mt} keys={keys}", path.display(), dev.name().unwrap_or("?")));
+            // 触摸设备未必被标成 direct：有些机型的控制器不报这一位，
+            // 只按 direct+mt 认会把面板漏掉。先把 mt 的都记下，direct 的优先；
+            // 一直没有 direct 的，就把最后那个 mt 当面板用（下面 take_panel）。
+            if mt && self.panel.is_none() {
+                if direct {
+                    self.take_panel(path, dev)?;
+                } else {
+                    let _ = skyward_sys::kmsg(&format!("{} reports multitouch but is not marked direct; kept in case no direct panel comes", path.display()));
+                    self.spare_panel = Some((path, dev));
                 }
             } else if keys {
                 set_nonblocking(dev.as_raw_fd()).context("make buttons non-blocking")?;
@@ -300,7 +290,39 @@ impl Inputs {
                 self.buttons.push((path, dev));
             }
         }
+        let _ = skyward_sys::kmsg(&format!("{} input devices under /dev/input, a touch panel {} among them", self.seen.len(), if self.panel.is_some() { "is" } else { "is not" }));
         Ok(())
+    }
+
+    /// Take the device at `path` as the panel, telling the touchscreen what the
+    /// device description writes to it. A write that does not go is said so but
+    /// does not drop the panel: the driver may keep the switch on another phone.
+    fn take_panel(&mut self, path: std::path::PathBuf, dev: RawDevice) -> Result<()> {
+        self.wakeful.add(dev.as_raw_fd())?;
+        self.panel = Some(Panel::new(path, dev)?);
+        for w in &self.touch_writes {
+            match fs::write(&w.path, &w.value) {
+                Ok(()) => {
+                    skyward_sys::kmsg(&format!("wrote {} to {} for the touchscreen", w.value, w.path))?;
+                }
+                Err(e) => {
+                    skyward_sys::kmsg(&format!("{} is not written for the touchscreen: {e}", w.path))?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Take the spare multitouch device as the panel when no direct one came.
+    /// Called once the wait for a panel has run out.
+    pub fn take_spare_panel(&mut self) -> Result<bool> {
+        if self.panel.is_some() {
+            return Ok(false);
+        }
+        let Some((path, dev)) = self.spare_panel.take() else { return Ok(false) };
+        skyward_sys::kmsg(&format!("{} is taken as the panel though it is not marked direct", path.display()))?;
+        self.take_panel(path, dev)?;
+        Ok(true)
     }
 
     /// Empty the watch's queue; true when /dev/input changed.
@@ -342,7 +364,7 @@ impl Inputs {
             match panel.read(self.w, self.h, &mut out) {
                 Ok(()) => {}
                 Err(e) if gone(&e) => {
-                    eprintln!("input {}: removed", panel.path.display());
+                    let _ = skyward_sys::kmsg(&format!("input {}: removed", panel.path.display()));
                     self.seen.remove(&panel.path);
                     self.panel = None;
                 }
@@ -365,7 +387,7 @@ impl Inputs {
                 }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => {}
                 Err(e) if gone(&e) => {
-                    eprintln!("input {}: removed", path.display());
+                    let _ = skyward_sys::kmsg(&format!("input {}: removed", path.display()));
                     removed.push(i);
                 }
                 Err(e) => return Err(e).context("read button events"),

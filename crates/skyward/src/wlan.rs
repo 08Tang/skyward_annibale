@@ -3,7 +3,7 @@
 //! address asked for over DHCP and kept. The screen is told how things
 //! stand each time that changes.
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use skyward_config::{Firmware, Wlan as Config};
 use skyward_net::dhcp::{self, Kept, Lease};
 use skyward_net::http::Servers;
@@ -18,8 +18,8 @@ use std::os::fd::RawFd;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command as Process, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -54,6 +54,10 @@ const POLL: Duration = Duration::from_secs(5);
 /// How often what went over the interface is counted, for how fast it
 /// goes.
 const TRAFFIC: Duration = Duration::from_secs(1);
+
+/// How long the driver is given after its interface appears before the
+/// supplicant is started on it.
+const SETTLE: Duration = Duration::from_millis(600);
 
 /// How long after the network gave no address it is asked again.
 const RETRY: Duration = Duration::from_secs(10);
@@ -316,20 +320,7 @@ impl Station {
             }
         };
         let mac = iface::hardware_address(&self.cfg.interface)?;
-        Ok(Running {
-            child,
-            control,
-            monitor,
-            mac,
-            found: Vec::new(),
-            lease: None,
-            asking: None,
-            asked: 0,
-            probed: 0,
-            retry_at: None,
-            polled_at: Instant::now(),
-            counted: None,
-        })
+        Ok(Running { child, control, monitor, mac, found: Vec::new(), lease: None, asking: None, asked: 0, probed: 0, retry_at: None, polled_at: Instant::now(), counted: None })
     }
 
     fn off(&mut self) {
@@ -469,9 +460,7 @@ impl Station {
             }
         };
         let same = r.lease.as_ref().is_some_and(|h| (h.lease.address, h.lease.mask, h.lease.router) == (lease.address, lease.mask, lease.router));
-        if !same
-            && let Err(e) = iface::configure(&self.cfg.interface, lease.address, lease.mask, lease.router)
-        {
+        if !same && let Err(e) = iface::configure(&self.cfg.interface, lease.address, lease.mask, lease.router) {
             let _ = skyward_sys::kmsg(&format!("{e:#}"));
             r.retry_at = Some(Instant::now() + RETRY);
             if let Some(j) = &mut self.state.joined {
@@ -479,10 +468,7 @@ impl Station {
             }
             return;
         }
-        let _ = skyward_sys::kmsg(&format!(
-            "{} has {} ({}) through {:?} for {} s, kept again after {} s",
-            self.cfg.interface, lease.address, lease.mask, lease.router, lease.seconds, lease.renew
-        ));
+        let _ = skyward_sys::kmsg(&format!("{} has {} ({}) through {:?} for {} s, kept again after {} s", self.cfg.interface, lease.address, lease.mask, lease.router, lease.seconds, lease.renew));
         *self.servers.lock().expect("the DNS servers are not held by a thread that panicked") = lease.dns.clone();
         let mut link = Link::new(&lease, r.mac);
         // An address kept keeps how far its network was found to reach; a
@@ -620,10 +606,35 @@ impl Station {
     }
 }
 
+/// Put the driver's firmware and modules in and tell it it may start, without
+/// waiting for the interface. The recovery does this while the services come
+/// up: the driver takes about eleven seconds to make its interface, and that
+/// time is better spent before the page asks for the WLAN than after it. The
+/// supplicant started right as the interface appears can be too early for the
+/// driver, which is what this buys.
+pub fn warm_up(cfg: &Config, modules: &[PathBuf]) -> Result<()> {
+    if iface::exists(&cfg.interface) {
+        return Ok(());
+    }
+    for file in &cfg.firmware {
+        place(file)?;
+    }
+    for path in skyward_modules::load(modules, &cfg.modules)? {
+        skyward_sys::kmsg(&format!("loaded {}", path.display()))?;
+    }
+    for w in &cfg.writes {
+        fs::write(&w.path, &w.value).with_context(|| format!("write {} to {}", w.value, w.path))?;
+    }
+    Ok(())
+}
+
 /// Load the driver where its interface is not there yet, and bring the
 /// interface up.
 fn bring_up(cfg: &Config, modules: &[PathBuf]) -> Result<()> {
     let net = Path::new("/sys/class/net").join(&cfg.interface);
+    // When the page asked for the radio, so the log can say how long the driver
+    // took to make its interface.
+    let asked = Instant::now();
     if !net.exists() {
         for file in &cfg.firmware {
             place(file)?;
@@ -640,6 +651,10 @@ fn bring_up(cfg: &Config, modules: &[PathBuf]) -> Result<()> {
             thread::sleep(Duration::from_millis(100));
         }
     }
+    // The interface is made before the driver is ready to answer through it:
+    // a supplicant started at the very moment it appears ends as it starts.
+    thread::sleep(SETTLE);
+    let _ = skyward_sys::kmsg(&format!("{} is there {:.2} s after the driver was asked for it", cfg.interface, asked.elapsed().as_secs_f64()));
     iface::set_up(&cfg.interface, true)
 }
 
@@ -680,8 +695,7 @@ fn start_supplicant(cfg: &Config, libraries: Option<&Path>) -> Result<Child> {
     std::os::unix::fs::chown(&sockets, Some(WIFI), Some(WIFI)).with_context(|| format!("give {} to the supplicant", sockets.display()))?;
     fs::set_permissions(&sockets, fs::Permissions::from_mode(0o770)).with_context(|| format!("keep {} to the supplicant", sockets.display()))?;
     let settings = home.join("wpa_supplicant.conf");
-    fs::write(&settings, format!("ctrl_interface={}\nupdate_config=0\np2p_disabled=1\npmf=1\nsae_pwe=2\n", sockets.display()))
-        .with_context(|| format!("write {}", settings.display()))?;
+    fs::write(&settings, format!("ctrl_interface={}\nupdate_config=0\np2p_disabled=1\npmf=1\nsae_pwe=2\n", sockets.display())).with_context(|| format!("write {}", settings.display()))?;
     fs::set_permissions(&settings, fs::Permissions::from_mode(0o644)).with_context(|| format!("open {} to the supplicant", settings.display()))?;
     let socket = sockets.join(&cfg.interface);
     // One an earlier run left would answer nothing.
@@ -692,20 +706,33 @@ fn start_supplicant(cfg: &Config, libraries: Option<&Path>) -> Result<Child> {
     if let Some(dir) = libraries {
         path.push(dir.to_string_lossy().into_owned());
     }
+    // What the supplicant says of itself goes beside its socket: it writes
+    // nothing anywhere else, and why it would not start is what is wanted
+    // when it does not.
+    let said = home.join("stderr.log");
+    let log = fs::File::create(&said).with_context(|| format!("make {}", said.display()))?;
+    let spoke = home.join("stdout.log");
+    let out = fs::File::create(&spoke).with_context(|| format!("make {}", spoke.display()))?;
+    let libraries_path = path.join(":");
+    let shown = iface::exists(&cfg.interface);
+    let _ = skyward_sys::kmsg(&format!("starting {} on {}, which {} there, with LD_LIBRARY_PATH={libraries_path}", cfg.supplicant, cfg.interface, if shown { "is" } else { "is not" },));
     let mut child = Process::new(&cfg.supplicant)
         .args(["-i", &cfg.interface, "-D", "nl80211", "-c"])
         .arg(&settings)
-        .env("LD_LIBRARY_PATH", path.join(":"))
+        .env("LD_LIBRARY_PATH", &libraries_path)
         .current_dir("/")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::from(out))
+        .stderr(Stdio::from(log))
         .spawn()
         .with_context(|| format!("start {}", cfg.supplicant))?;
     let until = Instant::now() + SOCKET_WAIT;
     while !socket.exists() {
         if let Some(status) = child.try_wait().context("look at wpa_supplicant")? {
-            bail!("wpa_supplicant ended as it started: {status}");
+            let tail = fs::read_to_string(&said).unwrap_or_default();
+            let head = fs::read_to_string(&spoke).unwrap_or_default();
+            let tail = format!("{} {}", tail.trim(), head.trim());
+            bail!("wpa_supplicant ended as it started: {status}: {}", tail.trim());
         }
         if Instant::now() >= until {
             end(&mut child, None);

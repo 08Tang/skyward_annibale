@@ -250,20 +250,14 @@ mod tests {
         fs::write(&b, vbmeta(0)).unwrap();
         let phone = Phone { by_name: dir.path(), suffix: "_a", locked: false };
         assert_eq!(ran(&["get-verity"], &phone), (0, "verity is enabled on slot with suffix _a.\n".into(), String::new()));
-        assert_eq!(
-            ran(&["--force", "disable-verity"], &phone),
-            (0, "Successfully disabled verity on slot with suffix _a. Reboot the device for changes to take effect.\n".into(), String::new())
-        );
+        assert_eq!(ran(&["--force", "disable-verity"], &phone), (0, "Successfully disabled verity on slot with suffix _a. Reboot the device for changes to take effect.\n".into(), String::new()));
         assert_eq!(fs::read(&a).unwrap(), vbmeta(1), "the verity flag set and nothing else");
         assert_eq!(ran(&["disable-verity"], &phone), (0, "verity is already disabled on slot with suffix _a.\n".into(), String::new()));
         assert_eq!(ran(&["disable-verification", "--force"], &phone).0, 0, "the command and --force in either order");
         assert_eq!(fs::read(&a).unwrap(), vbmeta(3));
         assert_eq!(ran(&["get-verification"], &phone).1, "verification is disabled on slot with suffix _a.\n");
         assert_eq!(ran(&["get-verity"], &phone).1, "verity is disabled on slot with suffix _a.\n");
-        assert_eq!(
-            ran(&["enable-verity"], &phone).1,
-            "Successfully enabled verity on slot with suffix _a. Reboot the device for changes to take effect.\n"
-        );
+        assert_eq!(ran(&["enable-verity"], &phone).1, "Successfully enabled verity on slot with suffix _a. Reboot the device for changes to take effect.\n");
         assert_eq!(fs::read(&a).unwrap(), vbmeta(2));
         assert_eq!(ran(&["enable-verification"], &phone).0, 0);
         assert_eq!(fs::read(&a).unwrap(), vbmeta(0));
@@ -347,4 +341,97 @@ mod tests {
             assert_eq!(ran(args, &phone), (64, String::new(), USAGE.into()), "{args:?}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// What the recovery's own page uses: the same image, read and turned, without
+// the command line.
+
+/// One of the two checks verified boot makes in the slot the phone runs from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Switch {
+    Verity,
+    Verification,
+}
+
+impl Switch {
+    fn check(self) -> Check {
+        match self {
+            Switch::Verity => Check::Verity,
+            Switch::Verification => Check::Verification,
+        }
+    }
+}
+
+/// The slot the phone runs from, and whether its bootloader is locked.
+fn here() -> (String, bool) {
+    let suffix = skyward_sys::prop("ro.boot.slot_suffix").unwrap_or_default();
+    let locked = skyward_sys::prop("ro.boot.vbmeta.device_state").as_deref() == Some("locked");
+    (suffix, locked)
+}
+
+fn phone_of(suffix: &str, locked: bool) -> Phone<'_> {
+    Phone { by_name: Path::new(skyward_block::BY_NAME), suffix, locked }
+}
+
+/// Whether `which` is on in the slot the phone runs from.
+pub fn read(which: Switch) -> anyhow::Result<bool> {
+    let (suffix, locked) = here();
+    is_on(&phone_of(&suffix, locked), which.check()).map_err(|e| anyhow::anyhow!("{e}"))
+}
+
+/// Where a vbmeta image's rollback index lies in its header, big-endian.
+const ROLLBACK_AT: usize = 112;
+
+/// A copy of the slot's vbmeta image, and the rollback index it carries: a
+/// bootloader does not start a slot whose own index is higher than the one
+/// written back, so the pair travels together.
+pub struct Copy {
+    pub bytes: Vec<u8>,
+    pub rollback_index: u64,
+}
+
+/// The rollback index a vbmeta image's header carries.
+pub fn rollback(bytes: &[u8]) -> u64 {
+    u64::from_be_bytes(bytes[ROLLBACK_AT..ROLLBACK_AT + 8].try_into().expect("eight bytes"))
+}
+
+/// How long the vbmeta image is: its header, then the blocks the header sizes.
+fn length(head: &[u8]) -> usize {
+    let auth = u64::from_be_bytes(head[12..20].try_into().expect("eight bytes")) as usize;
+    let aux = u64::from_be_bytes(head[20..28].try_into().expect("eight bytes")) as usize;
+    HEADER_LEN + auth + aux
+}
+
+/// The slot's vbmeta image as it lies, read whole.
+pub fn dump() -> anyhow::Result<Copy> {
+    let (suffix, locked) = here();
+    let (path, at) = top_level(&phone_of(&suffix, locked)).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let mut file = File::open(&path).map_err(|e| about(&path, e))?;
+    let head = header(&mut file, &path, at).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let whole = length(&head);
+    let mut bytes = vec![0u8; whole];
+    file.seek(SeekFrom::Start(at)).and_then(|_| file.read_exact(&mut bytes)).map_err(|e| about(&path, e))?;
+    Ok(Copy { rollback_index: rollback(&bytes), bytes })
+}
+
+/// Writes a copy back over the slot's vbmeta image, refusing one whose
+/// rollback index is below the slot's own: that is what makes a bootloader
+/// stop starting the slot.
+pub fn restore(copy: &Copy) -> anyhow::Result<()> {
+    let (suffix, locked) = here();
+    let (path, at) = top_level(&phone_of(&suffix, locked)).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let mut file = OpenOptions::new().read(true).write(true).open(&path).map_err(|e| about(&path, e))?;
+    let head = header(&mut file, &path, at).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let now = rollback(&head);
+    anyhow::ensure!(copy.rollback_index >= now, "the copy's rollback index {} is below the slot's own {now}: a bootloader does not start a slot rolled back", copy.rollback_index);
+    file.seek(SeekFrom::Start(at)).and_then(|_| file.write_all(&copy.bytes)).and_then(|()| file.sync_all()).map_err(|e| about(&path, e))?;
+    Ok(())
+}
+
+/// Turns `which` on or off, as the page asked.
+pub fn turn(which: Switch, on: bool) -> anyhow::Result<()> {
+    let (suffix, locked) = here();
+    anyhow::ensure!(!locked, "the bootloader is locked, and a locked bootloader does not boot a slot whose vbmeta image has been changed");
+    set(&phone_of(&suffix, locked), which.check(), on).map_err(|e| anyhow::anyhow!("{e}"))
 }
