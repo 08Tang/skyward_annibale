@@ -223,7 +223,7 @@ impl App {
     /// The question a copy or a move asks first: the phone's own storage, or
     /// the drive. Two pills in a card over the page.
     pub(super) fn compose_place(&mut self, out: &mut Canvas, f: &Fonts) {
-        let t = self.theme().clone();
+        let t = *self.theme();
         let m = &t.m;
         let l = self.state.lang;
         let (w, h) = (m.w as f32, m.h as f32);
@@ -248,7 +248,7 @@ impl App {
                 .enumerate()
         {
             let x = cx + m.inner + k as f32 * (cell + gap);
-            let fill = if k == 0 { t.pal.search } else { t.pal.search };
+            let fill = t.pal.search;
             crate::widgets::pill_sized(out, f, x, y, ph, m.row_title_px, m.inner, label, fill, t.pal.text);
             hits.push((crate::geom::Rect::new(x, y, cell, ph), action));
         }
@@ -451,7 +451,7 @@ impl App {
     /// The lock over the page: the phone's time, its battery, and the knob to
     /// slide along.
     fn compose_lock(&mut self, out: &mut Canvas, f: &Fonts, info: &DeviceInfo, clock: &str, drag: f32) {
-        let t = self.theme().clone();
+        let t = *self.theme();
         let m = &t.m;
         let (w, h) = (m.w as f32, m.h as f32);
         out.fill_rect(0.0, 0.0, w, h, Rgba::rgb(6, 6, 8).with_alpha(226));

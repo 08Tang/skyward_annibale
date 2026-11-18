@@ -73,14 +73,14 @@ fn jpeg(bytes: &[u8], path: &Path) -> Result<(Vec<u8>, u32, u32, usize)> {
     let mut pixels = decoder.decode().map_err(|e| anyhow!("read {}: {e:?}", path.display()))?;
     // A four-channel picture is cut down to three: a page wants a picture, not
     // the two bytes per pixel the phone's own saved alongside.
-    if pixels.len() == w as usize * h as usize * 4 {
-        let mut rgb = Vec::with_capacity(w as usize * h as usize * 3);
-        for px in pixels.chunks_exact(4) {
+    if pixels.len() == w * h * 4 {
+        let mut rgb = Vec::with_capacity(w * h * 3);
+        for px in pixels.as_chunks::<4>().0 {
             rgb.extend_from_slice(&px[..3]);
         }
         pixels = rgb;
     }
-    ensure!(pixels.len() == w as usize * h as usize * 3, "{} is a picture of {} bytes, which is not a size", path.display(), pixels.len());
+    ensure!(pixels.len() == w * h * 3, "{} is a picture of {} bytes, which is not a size", path.display(), pixels.len());
     Ok((pixels, w as u32, h as u32, 3))
 }
 

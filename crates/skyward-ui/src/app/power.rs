@@ -96,7 +96,7 @@ impl App {
     pub(super) fn sleep(&mut self, now: u64) {
         // The panel goes dark under a lock, as a phone's does: the page behind
         // it is there once the knob is slid along.
-        self.lock = Some(Lock { since: now, drag: 0.0, held: false });
+        self.lock = Some(Lock { drag: 0.0, held: false });
         // A sheet half pulled is let go of: it does not wait over a dark panel
         // for a finger that is no longer there.
         self.shade = 0.0;

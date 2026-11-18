@@ -1293,10 +1293,8 @@ enum ShadeHit {
     Vibration,
 }
 
-/// What a locked screen holds: when the panel went dark, and how far the knob
-/// has been slid along.
+/// What a locked screen holds: how far the knob has been slid along.
 struct Lock {
-    since: u64,
     drag: f32,
     /// Whether the finger went down on the knob rather than elsewhere.
     held: bool,
