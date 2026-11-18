@@ -601,13 +601,15 @@ mod tests {
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))));
         assert_eq!(app.deadline(CHORD_MS), Some(REPEAT_DELAY_MS), "and repeats as from when it went down");
         app.tick(REPEAT_DELAY_MS - 1);
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))), "not held long enough yet");
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))), "not held long enough yet");
         app.tick(REPEAT_DELAY_MS);
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Files))), "held on, it goes on to the file manager");
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::About))), "held on, it goes on to the phone's own row");
         app.tick(REPEAT_DELAY_MS + REPEAT_MS);
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Files))), "and on to the file manager");
+        app.tick(REPEAT_DELAY_MS + REPEAT_MS * 2);
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Modules))), "and on to the modules");
-        app.key_up(Key::VolumeDown, REPEAT_DELAY_MS + REPEAT_MS + 10);
-        app.tick(REPEAT_DELAY_MS + REPEAT_MS * 5);
+        app.key_up(Key::VolumeDown, REPEAT_DELAY_MS + REPEAT_MS * 2 + 10);
+        app.tick(REPEAT_DELAY_MS + REPEAT_MS * 6);
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Modules))), "let go, it stops");
     }
 

@@ -204,12 +204,13 @@ mod tests {
     fn a_home_page_grown_by_an_update_notice_scrolls_down_to_its_last_row() {
         let f = fonts();
         let plain = info();
-        // The home page lost the mount row, so a screen the old snug height
-        // fits leaves room the notice no longer fills. The search bar sits
-        // above the rows, and takes its own height and the gap under it off
-        // that screen.
-        let t = Theme::light(W, SNUG, PPD);
-        let snug = SNUG - 380 - (t.m.search_h + t.m.after_search) as u32;
+        // A screen the home page's rows just fit on: measured off the page
+        // itself, so the bar's height and the gap under it are already in it,
+        // and only the notice's own row is left to push the last one below.
+        let mut probe = App::new(Screen::Home, W, SNUG, PPD);
+        let probe_frame = probe.frame(&f, &plain);
+        let probe_reboot = probe_frame.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;
+        let snug = (probe_reboot.y + probe_reboot.h).ceil() as u32;
         let mut app = App::new(Screen::Home, W, snug, PPD);
         let fr = app.frame(&f, &plain);
         let reboot = fr.hits.iter().find(|h| h.action == Action::Open(Screen::Reboot)).expect("a reboot row").rect;

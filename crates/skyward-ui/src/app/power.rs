@@ -224,7 +224,7 @@ mod tests {
         assert!(app.tick(CHORD_MS * 2 + 10).is_empty());
         assert_eq!(app.screen(), Screen::Home, "the power key waits on the control lit until it comes up");
         app.key_up(Key::Power, CHORD_MS * 3);
-        assert_eq!(app.screen(), Screen::About, "and then works it");
+        assert_eq!(app.screen(), Screen::Search, "and then works it");
     }
 
     #[test]
