@@ -61,7 +61,17 @@ const LEAVE_AFTER_MS: u64 = 1500;
 
 /// How long after the screen starts a touch panel may still come up; with
 /// none by then, the pages are worked with the keys, their light shown.
-const TOUCH_WAIT: Duration = Duration::from_secs(5);
+///
+/// Ten seconds, where five was enough on this phone. The panel is the one
+/// part here whose driver is not this recovery's to bring up: it comes up
+/// when the phone's own system has got far enough to probe it, and a phone
+/// that stalls on the way there -- restarting servicemanager for the service
+/// descriptions takes some four seconds on one -- had its panel up at 8.5 s
+/// and had already been given up on. A finger on the glass takes the pages
+/// back the moment it lands, so waiting longer costs nothing when the panel
+/// does come, and only a phone with no panel at all waits the extra five
+/// seconds before its keys light.
+const TOUCH_WAIT: Duration = Duration::from_secs(10);
 
 /// How long a panel gone dark rests, ready to light again at once, before
 /// the display turns off; the phone's own system keeps its panel dozing
