@@ -1,4 +1,4 @@
-﻿//! What the pages show and the user changes, all in one place.
+//! What the pages show and the user changes, all in one place.
 
 use super::*;
 

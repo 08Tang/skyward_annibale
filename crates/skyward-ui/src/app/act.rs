@@ -1,4 +1,4 @@
-﻿//! What a control does once it is tapped, typed on or swiped.
+//! What a control does once it is tapped, typed on or swiped.
 
 use super::*;
 

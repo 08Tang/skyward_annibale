@@ -1,4 +1,4 @@
-﻿//! The recovery's pages as one machine: what it holds, what touches, keys
+//! The recovery's pages as one machine: what it holds, what touches, keys
 //! and the clock do to it, and what it asks of the runtime in return. Each
 //! page's own types, methods and tests are in the module named for it.
 
