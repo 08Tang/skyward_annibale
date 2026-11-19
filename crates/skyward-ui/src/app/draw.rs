@@ -175,7 +175,7 @@ impl App {
             self.compose_charging(out, f, info, charge, now);
         }
         if self.shade > 0.0 {
-            self.paint_shade(out, f, info, clock);
+            self.paint_shade(out, f, info, clock, now);
         }
         // The card asking to delete sits over the page, fixed where the eye
         // already is: drawn with the page it would scroll with it.
@@ -304,9 +304,11 @@ impl App {
 
     /// The control centre, pulled down from the top edge: the time and the
     /// battery, the toggles a recovery has a use for, and the two sliders.
-    fn paint_shade(&mut self, out: &mut Canvas, f: &Fonts, info: &DeviceInfo, clock: &str) {
+    fn paint_shade(&mut self, out: &mut Canvas, f: &Fonts, info: &DeviceInfo, clock: &str, now: u64) {
         self.shade_hits.clear();
         if self.shade <= 0.0 {
+            // Nothing of the sheet shows, so nothing of it rolls either.
+            self.shade_roll = None;
             return;
         }
         let t = self.theme();
@@ -349,9 +351,14 @@ impl App {
         }
         // The toggles, as round-cornered panes over the sheet.
         let on = self.state.wlan.as_ref().is_some_and(|w| w.power == Power::On);
-        let wlan = if on { l.pick(["WLAN · 已开", "WLAN · 已開", "WLAN · on"]) } else { l.pick(["WLAN · 已关", "WLAN · 已關", "WLAN · off"]) };
+        // What the WLAN tile says: the network joined where one is, and how the
+        // WLAN stands otherwise. The name is the tile's own word for itself --
+        // the mark above it already says WLAN -- and it is drawn to the tile's
+        // width rather than past it. Kept as its own string, since the tile
+        // records where the name has rolled to while it draws it.
+        let wlan = self.state.wlan.as_ref().map_or_else(|| l.pick(["已关闭", "已關閉", "Off"]), |w| fmt::wlan_value(l, w)).to_owned();
         let tiles: [(ShadeHit, &str, bool); 4] = [
-            (ShadeHit::Wlan, wlan, on),
+            (ShadeHit::Wlan, &wlan, on),
             (ShadeHit::Screenshot, l.pick(["截图", "截圖", "Screenshot"]), false),
             (ShadeHit::Reboot, l.pick(["重启", "重新啟動", "Reboot"]), false),
             (ShadeHit::Sleep, l.pick(["熄屏", "關閉螢幕", "Screen off"]), false),
@@ -359,6 +366,10 @@ impl App {
         let (gap, th) = (m.dp(14.0), m.dp(98.0));
         let tw = (w - m.margin * 2.0 - gap) / 2.0;
         let tiles_top = top + m.dp(128.0);
+        // A tile's words are set inside its own edge, and a name too long for
+        // that room is set smaller before it is let past the edge.
+        let pad = m.dp(18.0);
+        let room = tw - pad * 2.0;
         let mut hits = Vec::new();
         for (i, (hit, label, lit)) in tiles.iter().enumerate() {
             let (col, row) = (i % 2, i / 2);
@@ -369,7 +380,32 @@ impl App {
             out.fill_round_rect(x, y, tw, th, m.dp(26.0), fill);
             let ink = if *lit { white } else { white.with_alpha(238) };
             Self::shade_glyph(out, &t, *hit, x + m.dp(33.0), y + m.dp(35.0), m.dp(26.0), ink);
-            out.text(&f.body, label, x + m.dp(18.0), y + th - m.dp(21.0), m.row_title_px, ink, None);
+            let baseline = y + th - m.dp(21.0);
+            let name = *hit == ShadeHit::Wlan;
+            if name {
+                // Shrunk to fit, and rolled where it still does not: a name
+                // set past its tile would run under the one beside it.
+                let px = widgets::fitted_px(out, &f.body, label, m.row_title_px, m.dp(SHADE_NAME_LEAST_DP), room);
+                let travel = out.text_width(&f.body, label, px);
+                if travel <= room {
+                    self.shade_roll = None;
+                    out.text(&f.body, label, x + pad, baseline, px, ink, None);
+                } else {
+                    // The roll begins when the name first does not fit, and
+                    // keeps its place while the sheet is out: a name set off
+                    // again every frame would never be read. A name of another
+                    // width is another name, and sets off afresh.
+                    let since = match self.shade_roll {
+                        Some(r) if (r.travel - travel).abs() < 0.5 => r.since,
+                        _ => now,
+                    };
+                    let roll = Roll { since, travel, room, pace: roll_pace(m.dp(1.0)) };
+                    self.shade_roll = Some(roll);
+                    Self::paint_rolled(out, &f.body, label, x + pad, baseline, px, room, ink, roll.offset(now));
+                }
+            } else {
+                out.text(&f.body, label, x + pad, baseline, m.row_title_px, ink, None);
+            }
             hits.push((rect, *hit));
         }
         // The backlight and the motor: two capsules side by side, each filled
@@ -398,6 +434,25 @@ impl App {
             hits.push((cap, hit));
         }
         self.shade_hits = hits;
+    }
+
+    /// The WLAN tile's name, set from `x` at `px`, kept inside `room` however
+    /// long it is: a name too long to fit is set smaller where that is enough,
+    /// and rolled where it is not.
+    ///
+    /// The roll is the whole name drawn as ink and laid down shifted inside a
+    /// strip the width of the tile, so no part of a name is ever cut by its
+    /// bytes -- an SSID may be anything at all, and slicing one by index would
+    /// split a character.
+    #[allow(clippy::too_many_arguments)]
+    fn paint_rolled(out: &mut Canvas, face: &crate::font::Face, name: &str, x: f32, baseline: f32, px: f32, room: f32, ink: Rgba, shift: f32) {
+        let (_, top) = face.ink(px);
+        // A sprite of the name as it stands shifted, in white, kept as
+        // coverage alone: it is laid down in the tile's own ink.
+        let strip = Sprite::capture(x, baseline + top, room.ceil() as u32, (px * 1.6).ceil() as u32, |c, dx, dy| {
+            c.text(face, name, x - shift + dx, baseline + dy, px, Rgba::rgb(255, 255, 255), None);
+        });
+        strip.draw(out, 0.0, 0.0, ink, 1.0);
     }
 
     /// The mark a tile or a slider carries.
@@ -1081,6 +1136,81 @@ mod tests {
             assert_eq!(drawn.hits.iter().map(|h| h.action).collect::<Vec<_>>(), fresh.hits.iter().map(|h| h.action).collect::<Vec<_>>(), "{cap:?} typed");
         }
         assert_eq!(app.state.search, "bfQ");
+    }
+
+    #[test]
+    fn a_name_too_long_for_its_tile_is_set_smaller_before_it_is_rolled() {
+        let (f, i) = (fonts(), info());
+        let t = Theme::light(W, H, PPD);
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        let mut c = Canvas::new(W, H);
+        // A name that fits at the tile's own size is not rolled.
+        app.state.wlan = Some(connected("Redmi-AX6000"));
+        app.shade = 1.0;
+        app.compose(&mut c, &f, &i, "12:00", 1000);
+        assert!(app.shade_roll.is_none(), "a name that fits is still");
+
+        // One far too long for any size that fits: it rolls.
+        let long = "一个很长很长的无线网络名称用来看看跑马灯";
+        app.state.wlan = Some(connected(long));
+        app.compose(&mut c, &f, &i, "12:00", 2000);
+        let roll = app.shade_roll.expect("a name too long to set whole rolls");
+        assert!(roll.travel > roll.room, "wider than the tile at its least size");
+        assert_eq!(roll.since, 2000, "it sets off the first time it is drawn");
+        // The least size is the floor, not smaller.
+        let least = t.m.dp(SHADE_NAME_LEAST_DP);
+        let room = roll.room;
+        let at_least = c.text_width(&f.body, long, least);
+        assert!(at_least > room, "the floor does not fit either, so it rolls");
+    }
+
+    #[test]
+    fn a_rolling_name_keeps_its_place_and_asks_for_frames_only_while_it_moves() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        let mut c = Canvas::new(W, H);
+        app.state.wlan = Some(connected("一个很长很长的无线网络名称用来看看跑马灯"));
+        app.shade = 1.0;
+        app.compose(&mut c, &f, &i, "12:00", 1000);
+        let first = app.shade_roll.expect("rolling");
+        // A frame later the name has not set off again.
+        app.compose(&mut c, &f, &i, "12:00", 1040);
+        assert_eq!(app.shade_roll.expect("still rolling").since, first.since, "it keeps its place");
+
+        // Resting at its start, it asks for nothing: the sheet is drawn every
+        // turn while it is out, and a frame a turn would copy the panel for a
+        // name that is standing still.
+        app.tick(first.since + 100);
+        let _ = app.take_dirty();
+        app.tick(first.since + 200);
+        assert!(!app.take_dirty(), "at rest it does not have the panel copied");
+
+        // On the move it does, every turn it moves.
+        let moving = first.since + SHADE_ROLL_REST_MS + 100;
+        app.tick(moving);
+        assert!(app.take_dirty(), "a moving name has the panel copied");
+        app.tick(moving + 100);
+        assert!(app.take_dirty(), "and again while it is still moving");
+    }
+
+    #[test]
+    fn a_rolled_name_never_leaves_its_tile() {
+        // The offset stays between the name's start and its end, and comes
+        // back: nothing of the round trip runs past the tile.
+        let (travel, room) = (900.0, 400.0);
+        let over = travel - room;
+        for ms in (0..40_000).step_by(7) {
+            let at = roll_offset(travel, room, 66.0, ms);
+            assert!((0.0..=over).contains(&at), "{ms} ms: {at}");
+        }
+        // It rests at the start, then at the end, and comes back.
+        assert_eq!(roll_offset(travel, room, 66.0, 0), 0.0);
+        let roll = (over / 66.0 * 1000.0) as u64;
+        assert!(roll_offset(travel, room, 66.0, SHADE_ROLL_REST_MS + roll) >= over - 0.01, "the end shows");
+        assert!(roll_offset(travel, room, 66.0, SHADE_ROLL_REST_MS + roll + SHADE_ROLL_REST_MS + roll) <= 0.01, "and it comes back");
+        // A name that fits does not move at all.
+        assert_eq!(roll_offset(room, room, 66.0, 5000), 0.0);
+        assert_eq!(roll_offset(room - 1.0, room, 66.0, 5000), 0.0);
     }
 
     #[test]

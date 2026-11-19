@@ -1284,6 +1284,60 @@ const SHADE_KEEPS: f32 = 0.36;
 /// capsules; below about 460 dp the capsules' own feet are cut by the sheet's.
 const SHADE_HEIGHT_DP: f32 = 474.0;
 
+/// The least a network's name is set at in its tile, in dp: shrunk to fit the
+/// tile it is set at `row_title_px` down to this, and no further.
+const SHADE_NAME_LEAST_DP: f32 = 13.0;
+/// How fast a name still too long at that size rolls past, in dp a second. A
+/// name that fits is never rolled: only one that cannot be read whole is.
+const SHADE_ROLL_DP_S: f32 = 22.0;
+/// How long a rolling name rests at each end before setting off again, in ms.
+const SHADE_ROLL_REST_MS: u64 = 1400;
+
+/// How many pixels a second a name rolls at, on a panel `dp` pixels to the dp.
+fn roll_pace(dp: f32) -> f32 {
+    SHADE_ROLL_DP_S * dp
+}
+
+/// How long `over` pixels take to roll past at `pace` pixels a second, in ms.
+fn roll_ms(over: f32, pace: f32) -> u64 {
+    ((over / pace * 1000.0) as u64).max(1)
+}
+
+/// Where a name `travel` wide, of which `room` shows at a time, has got to
+/// `now` ms after its roll began: how far past its start the part shown
+/// begins, in the same pixels. `pace` is how fast it rolls, in pixels a
+/// second.
+///
+/// It rests at its start, rolls left until its end shows, rests there, and
+/// comes back, so a name is never cut at the end where the eye has not been
+/// yet. A name no wider than the room does not move at all.
+fn roll_offset(travel: f32, room: f32, pace: f32, now: u64) -> f32 {
+    let over = travel - room;
+    if over <= 0.0 || pace <= 0.0 {
+        return 0.0;
+    }
+    // The roll takes as long as the distance past the room at the roll's own
+    // pace, and each leg of the round trip is that and one rest at the end.
+    let roll = roll_ms(over, pace);
+    let leg = roll + SHADE_ROLL_REST_MS;
+    let t = now % (2 * leg);
+    if t < SHADE_ROLL_REST_MS {
+        0.0
+    } else if t < leg {
+        over * smooth((t - SHADE_ROLL_REST_MS) as f32 / roll as f32)
+    } else if t < leg + SHADE_ROLL_REST_MS {
+        over
+    } else {
+        over * (1.0 - smooth((t - leg - SHADE_ROLL_REST_MS) as f32 / roll as f32))
+    }
+}
+
+/// `k` from 0 to 1, moving off and coming to rest without a jolt.
+fn smooth(k: f32) -> f32 {
+    let k = k.clamp(0.0, 1.0);
+    k * k * (3.0 - 2.0 * k)
+}
+
 /// What a finger can press in the control centre.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ShadeHit {
@@ -1293,6 +1347,34 @@ enum ShadeHit {
     Sleep,
     Brightness,
     Vibration,
+}
+
+/// A name in the control centre's WLAN tile, longer than the tile shows,
+/// rolling so that all of it is read.
+#[derive(Clone, Copy, Debug)]
+struct Roll {
+    /// When the name set off.
+    since: u64,
+    /// How wide the name is, and how much of it the tile shows.
+    travel: f32,
+    room: f32,
+    /// How fast it rolls, in pixels a second.
+    pace: f32,
+}
+
+impl Roll {
+    /// How far past its start the part shown begins, at `now`.
+    fn offset(&self, now: u64) -> f32 {
+        roll_offset(self.travel, self.room, self.pace, now.saturating_sub(self.since))
+    }
+
+    /// Whether the name is on the move at `now`, rather than resting at one
+    /// end of its round trip.
+    fn rolling(&self, now: u64) -> bool {
+        let leg = roll_ms(self.travel - self.room, self.pace) + SHADE_ROLL_REST_MS;
+        let t = now.saturating_sub(self.since) % (2 * leg);
+        (t >= SHADE_ROLL_REST_MS && t < leg) || t >= leg + SHADE_ROLL_REST_MS
+    }
 }
 
 /// What a locked screen holds: how far the knob has been slid along.
@@ -1341,6 +1423,8 @@ pub struct App {
     shade_speed: f32,
     shade_press: Option<(ShadeHit, f32)>,
     shade_hits: Vec<(Rect, ShadeHit)>,
+    /// The name in the WLAN tile rolling, while it is longer than its tile.
+    shade_roll: Option<Roll>,
     /// When to take the screenshot a tile asked for, once the page under the
     /// sheet has been drawn without it.
     shot_when: Option<u64>,
@@ -1505,6 +1589,7 @@ impl App {
             shade_speed: 0.0,
             shade_press: None,
             shade_hits: Vec::new(),
+            shade_roll: None,
             shot_when: None,
             frame: None,
             spots: None,
@@ -1700,6 +1785,15 @@ impl App {
                 self.shade_settle = None;
                 self.shade = (target / SHADE_PULL_DP).clamp(0.0, 1.0);
             }
+            self.dirty = true;
+        }
+        // A name in the control centre's WLAN tile, too long for its tile,
+        // rolls: the loop draws the sheet every turn while it is out, but the
+        // panel is only copied on a frame that says it changed, so the name
+        // asks for one every few turns rather than every one.
+        if let Some(roll) = self.shade_roll
+            && roll.rolling(now)
+        {
             self.dirty = true;
         }
         // The decrypt page while the partition is being opened, and while it
