@@ -1,7 +1,8 @@
 use crate::app::{
-    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock, DownloadEnd,
+    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
+    DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, Pick, Place, Rows,
-    SCREEN_OFF, Screen, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
+    SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
     USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
 };
 use crate::canvas::Canvas;
@@ -81,6 +82,9 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::Advanced => advanced(cx),
         Screen::Modules => modules(cx),
         Screen::ModuleInfo => module_info(cx),
+        Screen::DataApps => data_apps(cx),
+        Screen::SystemApps => system_apps(cx),
+        Screen::DataAppInfo => data_app_info(cx),
         Screen::Files => files(cx),
         Screen::FileInfo => file_info(cx),
         Screen::Permissions => permissions(cx),
@@ -142,6 +146,7 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
         Confirm::Relabel => (["滑动以修复", "滑動以修復", "Slide to fix"], true),
         Confirm::SwitchSystem => (["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"], false),
         Confirm::RemoveSystem => (["滑动以删除", "滑動以刪除", "Slide to remove"], true),
+        Confirm::DeleteApp => (["滑动以卸载", "滑動以卸載", "Slide to uninstall"], true),
         Confirm::InstallSystem => (INSTALL, false),
     };
     (s.lang.pick(label), danger)
@@ -312,6 +317,10 @@ pub fn home(cx: &Ctx) -> Frame {
     // 模块管理紧挨着文件管理：装模块就是往 data 里放文件，放在这里顺手。
     first_rows.push(Row::new(l.pick(MODULES)).icon(BLUE, Icon::Layers));
     first_opens.push(Action::Open(Screen::Modules));
+    // 应用管理就在模块管理下面：一样是 data 分区里的东西，一个是模块，
+    // 一个是应用。
+    first_rows.push(Row::new(l.pick(DATA_APPS)).icon(PURPLE, Icon::Layers));
+    first_opens.push(Action::Open(Screen::DataApps));
     let first = widgets::list(&mut c, t, f, y, &first_rows);
     out.extend(hits(&first.rows, &first_opens));
     y = first.bottom + t.m.card_gap;
@@ -1852,30 +1861,61 @@ pub fn search(cx: &Ctx) -> Frame {
     let mut c = page(cx);
     let mut out = Vec::new();
     let (at, cancel) = widgets::search_layout(t);
-    let field = widgets::search_field(&mut c, t, f, at.x, at.w, at.y + at.h / 2.0, &s.search, l.pick(SEARCH_HINT));
+    // What the field is looking through says what it asks for: a page's apps
+    // or modules, or the whole of what the phone offers.
+    let hint = match s.search_scope {
+        SearchScope::Apps => l.pick(["搜索应用", "搜尋應用程式", "Search apps"]),
+        SearchScope::Modules => l.pick(["搜索模块", "搜尋模組", "Search modules"]),
+        SearchScope::Features => l.pick(SEARCH_HINT),
+    };
+    let field = widgets::search_field(&mut c, t, f, at.x, at.w, at.y + at.h / 2.0, &s.search, hint);
     widgets::cancel_button(&mut c, t, cancel);
     out.push(Hit { rect: cancel, action: Action::CloseSearch });
     let top = field.field.y + field.field.h + m.dp(12.0);
     let kb_top = m.h as f32 - widgets::keyboard_height(t);
     if s.search.trim().is_empty() {
-        let how = l.pick([
-            "输入功能或分区名称，支持拼音全拼和首字母，例如输入 bf 可找到「备份」。",
-            "輸入功能或分割區名稱，支援英文和漢語拼音的全拼與首字母，例如輸入 bf 可找到「備份」。",
-            "Type the name of a feature or partition, such as backup to find Backup.",
-        ]);
+        let how = match s.search_scope {
+            SearchScope::Apps => l.pick(["输入应用名称或包名筛选，例如输入 chrome 可找到 Chrome。", "輸入應用程式名稱或套件名稱篩選，例如輸入 chrome 可找到 Chrome。", "Type an app's name or package, such as chrome to find Chrome."]),
+            SearchScope::Modules => l.pick(["输入模块名称或目录名筛选。", "輸入模組名稱或目錄名篩選。", "Type a module's name or folder to filter them."]),
+            SearchScope::Features => l.pick([
+                "输入功能或分区名称，支持拼音全拼和首字母，例如输入 bf 可找到「备份」。",
+                "輸入功能或分割區名稱，支援英文和漢語拼音的全拼與首字母，例如輸入 bf 可找到「備份」。",
+                "Type the name of a feature or partition, such as backup to find Backup.",
+            ]),
+        };
         widgets::footnote(&mut c, t, f, top, how);
     } else {
-        let found = search::find_on(&s.search, l, |screen| s.offers(screen));
-        if found.is_empty() {
-            let typed = s.search.trim();
-            let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
-            widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
-        } else {
-            let rows: Vec<Row> = found.iter().map(|e| Row::new(l.pick(e.title)).subtitle(l.pick(e.place))).collect();
-            let list = widgets::list(&mut c, t, f, top, &rows);
-            // The keyboard covers what does not fit above it.
-            let shown = list.rows.iter().zip(&found).filter(|(r, _)| r.y + r.h <= kb_top);
-            out.extend(shown.map(|(&rect, e)| Hit { rect, action: Action::Open(e.screen) }));
+        // A page's entries are filtered, and the row opens the one it names;
+        // the whole of what the phone offers is searched, and the row opens
+        // the page.
+        let query = s.search.trim().to_lowercase();
+        match s.search_scope {
+            SearchScope::Features => {
+                let found = search::find_on(&s.search, l, |screen| s.offers(screen));
+                if found.is_empty() {
+                    let typed = s.search.trim();
+                    let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
+                    widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
+                } else {
+                    let rows: Vec<Row> = found.iter().map(|e| Row::new(l.pick(e.title)).subtitle(l.pick(e.place))).collect();
+                    let list = widgets::list(&mut c, t, f, top, &rows);
+                    // The keyboard covers what does not fit above it.
+                    let shown = list.rows.iter().zip(&found).filter(|(r, _)| r.y + r.h <= kb_top);
+                    out.extend(shown.map(|(&rect, e)| Hit { rect, action: Action::Open(e.screen) }));
+                }
+            }
+            scope => {
+                let (rows, acts) = filtered(s, scope, &query);
+                if rows.is_empty() {
+                    let typed = s.search.trim();
+                    let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
+                    widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
+                } else {
+                    let list = widgets::list(&mut c, t, f, top, &rows);
+                    let shown = list.rows.iter().zip(&acts).filter(|(r, _)| r.y + r.h <= kb_top);
+                    out.extend(shown.map(|(&rect, &action)| Hit { rect, action }));
+                }
+            }
         }
     }
     let find = l.pick(["搜索", "搜尋", "Search"]);
@@ -2545,6 +2585,12 @@ pub fn modules(cx: &Ctx) -> Frame {
     let install = l.pick(["安装", "安裝", "Install"]);
     let wid = widgets::pill(&mut c, t, f, pill_x, pill_y, install, t.pal.search, t.pal.text);
     out.push(Hit { rect: Rect::new(pill_x, pill_y, wid, pill_h), action: Action::Open(Screen::Files) });
+    // 一枚「搜索模块」：只看这个列表，不搜功能。放在「安装」右边，靠右对齐。
+    let search_label = l.pick(["搜索模块", "搜尋模組", "Search modules"]);
+    let w = widgets::pill_width(&c, t, f, search_label);
+    let x = t.m.w as f32 - t.m.margin - w;
+    let wd = widgets::pill(&mut c, t, f, x, pill_y, search_label, t.pal.search, t.pal.text);
+    out.push(pill_hit(t, x, pill_y, wd, pill_h, Action::SearchModules));
     let listed = widgets::list(&mut c, t, f, top, &rows);
     let rows_hits = hits(&listed.rows, &acts);
     out.extend(rows_hits);
@@ -2595,11 +2641,268 @@ pub fn module_info(cx: &Ctx) -> Frame {
 }
 
 const MODULES: Text = ["模块管理", "模組管理", "Modules"];
+const DATA_APPS: Text = ["应用管理", "應用程式管理", "Apps"];
+const SYSTEM_APPS: Text = ["系统应用", "系統應用程式", "System apps"];
 const RELABEL: Text = ["修复 SELinux 上下文", "修復 SELinux 上下文", "Fix SELinux contexts"];
 const FILESYSTEMS: Text = ["文件系统", "檔案系統", "Filesystems"];
 const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
 const STOPPED: Text = ["已停止", "已停止", "Stopped"];
 const STOPPING: Text = ["正在停止", "正在停止", "Stopping"];
+
+/// A pill's tap target: the pill and a little about it, so that a finger that
+/// lands beside it still finds it.
+fn pill_hit(t: &Theme, x: f32, y: f32, w: f32, h: f32, action: Action) -> Hit {
+    let pad = (t.m.dp(44.0) - h).max(0.0) / 2.0;
+    Hit { rect: Rect::new(x - t.m.dp(4.0), y - pad, w + t.m.dp(8.0), h + pad * 2.0), action }
+}
+
+/// The rows one page's entries make when filtered by `query`, and what each
+/// one opens: an app by its name or package, a module by its name or folder.
+fn filtered<'a>(s: &'a State, scope: SearchScope, query: &str) -> (Vec<Row<'a>>, Vec<Action>) {
+    let mut rows = Vec::new();
+    let mut acts = Vec::new();
+    match scope {
+        SearchScope::Apps => {
+            let Some(Ok(list)) = &s.apps else { return (rows, acts) };
+            for (k, a) in list.iter().enumerate() {
+                if !a.label.to_lowercase().contains(query) && !a.package.to_lowercase().contains(query) {
+                    continue;
+                }
+                let mut row = Row::new(&a.label).icon(PURPLE, Icon::Layers);
+                row.sub = Some(a.package.as_str());
+                rows.push(row);
+                acts.push(Action::DataAppOpen(k));
+            }
+        }
+        SearchScope::Modules => {
+            let Some(Ok(list)) = &s.modules else { return (rows, acts) };
+            for (k, m) in list.iter().enumerate() {
+                if !m.name.to_lowercase().contains(query) && !m.id.to_lowercase().contains(query) {
+                    continue;
+                }
+                // The same row the modules page draws, switch and all: the
+                // search is a way of finding one, not another list of them.
+                let mut row = Row::new(&m.name).icon(if m.enabled { BLUE } else { SLATE }, Icon::Layers).trail(Trail::Switch(m.enabled));
+                row.sub = Some(if m.note.is_empty() { m.about.as_str() } else { m.note.as_str() });
+                rows.push(row);
+                acts.push(Action::ModuleOpen(k));
+            }
+        }
+        // The whole of what the phone offers is searched by the page itself,
+        // which has the names of the features to look through.
+        SearchScope::Features => {}
+    }
+    (rows, acts)
+}
+
+/// How many rows of `sample` fit on a page whose content starts at `top`, and
+/// the height one of them takes.
+///
+/// Measured rather than counted from a number: a row with a subtitle under
+/// its name is taller than one without, and the subtitle wraps, so the count
+/// has to come from the row the page actually draws.
+fn rows_that_fit(t: &Theme, f: &Fonts, top: f32, sample: &Row) -> (usize, f32) {
+    let probe = Canvas::band(t.m.w, 1, 0..1, 0..t.m.w, t.pal.bg);
+    let h = widgets::one_height(&probe, t, f, sample);
+    // Half a row is left over at the foot, so that the last one is not cut in
+    // half by the bottom margin.
+    let room = t.m.h as f32 - top - t.m.margin * 2.0 - h / 2.0;
+    (((room / h).floor() as usize).max(1), h)
+}
+
+/// The pager a page turned a screen at a time draws at its top right: the
+/// count, and a way back and on.
+///
+/// The three cells keep their places whether or not they can be used, and a
+/// cell that cannot be is drawn faint and takes no tap. Moving them would
+/// put the one tapped after a turn under the finger that had just turned the
+/// page, and the page would run back and forth.
+#[allow(clippy::too_many_arguments)]
+fn pager(t: &Theme, f: &Fonts, c: &mut Canvas, out: &mut Vec<Hit>, l: Lang, y: f32, page: usize, pages: usize, turn: fn(i32) -> Action) {
+    let ph = t.m.dp(widgets::PILL_DP);
+    if pages <= 1 {
+        let only = l.pick(["只有一页", "只有一頁", "One page"]);
+        let w = widgets::pill_width(c, t, f, only);
+        let x = t.m.w as f32 - t.m.margin - w;
+        widgets::pill(c, t, f, x, y, only, t.pal.search, t.pal.text);
+        return;
+    }
+    let gaps = t.m.dp(widgets::PILL_GAP_DP);
+    let counter = format!("{}/{}", page + 1, pages);
+    let back = l.pick(["上一页", "上一頁", "Newer"]);
+    let fwd = l.pick(["下一页", "下一頁", "Older"]);
+    let w_prev = widgets::pill_width(c, t, f, back);
+    let w_next = widgets::pill_width(c, t, f, fwd);
+    let w_counter = c.text_width(&f.value, &counter, t.m.sub_px) + t.m.dp(8.0);
+    let x_next = t.m.w as f32 - t.m.margin - w_next;
+    let x_counter = x_next - gaps - w_counter;
+    let x_prev = x_counter - gaps - w_prev;
+    let faint = t.pal.subtitle;
+    // The right third of the screen turns the page on: a finger that lands a
+    // little wide still turns it.
+    if page + 1 < pages {
+        out.push(Hit { rect: Rect::new(t.m.w as f32 * 0.66, y - t.m.dp(12.0), t.m.w as f32 * 0.34 - t.m.margin, ph + t.m.dp(24.0)), action: turn(1) });
+    }
+    if page > 0 {
+        let wd = widgets::pill(c, t, f, x_prev, y, back, t.pal.search, t.pal.text);
+        // The way back stops at 62% of the width, leaving the rest to the way
+        // on.
+        let left = x_prev - t.m.dp(16.0);
+        let right = (x_prev + wd + t.m.dp(8.0)).min(t.m.w as f32 * 0.62);
+        out.push(Hit { rect: Rect::new(left, y - t.m.dp(10.0), (right - left).max(wd), ph + t.m.dp(20.0)), action: turn(-1) });
+    } else {
+        widgets::pill(c, t, f, x_prev, y, back, t.pal.search, faint);
+    }
+    c.text_center(&f.value, &counter, x_counter + w_counter / 2.0, y + ph / 2.0, t.m.sub_px, faint);
+    if page + 1 < pages {
+        widgets::pill(c, t, f, x_next, y, fwd, t.pal.search, t.pal.text);
+    } else {
+        widgets::pill(c, t, f, x_next, y, fwd, t.pal.search, faint);
+    }
+}
+
+/// The apps the owner installed, newest first, a screen at a time.
+///
+/// Ported from skyward-pudding v0.3.15. A screen holds what fits rather than
+/// the whole list on one tall page: a phone with a hundred and eighty apps
+/// makes a page tens of thousands of pixels tall, which is a canvas of over a
+/// hundred megabytes for every frame.
+pub fn data_apps(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let top = t.m.content_top;
+    let mut c = page(cx);
+    let mut out = Vec::new();
+    let mut sample = Row::new("Ag").icon(PURPLE, Icon::Layers);
+    sample.sub = Some("com.example.app");
+    let (per, _) = rows_that_fit(t, f, top, &sample);
+    let mut rows: Vec<Row> = Vec::new();
+    let mut acts: Vec<Action> = Vec::new();
+    let mut pages = 1usize;
+    match &s.apps {
+        None => rows.push(Row::new(l.pick(["正在读取…", "正在讀取…", "Reading…"]))),
+        Some(Err(why)) => {
+            let mut row = Row::new(l.pick(["读取失败", "讀取失敗", "Not read"]));
+            row.sub = Some(why.as_str());
+            rows.push(row);
+        }
+        Some(Ok(list)) if list.is_empty() => rows.push(Row::new(l.pick(["数据分区里没有应用", "資料分區裡沒有應用程式", "No apps in the data partition"]))),
+        Some(Ok(list)) => {
+            pages = list.len().div_ceil(per).max(1);
+            let page = s.app_page.min(pages - 1);
+            let (from, to) = (page * per, ((page + 1) * per).min(list.len()));
+            for (k, a) in list.iter().enumerate().take(to).skip(from) {
+                let mut row = Row::new(&a.label).icon(PURPLE, Icon::Layers);
+                row.sub = Some(a.package.as_str());
+                rows.push(row);
+                acts.push(Action::DataAppOpen(k));
+            }
+        }
+    }
+    let page = s.app_page.min(pages.saturating_sub(1));
+    // The search pill stands on the line the back arrow is on; the pager on
+    // the title's.
+    let ph = t.m.dp(widgets::PILL_DP);
+    let py = t.m.back_cy - ph / 2.0;
+    let pager_y = t.m.title_top + t.m.title_px * 0.46 - ph / 2.0;
+    let mut x = t.m.w as f32 - t.m.margin;
+    let search_label = l.pick(["搜索应用", "搜尋應用程式", "Search apps"]);
+    let w = widgets::pill_width(&c, t, f, search_label);
+    x -= w;
+    let wd = widgets::pill(&mut c, t, f, x, py, search_label, t.pal.search, t.pal.text);
+    out.push(pill_hit(t, x, py, wd, ph, Action::SearchApps));
+    // What the system's own partitions hold is a page of its own, and this is
+    // the way to it.
+    let sys_label = l.pick(SYSTEM_APPS);
+    let w = widgets::pill_width(&c, t, f, sys_label);
+    x -= t.m.dp(widgets::PILL_GAP_DP) + w;
+    let wd = widgets::pill(&mut c, t, f, x, py, sys_label, t.pal.search, t.pal.subtitle);
+    out.push(pill_hit(t, x, py, wd, ph, Action::Open(Screen::SystemApps)));
+    pager(t, f, &mut c, &mut out, l, pager_y, page, pages, Action::AppPage);
+    let listed = widgets::list(&mut c, t, f, top, &rows);
+    out.extend(hits(&listed.rows, &acts));
+    Frame::new(t, c, out, l.pick(DATA_APPS), top)
+}
+
+/// The apps the system's own partitions hold: laid out as the owner's are,
+/// but only to be looked at. There is no switch and no uninstalling, and a
+/// row opens nothing, since taking one of them away keeps the system from
+/// starting.
+///
+/// Ported from skyward-pudding v0.3.15.
+pub fn system_apps(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let top = t.m.content_top;
+    let mut c = page(cx);
+    let mut sample = Row::new("Ag").icon(SLATE, Icon::Layers);
+    sample.sub = Some("/system/app");
+    let (per, _) = rows_that_fit(t, f, top, &sample);
+    let mut rows: Vec<Row> = Vec::new();
+    let mut pages = 1usize;
+    match &s.sys_apps {
+        None => rows.push(Row::new(l.pick(["正在读取…", "正在讀取…", "Reading…"]))),
+        Some(list) if list.is_empty() => rows.push(Row::new(l.pick(["没有读到系统应用", "沒有讀到系統應用程式", "No system apps read"]))),
+        Some(list) => {
+            pages = list.len().div_ceil(per).max(1);
+            let page = s.sys_page.min(pages - 1);
+            let (from, to) = (page * per, ((page + 1) * per).min(list.len()));
+            for a in list.iter().take(to).skip(from) {
+                let mut row = Row::new(&a.label).icon(SLATE, Icon::Layers);
+                row.sub = Some(a.package.as_str());
+                rows.push(row);
+            }
+        }
+    }
+    let page = s.sys_page.min(pages.saturating_sub(1));
+    let ph = t.m.dp(widgets::PILL_DP);
+    let pager_y = t.m.title_top + t.m.title_px * 0.46 - ph / 2.0;
+    let mut out = Vec::new();
+    pager(t, f, &mut c, &mut out, l, pager_y, page, pages, Action::SysPage);
+    let listed = widgets::list(&mut c, t, f, top, &rows);
+    let bottom = widgets::footnote(&mut c, t, f, listed.bottom, l.pick(["这些装在系统分区里，不能这样卸载", "這些裝在系統分區裡，不能這樣卸載", "These are in the system's partitions, and are not removed here"]));
+    Frame::new(t, fit(c, t, bottom), out, l.pick(SYSTEM_APPS), top)
+}
+
+/// One app: what it is, and the swipe that takes it off.
+///
+/// Ported from skyward-pudding v0.3.15.
+pub fn data_app_info(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let top = t.m.content_top;
+    let at = s.app_at.unwrap_or(0);
+    let picked = match &s.apps {
+        Some(Ok(list)) => list.get(at),
+        _ => None,
+    };
+    let Some(a) = picked else {
+        return Frame::new(t, c, Vec::new(), l.pick(DATA_APPS), top);
+    };
+    let facts: Vec<(&str, String)> = vec![
+        (l.pick(["包名", "套件名稱", "Package"]), a.package.clone()),
+        (l.pick(["名称", "名稱", "Name"]), a.label.clone()),
+        (l.pick(["位置", "位置", "Where"]), a.dir.clone()),
+        (l.pick(["占用", "佔用", "Size"]), fmt::file_size(a.size)),
+        (l.pick(["安装", "安裝", "Installed"]), fmt::datetime(l, a.installed, s.time_zone)),
+        (l.pick(["更新", "更新", "Updated"]), fmt::datetime(l, a.updated, s.time_zone)),
+    ];
+    let y = widgets::info_card(&mut c, t, f, top, &facts);
+    // An app in the system's own partitions is not taken off from here: the
+    // system would not start.
+    let mut out = Vec::new();
+    let bottom = if a.system {
+        let row = Row::new(l.pick(["系统应用，不能这样卸载", "系統應用程式，不能這樣卸載", "A system app: not removed here"])).icon(SLATE, Icon::Shield);
+        let listed = widgets::list(&mut c, t, f, y + t.m.card_gap, &[row]);
+        widgets::footnote(&mut c, t, f, listed.bottom, l.pick(["这些装在系统分区里，删掉系统就起不来", "這些裝在系統分區裡，刪掉系統就起不來", "These are in the system's partitions; taking one away keeps it from starting"]))
+    } else {
+        let row = Row::new(l.pick(["卸载应用", "卸載應用程式", "Uninstall"])).icon(RED, Icon::Wipe).tint(t.pal.danger);
+        let listed = widgets::list(&mut c, t, f, y + t.m.card_gap, &[row]);
+        let (label, danger) = confirm_label(Confirm::DeleteApp, s);
+        let track = widgets::confirm(&mut c, t, f, listed.bottom + t.m.dp(24.0), label, danger, s.confirm);
+        out.push(Hit { rect: track, action: Action::Confirm(Confirm::DeleteApp) });
+        widgets::footnote(&mut c, t, f, track.y + track.h, l.pick(["卸载会删掉它的安装目录和 /data/data 里的数据", "卸載會刪掉它的安裝目錄和 /data/data 裡的資料", "Uninstalling removes its folder and what it kept in /data/data"]))
+    };
+    Frame::new(t, fit(c, t, bottom), out, l.pick(DATA_APPS), top)
+}
 
 /// Android Verified Boot's checks in the running slot: what they are, and
 /// where the bootloader is unlocked, switches for them and the saved

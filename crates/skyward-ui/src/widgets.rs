@@ -1438,6 +1438,23 @@ fn layout(c: &Canvas, t: &Theme, f: &Fonts, r: &Row) -> Layout {
     Layout { text_x, text_max, sub_lines, h }
 }
 
+/// One row drawn into a canvas of its own: the canvas is as tall as the row,
+/// and the row is drawn at its top.
+///
+/// The pages that hold a screen's worth of rows and turn from one screen to
+/// the next need a row's height before they can say how many fit; this and
+/// [`one_height`] are how they measure one without drawing a whole list.
+pub fn draw_one(c: &mut Canvas, t: &Theme, f: &Fonts, r: &Row) {
+    let lay = layout(c, t, f, r);
+    draw_row(c, t, f, r, &lay, 0.0, &Tone::page(t));
+}
+
+/// How tall [`draw_one`] would draw this row, measured on a canvas wide
+/// enough for it.
+pub fn one_height(c: &Canvas, t: &Theme, f: &Fonts, r: &Row) -> f32 {
+    layout(c, t, f, r).h
+}
+
 fn draw_row(c: &mut Canvas, t: &Theme, f: &Fonts, r: &Row, lay: &Layout, top: f32, tone: &Tone) {
     let m = &t.m;
     let card_x = m.margin;

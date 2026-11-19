@@ -1,4 +1,4 @@
-//! The recovery's pages as one machine: what it holds, what touches, keys
+﻿//! The recovery's pages as one machine: what it holds, what touches, keys
 //! and the clock do to it, and what it asks of the runtime in return. Each
 //! page's own types, methods and tests are in the module named for it.
 
@@ -36,6 +36,8 @@ use skyward_vab::{BootSlots, Hold, Slot, SnapshotState, Standing};
 mod act;
 mod avb;
 mod backup;
+pub mod dataapp;
+mod dataapp_list;
 mod decrypt;
 mod draw;
 mod entry;
@@ -121,6 +123,14 @@ pub enum Screen {
     Modules,
     /// One module: what it is, and what can be done with it.
     ModuleInfo,
+    /// The apps the owner installed, newest first, a screen at a time.
+    DataApps,
+    /// The apps the system's own partitions hold: what is there, and
+    /// nothing more, since taking one of them away keeps the system from
+    /// starting.
+    SystemApps,
+    /// One app: what it is, and a way to take it off.
+    DataAppInfo,
     Files,
     /// The files on the OTG drive, all of them.
     FilesOtg,
@@ -243,6 +253,8 @@ pub enum Confirm {
     SwitchSystem,
     /// Take the other system away.
     RemoveSystem,
+    /// Take the app the detail page shows off the phone.
+    DeleteApp,
     /// Install the system the installer holds with the room chosen.
     InstallSystem,
 }
@@ -359,6 +371,17 @@ pub enum Action {
     InstallAsModule,
     /// Open the module at this place in the list.
     ModuleOpen(usize),
+    /// Turn the apps page by this many screens: a negative count goes back.
+    AppPage(i32),
+    /// Turn the system apps page by this many screens: a negative count goes
+    /// back.
+    SysPage(i32),
+    /// Open the app at this place in the list.
+    DataAppOpen(usize),
+    /// Open the search page to look through the apps.
+    SearchApps,
+    /// Open the search page to look through the modules.
+    SearchModules,
     /// Put the question away without doing anything.
     DismissPlace,
     /// Look at the files on the OTG drive.
@@ -533,6 +556,16 @@ pub enum Effect {
     ReadMounts,
     /// Read the modules installed for the phone's own system.
     ReadModules,
+    /// Read the apps installed in the data partition, telling them with
+    /// [`App::set_apps`] and each one's name as it is read with
+    /// [`App::data_app_enriched`].
+    ReadDataApps,
+    /// Read the apps the system's own partitions hold, telling them with
+    /// [`App::set_sys_apps`].
+    ReadSystemApps,
+    /// Take the app with this package name, whose folder in `/data/app` this
+    /// is, off the phone.
+    DataAppRemove(String, String),
     /// Have the module in this folder switched on or off: the folder's name,
     /// and whether it is to be on.
     ModuleSwitch(String, bool),

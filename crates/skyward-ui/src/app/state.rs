@@ -1,4 +1,4 @@
-//! What the pages show and the user changes, all in one place.
+﻿//! What the pages show and the user changes, all in one place.
 
 use super::*;
 
@@ -34,6 +34,15 @@ pub enum Fetch {
     },
     Failed(String),
     Stopped,
+}
+
+/// What the search field is looking through: the whole of what the phone
+/// offers, or the entries of one page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SearchScope {
+    Features,
+    Apps,
+    Modules,
 }
 
 /// One module the phone's own system would load: KernelSU's and Magisk's keep
@@ -146,6 +155,22 @@ pub struct State {
     pub modules: Option<Result<Vec<ModuleRow>, String>>,
     /// The module the detail page shows, by its place in the list.
     pub module_at: Option<usize>,
+    /// The apps installed in the data partition, newest first, read when the
+    /// page opens; none until they are, and a reason where they could not be.
+    pub apps: Option<Result<Vec<crate::app::dataapp::DataApp>, String>>,
+    /// The app the detail page shows, by its place in the list.
+    pub app_at: Option<usize>,
+    /// The apps the system's own partitions hold, for the page that only
+    /// looks at them; none until that page is opened.
+    pub sys_apps: Option<Vec<crate::app::dataapp::DataApp>>,
+    /// How many screens of apps the page has been turned by: a screen holds
+    /// what fits, and the list is read a screen at a time.
+    pub app_page: usize,
+    /// The screen of system apps the page shows.
+    pub sys_page: usize,
+    /// What the search field is looking through, which the page it was opened
+    /// from decides.
+    pub search_scope: SearchScope,
     /// A copy or a move waiting to be told where it goes: the phone or the
     /// drive, asked before the folder it lands in is walked to.
     pub place_ask: Option<crate::app::FileOp>,
@@ -346,6 +371,12 @@ impl Default for State {
             updates: true,
             modules: None,
             module_at: None,
+            apps: None,
+            app_at: None,
+            sys_apps: None,
+            app_page: 0,
+            sys_page: 0,
+            search_scope: SearchScope::Features,
             place_ask: None,
             systems: None,
             system_pick: None,
@@ -516,6 +547,11 @@ impl State {
     /// The modules read for the page, or why they could not be.
     pub fn set_modules(&mut self, rows: Result<Vec<ModuleRow>, String>) {
         self.modules = Some(rows);
+    }
+
+    /// The apps read for the page, or why they could not be.
+    pub fn set_apps(&mut self, rows: Result<Vec<crate::app::dataapp::DataApp>, String>) {
+        self.apps = Some(rows);
     }
 
     pub fn offers(&self, screen: Screen) -> bool {

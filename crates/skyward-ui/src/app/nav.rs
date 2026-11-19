@@ -279,6 +279,28 @@ impl App {
                 self.state.modules = None;
                 vec![Effect::ReadModules]
             }
+            // The apps are read once and kept: coming back to the page shows
+            // what was read rather than walking every folder again, which
+            // takes a while on a phone with a hundred of them. A reading that
+            // failed is tried again, since it says nothing about the list.
+            Screen::DataApps => {
+                self.state.app_page = 0;
+                if matches!(self.state.apps, Some(Ok(_))) {
+                    Vec::new()
+                } else {
+                    vec![Effect::ReadDataApps]
+                }
+            }
+            // What the system's own partitions hold is read when the page is
+            // first opened, and not before: it is only ever looked at.
+            Screen::SystemApps => {
+                self.state.sys_page = 0;
+                if self.state.sys_apps.is_none() {
+                    vec![Effect::ReadSystemApps]
+                } else {
+                    Vec::new()
+                }
+            }
             Screen::Filesystems => vec![Effect::ReadFilesystems],
             Screen::Slot | Screen::Reboot => vec![Effect::ReadSlots],
             Screen::Systems => vec![Effect::ReadSystems],

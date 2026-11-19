@@ -1,3 +1,4 @@
+use crate::appread;
 use crate::backup;
 use crate::decrypt::{self, Decryptor};
 use crate::fetch;
@@ -1234,6 +1235,10 @@ struct Pages<'a> {
     worker: Option<filework::Worker>,
     /// Giving the data partition's files their SELinux labels under way.
     relabeler: Option<filework::Worker>,
+    /// The apps in the data partition being read, or the system's own: the
+    /// page is drawn and turned while they come, and each name is filled in
+    /// as it is read.
+    app_reader: Option<appread::Reader>,
     /// Backing up or restoring under way.
     backuper: Option<backup::Worker>,
     /// An update's merge followed: one the recovery found under way, which
@@ -1495,6 +1500,7 @@ impl<'a> Pages<'a> {
             part_worker: None,
             worker: None,
             relabeler: None,
+            app_reader: None,
             backuper: None,
             merger: None,
             systems_worker,
@@ -1754,6 +1760,7 @@ impl<'a> Pages<'a> {
         self.installer_told(now)?;
         self.eraser_told(now)?;
         self.files_told(now)?;
+        self.apps_told();
         self.relabel_told(now);
         self.parts_told(now)?;
         self.backup_told(now);
@@ -1969,6 +1976,9 @@ impl<'a> Pages<'a> {
             fds.push(w.fd());
         }
         if let Some(r) = &self.relabeler {
+            fds.push(r.fd());
+        }
+        if let Some(r) = &self.app_reader {
             fds.push(r.fd());
         }
         if let Some(b) = &self.backuper {
@@ -2230,6 +2240,41 @@ impl Pages<'_> {
             }
         }
         Ok(())
+    }
+
+    /// What reading the apps on the phone told: the list itself, then each
+    /// name as it is read out of the app's manifest.
+    fn apps_told(&mut self) {
+        let (told, ended) = match &self.app_reader {
+            Some(reader) => (reader.events(), reader.ended()),
+            None => return,
+        };
+        let mut heard = false;
+        for ev in told {
+            match ev {
+                appread::Event::Folders(apps) => {
+                    self.app.set_apps(Ok(apps));
+                    heard = true;
+                }
+                appread::Event::System(apps) => {
+                    self.app.set_sys_apps(apps);
+                    heard = true;
+                }
+                appread::Event::Name(at, label) => {
+                    self.app.data_app_enriched(at, label);
+                    heard = true;
+                }
+            }
+        }
+        // The names come a batch at a time, and one redraw a batch is enough:
+        // redrawing on each would hold the loop that takes the touches for as
+        // long as the batch lasts.
+        if heard {
+            self.app.refresh();
+        }
+        if ended {
+            self.app_reader = None;
+        }
     }
 
     /// What giving the data partition's files their labels told.
@@ -3019,6 +3064,36 @@ impl Pages<'_> {
             }
             Effect::Cancel => self.cancel_install(now)?,
             Effect::ReadMounts => self.app.set_mounts(self.mounts()),
+            // The apps are read on a thread of their own: the page is drawn
+            // and turned while they come, and the list fills in as it does.
+            // A reading already under way is let go first, since only one is
+            // taken in at a time.
+            Effect::ReadDataApps => {
+                self.app_reader = None;
+                self.app.set_apps_pending();
+                self.app_reader = Some(appread::Reader::start_data()?);
+            }
+            Effect::ReadSystemApps => {
+                self.app_reader = None;
+                self.app_reader = Some(appread::Reader::start_system()?);
+            }
+            Effect::DataAppRemove(package, dir) => {
+                match appread::remove(&package, &dir) {
+                    Ok(()) => {
+                        skyward_sys::kmsg(&format!("the app {package} is off, from {dir}"))?;
+                        self.app.report(&format!("{package}: uninstalled"), monotonic_ms());
+                    }
+                    Err(e) => {
+                        skyward_sys::kmsg(&format!("{package} is not removed: {e:#}"))?;
+                        self.app.report(&format!("not uninstalled: {e:#}"), monotonic_ms());
+                    }
+                }
+                // The list is read again so that what was taken off is gone
+                // from it. The page goes on showing the one it has while the
+                // reading runs, rather than going blank under the finger.
+                self.app_reader = None;
+                self.app_reader = Some(appread::Reader::start_data()?);
+            }
             Effect::ReadModules => {
                 let rows = read_modules();
                 self.app.set_modules(rows);

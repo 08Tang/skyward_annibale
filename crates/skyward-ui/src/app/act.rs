@@ -1,4 +1,4 @@
-//! What a control does once it is tapped, typed on or swiped.
+﻿//! What a control does once it is tapped, typed on or swiped.
 
 use super::*;
 
@@ -14,6 +14,10 @@ impl App {
                     self.state.picking = false;
                 }
                 if s == Screen::Search && self.screen() == Screen::Home {
+                    // The bar on the home page looks through the whole of
+                    // what the phone offers, whatever page the field was last
+                    // opened from.
+                    self.state.search_scope = SearchScope::Features;
                     // The bar moves up from where it stands unfolded: a
                     // page easing there for the keys gets there at once.
                     if let Some((rest, _)) = self.seek.take() {
@@ -793,6 +797,32 @@ impl App {
                 self.state.module_at = Some(k);
                 return self.act(Action::Open(Screen::ModuleInfo), now);
             }
+            // The apps page shows a screen at a time: turning it is only a
+            // change of which screen, and the page redraws.
+            Action::AppPage(by) => {
+                let page = self.state.app_page as i32 + by;
+                self.state.app_page = page.max(0) as usize;
+                self.refresh();
+                return Vec::new();
+            }
+            Action::SysPage(by) => {
+                let page = self.state.sys_page as i32 + by;
+                self.state.sys_page = page.max(0) as usize;
+                self.refresh();
+                return Vec::new();
+            }
+            Action::DataAppOpen(k) => {
+                self.state.app_at = Some(k);
+                return self.act(Action::Open(Screen::DataAppInfo), now);
+            }
+            // The search page is opened to look through one page's entries:
+            // the query is cleared, and the page it was opened from says what
+            // it is looking through.
+            Action::SearchApps | Action::SearchModules => {
+                self.state.search_scope = if matches!(action, Action::SearchApps) { SearchScope::Apps } else { SearchScope::Modules };
+                self.state.search.clear();
+                return self.act(Action::Open(Screen::Search), now);
+            }
             // 标记删除（或取消标记）：KSU/Magisk 都是看模块目录里有没有
             // `remove` 文件，有就在下次启动时清掉。
             Action::ModuleRemove(k) => {
@@ -915,8 +945,22 @@ impl App {
             Cap::Show(layer) => self.state.layer = layer,
             Cap::Enter => match self.screen() {
                 Screen::Search => {
-                    if let Some(first) = search::find_on(&self.state.search, l, |screen| self.state.offers(screen)).first() {
-                        return self.act(Action::Open(first.screen), now);
+                    let query = self.state.search.trim().to_lowercase();
+                    match self.state.search_scope {
+                        SearchScope::Features => {
+                            if let Some(first) = search::find_on(&self.state.search, l, |screen| self.state.offers(screen)).first() {
+                                return self.act(Action::Open(first.screen), now);
+                            }
+                        }
+                        // Looking through a page's entries, the first that
+                        // answers is the one opened.
+                        scope => {
+                            let Some(first) = self.first_match(scope, &query) else { return Vec::new() };
+                            return match scope {
+                                SearchScope::Apps => self.act(Action::DataAppOpen(first), now),
+                                _ => self.act(Action::ModuleOpen(first), now),
+                            };
+                        }
                     }
                 }
                 // Return starts the download, or stops the one under way.
@@ -1081,6 +1125,17 @@ impl App {
             Confirm::DeleteBackup => {
                 let (entry, _) = self.state.restore.as_ref().expect("the restore page shows a backup");
                 fx.push(Effect::DeleteBackup { place: entry.place, name: entry.name.clone() });
+            }
+            // The app is taken off once the swipe has agreed to it: its folder
+            // in the data partition, and what it kept there.
+            Confirm::DeleteApp => {
+                if let Some(at) = self.state.app_at {
+                    if let Some(Ok(list)) = &self.state.apps {
+                        if let Some(a) = list.get(at) {
+                            fx.push(Effect::DataAppRemove(a.package.clone(), a.dir.clone()));
+                        }
+                    }
+                }
             }
             Confirm::Slot => match (&self.state.boot_slots, self.state.next_slot) {
                 (Some(Ok(slots)), Some(pick)) if pick != slots.active => fx.push(Effect::SetSlot(pick)),
