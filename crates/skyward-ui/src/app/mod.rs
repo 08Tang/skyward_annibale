@@ -372,10 +372,12 @@ pub enum Action {
     /// Open the module at this place in the list.
     ModuleOpen(usize),
     /// Turn the apps page by this many screens: a negative count goes back.
-    AppPage(i32),
+    /// The apps page turned to the screen at this place in the list.
+    AppPage(usize),
     /// Turn the system apps page by this many screens: a negative count goes
     /// back.
-    SysPage(i32),
+    /// The system apps page turned to the screen at this place in the list.
+    SysPage(usize),
     /// Open the app at this place in the list.
     DataAppOpen(usize),
     /// Open the search page to look through the apps.

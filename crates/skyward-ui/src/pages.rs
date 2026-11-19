@@ -2718,7 +2718,7 @@ fn rows_that_fit(t: &Theme, f: &Fonts, top: f32, sample: &Row) -> (usize, f32) {
 /// put the one tapped after a turn under the finger that had just turned the
 /// page, and the page would run back and forth.
 #[allow(clippy::too_many_arguments)]
-fn pager(t: &Theme, f: &Fonts, c: &mut Canvas, out: &mut Vec<Hit>, l: Lang, y: f32, page: usize, pages: usize, turn: fn(i32) -> Action) {
+fn pager(t: &Theme, f: &Fonts, c: &mut Canvas, out: &mut Vec<Hit>, l: Lang, y: f32, page: usize, pages: usize, turn: fn(usize) -> Action) {
     let ph = t.m.dp(widgets::PILL_DP);
     if pages <= 1 {
         let only = l.pick(["只有一页", "只有一頁", "One page"]);
@@ -2741,7 +2741,7 @@ fn pager(t: &Theme, f: &Fonts, c: &mut Canvas, out: &mut Vec<Hit>, l: Lang, y: f
     // The right third of the screen turns the page on: a finger that lands a
     // little wide still turns it.
     if page + 1 < pages {
-        out.push(Hit { rect: Rect::new(t.m.w as f32 * 0.66, y - t.m.dp(12.0), t.m.w as f32 * 0.34 - t.m.margin, ph + t.m.dp(24.0)), action: turn(1) });
+        out.push(Hit { rect: Rect::new(t.m.w as f32 * 0.66, y - t.m.dp(12.0), t.m.w as f32 * 0.34 - t.m.margin, ph + t.m.dp(24.0)), action: turn(page + 1) });
     }
     if page > 0 {
         let wd = widgets::pill(c, t, f, x_prev, y, back, t.pal.search, t.pal.text);
@@ -2749,7 +2749,7 @@ fn pager(t: &Theme, f: &Fonts, c: &mut Canvas, out: &mut Vec<Hit>, l: Lang, y: f
         // on.
         let left = x_prev - t.m.dp(16.0);
         let right = (x_prev + wd + t.m.dp(8.0)).min(t.m.w as f32 * 0.62);
-        out.push(Hit { rect: Rect::new(left, y - t.m.dp(10.0), (right - left).max(wd), ph + t.m.dp(20.0)), action: turn(-1) });
+        out.push(Hit { rect: Rect::new(left, y - t.m.dp(10.0), (right - left).max(wd), ph + t.m.dp(20.0)), action: turn(page - 1) });
     } else {
         widgets::pill(c, t, f, x_prev, y, back, t.pal.search, faint);
     }

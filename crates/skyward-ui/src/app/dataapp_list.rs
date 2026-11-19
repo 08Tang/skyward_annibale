@@ -137,12 +137,26 @@ mod tests {
     fn a_page_turned_goes_nowhere_below_the_first_screen() {
         let (f, i) = (fonts(), info());
         let mut app = page(vec![app("com.example.one", "One", false)]);
-        // One app is one screen: there is nowhere back to go, and turning on
-        // moves nothing.
-        assert!(tap(&mut app, &f, &i, Action::AppPage(-1)).is_empty());
+        // One app is one screen: the page it draws has no way on, and the
+        // screen it stands on is the first.
         assert_eq!(app.state.app_page, 0);
-        assert!(tap(&mut app, &f, &i, Action::AppPage(1)).is_empty());
+        assert!(app.frame(&f, &i).hits.iter().all(|h| !matches!(h.action, Action::AppPage(_))), "nowhere to turn to");
+    }
+
+    #[test]
+    fn a_page_is_told_where_to_go_rather_than_by_how_much() {
+        let (f, i) = (fonts(), info());
+        let mut app = page((0..40).map(|k| app(&format!("com.example.a{k}"), &format!("A{k}"), false)).collect());
+        // A screen holds fewer than forty, so there is a page on.
+        assert!(app.frame(&f, &i).hits.iter().any(|h| matches!(h.action, Action::AppPage(1))));
+        tap(&mut app, &f, &i, Action::AppPage(1));
         assert_eq!(app.state.app_page, 1);
+        // The list grows shorter than the page the owner stands on -- an app
+        // taken off it -- and the page still draws: the page it goes back to
+        // is the last one there is, not one past the end.
+        app.state.apps = Some(Ok(vec![app("com.example.one", "One", false)]));
+        app.refresh();
+        assert!(app.frame(&f, &i).hits.iter().all(|h| !matches!(h.action, Action::AppPage(_))), "one screen, nowhere to turn");
     }
 
     #[test]

@@ -798,16 +798,17 @@ impl App {
                 return self.act(Action::Open(Screen::ModuleInfo), now);
             }
             // The apps page shows a screen at a time: turning it is only a
-            // change of which screen, and the page redraws.
-            Action::AppPage(by) => {
-                let page = self.state.app_page as i32 + by;
-                self.state.app_page = page.max(0) as usize;
+            // change of which screen, and the page redraws. The screen to turn
+            // to is given outright rather than as a step, so that a list that
+            // has grown shorter -- an app taken off it -- cannot leave the
+            // page out past the end of it.
+            Action::AppPage(to) => {
+                self.state.app_page = to;
                 self.refresh();
                 return Vec::new();
             }
-            Action::SysPage(by) => {
-                let page = self.state.sys_page as i32 + by;
-                self.state.sys_page = page.max(0) as usize;
+            Action::SysPage(to) => {
+                self.state.sys_page = to;
                 self.refresh();
                 return Vec::new();
             }
