@@ -125,9 +125,8 @@ fn folders() -> Vec<DataApp> {
         // A folder whose name begins `~~` holds the ones that were replaced
         // rather than removed; what is in it is what the phone runs.
         if entry.file_name().to_string_lossy().starts_with("~~") {
-            if let Ok(inner) = std::fs::read_dir(&path) {
-                dirs.extend(inner.flatten().map(|e| e.path()).filter(|p| p.is_dir()));
-            }
+            let inner = std::fs::read_dir(&path).into_iter().flatten().flatten();
+            dirs.extend(inner.map(|e| e.path()).filter(|p| p.is_dir()));
         } else {
             dirs.push(path);
         }

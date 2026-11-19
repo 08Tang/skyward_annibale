@@ -1130,12 +1130,11 @@ impl App {
             // The app is taken off once the swipe has agreed to it: its folder
             // in the data partition, and what it kept there.
             Confirm::DeleteApp => {
-                if let Some(at) = self.state.app_at {
-                    if let Some(Ok(list)) = &self.state.apps {
-                        if let Some(a) = list.get(at) {
-                            fx.push(Effect::DataAppRemove(a.package.clone(), a.dir.clone()));
-                        }
-                    }
+                if let Some(at) = self.state.app_at
+                    && let Some(Ok(list)) = &self.state.apps
+                    && let Some(a) = list.get(at)
+                {
+                    fx.push(Effect::DataAppRemove(a.package.clone(), a.dir.clone()));
                 }
             }
             Confirm::Slot => match (&self.state.boot_slots, self.state.next_slot) {

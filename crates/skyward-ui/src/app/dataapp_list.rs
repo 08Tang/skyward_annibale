@@ -69,7 +69,7 @@ mod tests {
     use crate::app::testing::*;
     use crate::app::{Action, App, Confirm, Effect, Screen, SearchScope};
 
-    fn app(package: &str, label: &str, system: bool) -> DataApp {
+    fn one_app(package: &str, label: &str, system: bool) -> DataApp {
         DataApp {
             package: package.into(),
             dir: if system { format!("/mnt/system/system/app/{package}") } else { format!("/data/app/{package}-hash") },
@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn a_search_finds_an_app_by_its_name_or_its_package() {
         let mut app_state = App::new(Screen::DataApps, W, H, PPD);
-        app_state.state.apps = Some(Ok(vec![app("com.example.one", "One", false), app("com.example.two", "Two", false)]));
+        app_state.state.apps = Some(Ok(vec![one_app("com.example.one", "One", false), one_app("com.example.two", "Two", false)]));
         assert_eq!(app_state.first_match(SearchScope::Apps, "two"), Some(1), "by name");
         assert_eq!(app_state.first_match(SearchScope::Apps, "example.two"), Some(1), "by package");
         assert_eq!(app_state.first_match(SearchScope::Apps, "one"), Some(0));
@@ -102,14 +102,14 @@ mod tests {
     #[test]
     fn a_search_with_nothing_typed_finds_nothing() {
         let mut app_state = App::new(Screen::DataApps, W, H, PPD);
-        app_state.state.apps = Some(Ok(vec![app("com.example.one", "One", false)]));
+        app_state.state.apps = Some(Ok(vec![one_app("com.example.one", "One", false)]));
         assert_eq!(app_state.first_match(SearchScope::Apps, ""), None);
     }
 
     #[test]
     fn a_name_read_for_an_app_lands_in_the_list_where_it_belongs() {
         let mut app_state = App::new(Screen::DataApps, W, H, PPD);
-        app_state.state.apps = Some(Ok(vec![app("com.example.one", "com.example.one", false)]));
+        app_state.state.apps = Some(Ok(vec![one_app("com.example.one", "com.example.one", false)]));
         app_state.data_app_enriched(0, "One".into());
         let Some(Ok(list)) = &app_state.state.apps else { panic!("the list is still there") };
         assert_eq!(list[0].label, "One");
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn a_name_for_an_app_that_is_not_there_is_put_nowhere() {
         let mut app_state = App::new(Screen::DataApps, W, H, PPD);
-        app_state.state.apps = Some(Ok(vec![app("com.example.one", "One", false)]));
+        app_state.state.apps = Some(Ok(vec![one_app("com.example.one", "One", false)]));
         // Out of the list, and with no list at all: neither is a panic.
         app_state.data_app_enriched(9, "Nine".into());
         app_state.state.apps = None;
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn the_page_lists_what_was_read_and_opens_one() {
         let (f, i) = (fonts(), info());
-        let mut app = page(vec![app("com.example.one", "One", false), app("com.example.two", "Two", false)]);
+        let mut app = page(vec![one_app("com.example.one", "One", false), one_app("com.example.two", "Two", false)]);
         assert!(tap(&mut app, &f, &i, Action::DataAppOpen(0)).is_empty());
         assert_eq!(app.screen(), Screen::DataAppInfo);
         assert_eq!(app.state.app_at, Some(0));
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn a_page_turned_goes_nowhere_below_the_first_screen() {
         let (f, i) = (fonts(), info());
-        let mut app = page(vec![app("com.example.one", "One", false)]);
+        let mut app = page(vec![one_app("com.example.one", "One", false)]);
         // One app is one screen: the page it draws has no way on, and the
         // screen it stands on is the first.
         assert_eq!(app.state.app_page, 0);
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn a_page_is_told_where_to_go_rather_than_by_how_much() {
         let (f, i) = (fonts(), info());
-        let mut app = page((0..40).map(|k| app(&format!("com.example.a{k}"), &format!("A{k}"), false)).collect());
+        let mut app = page((0..40).map(|k| one_app(&format!("com.example.a{k}"), &format!("A{k}"), false)).collect());
         // A screen holds fewer than forty, so there is a page on.
         assert!(app.frame(&f, &i).hits.iter().any(|h| matches!(h.action, Action::AppPage(1))));
         tap(&mut app, &f, &i, Action::AppPage(1));
@@ -155,7 +155,7 @@ mod tests {
         // The list grows shorter than the page the owner stands on -- an app
         // taken off it -- and the page still draws: the page it goes back to
         // is the last one there is, not one past the end.
-        app.state.apps = Some(Ok(vec![app("com.example.one", "One", false)]));
+        app.state.apps = Some(Ok(vec![one_app("com.example.one", "One", false)]));
         app.refresh();
         assert!(app.frame(&f, &i).hits.iter().all(|h| !matches!(h.action, Action::AppPage(_))), "one screen, nowhere to turn");
     }
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn taking_an_app_off_asks_for_the_swipe_and_then_removes_it() {
         let (f, i) = (fonts(), info());
-        let mut app = page(vec![app("com.example.one", "One", false)]);
+        let mut app = page(vec![one_app("com.example.one", "One", false)]);
         tap(&mut app, &f, &i, Action::DataAppOpen(0));
         // The swipe is on the page: the app is not taken off until it is made.
         assert_eq!(
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn an_app_in_the_systems_own_partitions_is_not_taken_off_here() {
         let (f, i) = (fonts(), info());
-        let mut app = page(vec![app("com.android.settings", "Settings", true)]);
+        let mut app = page(vec![one_app("com.android.settings", "Settings", true)]);
         tap(&mut app, &f, &i, Action::DataAppOpen(0));
         assert!(app.frame(&f, &i).hits.iter().all(|h| !matches!(h.action, Action::Confirm(Confirm::DeleteApp))), "nothing to swipe");
     }
@@ -193,7 +193,7 @@ mod tests {
     fn the_system_apps_page_lists_them_and_opens_nothing() {
         let (f, i) = (fonts(), info());
         let mut app = App::new(Screen::SystemApps, W, H, PPD);
-        app.state.sys_apps = Some(vec![app("com.android.settings", "Settings", true)]);
+        app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
         app.refresh();
         assert!(app.frame(&f, &i).hits.iter().all(|h| !matches!(h.action, Action::DataAppOpen(_))), "a system app opens nothing");
     }
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn a_search_looks_through_what_the_page_it_was_opened_from_holds() {
         let (f, i) = (fonts(), info());
-        let mut app = page(vec![app("com.example.one", "One", false), app("com.example.two", "Two", false)]);
+        let mut app = page(vec![one_app("com.example.one", "One", false), one_app("com.example.two", "Two", false)]);
         tap(&mut app, &f, &i, Action::SearchApps);
         assert_eq!(app.screen(), Screen::Search);
         assert_eq!(app.state.search_scope, SearchScope::Apps);

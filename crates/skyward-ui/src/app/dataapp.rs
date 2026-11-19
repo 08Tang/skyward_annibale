@@ -224,12 +224,11 @@ pub fn resolve_string(arsc: &[u8], id: u32) -> Option<String> {
                                     (arsc.get(e + esize + 3).copied().unwrap_or(0), u32_at(arsc, e + esize + 4)?)
                                 };
                                 // 0x03 is an index into the string pool.
-                                if data_kind == 0x03 {
-                                    if let Some(text) = pool_at(arsc, global, data as usize) {
-                                        if !text.is_empty() {
-                                            return Some(text);
-                                        }
-                                    }
+                                if data_kind == 0x03
+                                    && let Some(text) = pool_at(arsc, global, data as usize)
+                                    && !text.is_empty()
+                                {
+                                    return Some(text);
                                 }
                             }
                         }
@@ -259,10 +258,10 @@ pub fn size_of(dir: &Path) -> u64 {
     let mut total = 0;
     if let Ok(list) = std::fs::read_dir(dir) {
         for entry in list.flatten() {
-            if let Ok(meta) = entry.metadata() {
-                if meta.is_file() {
-                    total += meta.len();
-                }
+            if let Ok(meta) = entry.metadata()
+                && meta.is_file()
+            {
+                total += meta.len();
             }
         }
     }
