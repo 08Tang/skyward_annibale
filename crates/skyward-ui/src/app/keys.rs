@@ -299,6 +299,20 @@ mod tests {
     use crate::app::testing::*;
 
     #[test]
+    fn diagnose_the_home_page_walk() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        app.frame(&f, &i);
+        println!("DIAG max_scroll={}", app.max_scroll());
+        println!("DIAG band={:?}", app.band(0.0));
+        for step in 0..24 {
+            press(&mut app, Key::VolumeDown, 0);
+            let lit_now = lit(&mut app, &f, &i);
+            println!("DIAG step={step} lit={lit_now:?} keys={} resting={} top={}", app.keys, app.resting(), app.top().1);
+        }
+    }
+
+    #[test]
     fn the_keys_reach_the_last_row_of_a_home_page_grown_by_an_update_notice() {
         let f = fonts();
         let i = DeviceInfo { snapshot: SnapshotState::Snapshotted, ..info() };
