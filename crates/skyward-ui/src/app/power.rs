@@ -281,9 +281,9 @@ mod tests {
     #[test]
     fn the_dim_level_sits_below_the_brightness_set() {
         assert_eq!(dim_level(1.0), DIM_CEILING);
-        assert_eq!(dim_level(0.06), MIN_BRIGHTNESS);
-        assert_eq!(dim_level(0.03), MIN_BRIGHTNESS);
-        assert_eq!(dim_level(0.01), 0.01, "never brighter than the level set");
+        assert_eq!(dim_level(0.06), 0.02, "the drop below the brightness set, above the floor");
+        assert_eq!(dim_level(0.03), MIN_BRIGHTNESS, "no lower than the slider's floor");
+        assert_eq!(dim_level(0.005), 0.005, "never brighter than the level set");
         assert_eq!(dim_span(15_000), 3000);
         assert_eq!(dim_span(120_000), DIM_MS);
     }

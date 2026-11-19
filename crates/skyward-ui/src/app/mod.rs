@@ -941,8 +941,10 @@ const DIM_MS: u64 = 7000;
 /// set is.
 const DIM_DROP: f32 = 0.04;
 const DIM_CEILING: f32 = 0.05;
-/// The lowest brightness the slider sets.
-const MIN_BRIGHTNESS: f32 = 0.02;
+/// The lowest brightness the slider sets: a hundredth of the panel's normal
+/// maximum. Two hundredths left the K90's panel bright enough to read by in
+/// a dark room, at a level the panel's own doze mode rests well under.
+const MIN_BRIGHTNESS: f32 = 0.01;
 /// How much of a slider's span a volume key moves it.
 const SLIDER_STEP: f32 = 0.1;
 /// Where both sliders start: one step of the keys from their left end.

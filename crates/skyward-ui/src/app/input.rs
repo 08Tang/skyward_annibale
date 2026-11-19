@@ -709,7 +709,7 @@ impl App {
     fn shade_slider(&mut self, which: Slider, track: Rect, x: f32) {
         let level = ((x - track.x) / track.w).clamp(0.0, 1.0);
         match which {
-            Slider::Brightness => self.state.brightness = level.max(0.02),
+            Slider::Brightness => self.state.brightness = level.max(MIN_BRIGHTNESS),
             Slider::Vibration => self.state.vibration = level,
         }
         self.dirty = true;
