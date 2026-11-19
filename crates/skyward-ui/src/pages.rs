@@ -2695,19 +2695,18 @@ fn filtered<'a>(s: &'a State, scope: SearchScope, query: &str) -> (Vec<Row<'a>>,
     (rows, acts)
 }
 
-/// How many rows of `sample` fit on a page whose content starts at `top`, and
-/// the height one of them takes.
+/// How many rows of `sample` fit on a page whose content starts at `top`.
 ///
 /// Measured rather than counted from a number: a row with a subtitle under
 /// its name is taller than one without, and the subtitle wraps, so the count
 /// has to come from the row the page actually draws.
-fn rows_that_fit(t: &Theme, f: &Fonts, top: f32, sample: &Row) -> (usize, f32) {
+fn rows_that_fit(t: &Theme, f: &Fonts, top: f32, sample: &Row) -> usize {
     let probe = Canvas::band(t.m.w, 1, 0..1, 0..t.m.w, t.pal.bg);
     let h = widgets::one_height(&probe, t, f, sample);
     // Half a row is left over at the foot, so that the last one is not cut in
     // half by the bottom margin.
     let room = t.m.h as f32 - top - t.m.margin * 2.0 - h / 2.0;
-    (((room / h).floor() as usize).max(1), h)
+    ((room / h).floor() as usize).max(1)
 }
 
 /// The pager a page turned a screen at a time draws at its top right: the
@@ -2774,7 +2773,7 @@ pub fn data_apps(cx: &Ctx) -> Frame {
     let mut out = Vec::new();
     let mut sample = Row::new("Ag").icon(PURPLE, Icon::Layers);
     sample.sub = Some("com.example.app");
-    let (per, _) = rows_that_fit(t, f, top, &sample);
+    let per = rows_that_fit(t, f, top, &sample);
     let mut rows: Vec<Row> = Vec::new();
     let mut acts: Vec<Action> = Vec::new();
     let mut pages = 1usize;
@@ -2835,7 +2834,7 @@ pub fn system_apps(cx: &Ctx) -> Frame {
     let mut c = page(cx);
     let mut sample = Row::new("Ag").icon(SLATE, Icon::Layers);
     sample.sub = Some("/system/app");
-    let (per, _) = rows_that_fit(t, f, top, &sample);
+    let per = rows_that_fit(t, f, top, &sample);
     let mut rows: Vec<Row> = Vec::new();
     let mut pages = 1usize;
     match &s.sys_apps {
