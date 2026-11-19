@@ -1,11 +1,15 @@
 name: Preview
 
-# The preview branch carries pages brought over from other phones' builds
-# before they are ready for `main`. It is checked by compiling alone: the
-# workspace as it builds on the computer, the recovery as it builds for the
-# phone, and the recovery packed into an image that can be flashed. No
-# linting and no tests, so that a page half brought over still says whether
-# it builds and what it builds into.
+# The preview branch carries changes before they are ready for `main`. It is
+# held to the same linting and testing `main` is, so that a change that
+# passes here does not fail the moment it lands there: compiling alone says
+# nothing about a test the change broke, and a test that passes only because
+# `main` is where it runs is worse than no check at all. What it does not do
+# is hold the lock file, which the branch may bring up to date.
+#
+# The workspace is compiled, linted and tested on the computer and on the
+# phone; the recovery is then built for the phone and packed into an image
+# that can be flashed.
 on:
   push:
     branches: ["preview", "preview/**"]
@@ -22,6 +26,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check:
+    name: Lint and test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # `main` builds with --locked, so a lock file out of date is a failure
+      # there and nowhere else unless it is caught here: every command below
+      # would quietly bring the file up to date and pass. This brings it up to
+      # date too, then says so, so that the commit carrying it can be made
+      # before the branch lands rather than after.
+      - name: Check that the lock file is committed as it resolves
+        run: |
+          cargo metadata --format-version 1 > /dev/null
+          git diff --exit-code -- Cargo.lock
+      - name: Lint what runs on the computer
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      # The vendored QR generator's own examples are written for its own
+      # project, where they are compiled with it in scope; here they are
+      # neither this project's code nor its tests, so they are left out.
+      - name: Test
+        run: cargo test --workspace --exclude qrcodegen
+      - name: Lint what runs on the phone
+        run: cargo ndk -t arm64-v8a --platform 30 clippy --workspace --all-targets -- -D warnings
+
   compile:
     name: Compile
     runs-on: ubuntu-24.04
@@ -35,12 +64,13 @@ jobs:
       - name: Compile what runs on the phone
         run: cargo ndk -t arm64-v8a --platform 30 check --workspace --all-targets
 
-  # `check` only type-checks; nothing is linked and no image comes out. This
-  # job does the real build, so that a preview says whether it is a recovery
-  # that runs, not only one that type-checks.
+  # Neither of the jobs above links anything or makes an image: one tests and
+  # lints, the other only type-checks. This job does the real build, so that a
+  # preview says whether it is a recovery that runs, not only one that
+  # type-checks.
   recovery:
     name: Recovery for annibale
-    needs: compile
+    needs: [check, compile]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
