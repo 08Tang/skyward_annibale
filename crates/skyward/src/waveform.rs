@@ -5,14 +5,27 @@
 use skyward_config::Strength;
 use std::f32::consts::{FRAC_PI_2, TAU};
 
-/// The rate a made click's samples are played at, the lowest the driver
-/// takes: some fifty samples to each swing of the motor.
-pub(crate) const RATE: u32 = 8000;
+/// The rate a made click's samples are played at: 24000 a second, as the
+/// ticks are. A motor swinging at 1780 Hz gets thirteen samples to each
+/// swing at this rate, where 8000 gave it four and a half -- too few for
+/// the wave to come out as anything but noise.
+pub(crate) const RATE: u32 = 24000;
 
-/// A made click: swings of the motor at its resonant frequency that drive
-/// it, then swings turned over that stop it, so that it does not ring on.
-const DRIVE_SWINGS: f32 = 2.0;
-const BRAKE_SWINGS: f32 = 1.5;
+/// How long a made click rings for, counted in time rather than in swings,
+/// so that a motor swinging slowly gets the same tap as a fast one. Two
+/// swings to drive it and one and a half to stop it came to twenty
+/// milliseconds on a motor at 172 Hz, which was felt; the same count on a
+/// motor at 1780 Hz came to two, which a finger does not notice at all.
+///
+/// 45 ms was felt but rang on into a rasping buzz: the motor is driven at
+/// its resonant frequency, and driven past a certain point its swing loses
+/// the wave and comes out as noise (2026-11-17). 22 ms is felt, and is a tap.
+const CLICK_MS: f32 = 22.0;
+
+/// The share of the click the motor is driven through, the rest being the
+/// swings turned over that stop it.
+const DRIVE_SHARE: f32 = 0.6;
+
 /// The ticks of the screen going off by the power key, as the phone's own
 /// system plays them on the 17 Ultra, whose motor swings at [`TICKS_HZ`]:
 /// two crisp ticks, the second lighter, each six half-swings at about one
@@ -40,11 +53,12 @@ pub(crate) fn share(strength: &Strength, position: f32) -> f32 {
     strength.lightest * (strength.strongest / strength.lightest).powf(position.clamp(0.0, 1.0))
 }
 
-/// A click's samples at [`RATE`] for a motor that swings at `hz`: whole
-/// swings that drive it, then swings turned over that stop it.
+/// A click's samples at [`RATE`] for a motor that swings at `hz`: swings of
+/// the motor at that frequency that drive it for the first [`DRIVE_SHARE`]
+/// of [`CLICK_MS`], then swings turned over that stop it.
 pub(crate) fn made(hz: f32) -> Vec<i8> {
-    let at = |swings: f32| (swings * RATE as f32 / hz).round() as usize;
-    let (drive, all) = (at(DRIVE_SWINGS), at(DRIVE_SWINGS + BRAKE_SWINGS));
+    let all = (CLICK_MS / 1000.0 * RATE as f32).round() as usize;
+    let drive = (all as f32 * DRIVE_SHARE).round() as usize;
     (0..all)
         .map(|i| {
             let wave = (TAU * hz * i as f32 / RATE as f32).sin() * f32::from(i8::MAX);
@@ -79,15 +93,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_made_click_drives_whole_swings_then_turns_over() {
-        let samples = made(172.4);
-        let drive = (DRIVE_SWINGS * RATE as f32 / 172.4).round() as usize;
-        assert_eq!(samples.len(), (3.5 * RATE as f32 / 172.4).round() as usize);
-        assert_eq!(samples[0], 0);
+    fn a_made_click_lasts_the_same_time_whatever_the_motor_swings_at() {
+        // Counted in time, not in swings: the same tap on every motor.
+        let all = (CLICK_MS / 1000.0 * RATE as f32).round() as usize;
+        assert_eq!(all, 528, "22 ms at 24000 a second");
+        for hz in [172.4, 235.0, 1780.0] {
+            assert_eq!(made(hz).len(), all, "the same tap at {hz} Hz");
+        }
+    }
+
+    #[test]
+    fn a_made_click_drives_its_share_then_turns_over() {
+        let hz = 172.4;
+        let samples = made(hz);
+        let all = samples.len();
+        let drive = (all as f32 * DRIVE_SHARE).round() as usize;
+        assert_eq!(all, 528, "22 ms at 24000 a second");
+        assert_eq!(drive, 317, "driven through 60% of it");
+        assert_eq!(samples[0], 0, "it starts at rest");
         assert_eq!(*samples.iter().max().unwrap(), i8::MAX);
-        let quarter = (RATE as f32 / 172.4 / 4.0).round() as usize;
-        assert!(samples[quarter] > 120, "it rises first");
-        assert!(samples[drive + quarter] < -120, "it falls first once turned over");
+        assert_eq!(*samples.iter().min().unwrap(), -i8::MAX);
+        // Driven, it swings the motor the way the wave says; turned over,
+        // it swings it the other way, which is what stops it.
+        let wave = |i: usize| (TAU * hz * i as f32 / RATE as f32).sin();
+        for i in [13, drive / 2, drive - 1] {
+            let want = (wave(i) * f32::from(i8::MAX)).round() as i8;
+            assert_eq!(samples[i], want, "driven at {i}");
+        }
+        for i in [drive, drive + 20, all - 1] {
+            let want = (-wave(i) * f32::from(i8::MAX)).round() as i8;
+            assert_eq!(samples[i], want, "turned over at {i}");
+        }
+        assert!(samples[drive - 1] > 100 && samples[drive] < -100, "it is turned over at the peak of a swing");
+        // Each swing of this motor gets 139 samples, where at 8000 it got
+        // 46: enough for the wave to come out rather than as a rasp.
+        let per_swing = RATE as f32 / hz;
+        assert!(per_swing > 100.0, "{per_swing} samples to a swing");
     }
 
     #[test]
