@@ -32,9 +32,11 @@ impl App {
     }
 
     /// The apps read for the page, or why they could not be.
+    ///
+    /// Nothing is redrawn here: the reading tells the list and then a name at
+    /// a time, and the caller redraws once when the batch is in.
     pub fn set_apps(&mut self, list: Result<Vec<DataApp>, String>) {
         self.state.set_apps(list);
-        self.refresh();
     }
 
     /// One app's name is read: put it in the list at `at`.
@@ -49,10 +51,9 @@ impl App {
     }
 
     /// The apps the system's own partitions hold are read: the page that only
-    /// looks at them shows this list.
+    /// looks at them shows this list. Nothing is redrawn here, as above.
     pub fn set_sys_apps(&mut self, list: Vec<DataApp>) {
         self.state.sys_apps = Some(list);
-        self.refresh();
     }
 
     /// The apps are being read: the page says so until they come.

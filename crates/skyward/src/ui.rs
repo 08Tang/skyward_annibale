@@ -3073,15 +3073,12 @@ impl Pages<'_> {
             Effect::ReadMounts => self.app.set_mounts(self.mounts()),
             // The apps are read on a thread of their own: the page is drawn
             // and turned while they come, and the list fills in as it does.
-            // A reading already under way is let go first, since only one is
-            // taken in at a time.
+            // Setting the reader lets go of the one before it, if there is one.
             Effect::ReadDataApps => {
-                self.app_reader = None;
                 self.app.set_apps_pending();
                 self.app_reader = Some(appread::Reader::start_data()?);
             }
             Effect::ReadSystemApps => {
-                self.app_reader = None;
                 self.app_reader = Some(appread::Reader::start_system()?);
             }
             Effect::DataAppRemove(package, dir) => {
@@ -3098,6 +3095,9 @@ impl Pages<'_> {
                 // The list is read again so that what was taken off is gone
                 // from it. The page goes on showing the one it has while the
                 // reading runs, rather than going blank under the finger.
+                // The reader is let go first: starting the next one while the
+                // last still holds its thread would leave two readings on the
+                // same folders.
                 self.app_reader = None;
                 self.app_reader = Some(appread::Reader::start_data()?);
             }
