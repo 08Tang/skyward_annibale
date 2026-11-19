@@ -111,13 +111,17 @@ impl App {
         }
         let to = if down {
             // Past the page's own: the rest of the page, then the bottom
-            // strip, then round.
+            // strip, then round. A page with a few pixels left to scroll has
+            // nowhere to go: its search bar settles back to the top, and
+            // scrolling would leave the light where it is for good.
             let past = || {
-                if scroll < max { To::Scroll } else { (0..n).find(|&k| docked(k)).map_or(To::Round, To::Spot) }
+                if self.room_below(scroll) { To::Scroll } else { (0..n).find(|&k| docked(k)).map_or(To::Round, To::Spot) }
             };
             match cur {
                 Some(i) if page(i) => (i + 1..n).find(|&k| page(k)).map_or_else(past, To::Spot),
-                Some(i) if docked(i) => (i + 1..n).find(|&k| docked(k)).map_or(if scroll < max { To::Scroll } else { To::Round }, To::Spot),
+                Some(i) if docked(i) => {
+                    (i + 1..n).find(|&k| docked(k)).map_or(if self.room_below(scroll) { To::Scroll } else { To::Round }, To::Spot)
+                }
                 Some(i) => (i + 1..n).find(|&k| held(k)).or_else(|| (0..n).find(|&k| from_top(k))).map_or_else(past, To::Spot),
                 None => (0..n).find(|&k| from_top(k)).map_or_else(past, To::Spot),
             }
@@ -125,12 +129,14 @@ impl App {
             // Before the page's own: the rest of the page, then the `<` and
             // the strip at the top, then round.
             let before = || {
-                if scroll > 0.0 { To::Scroll } else { (0..n).rev().find(|&k| held(k)).map_or(To::Round, To::Spot) }
+                if self.room_above(scroll) { To::Scroll } else { (0..n).rev().find(|&k| held(k)).map_or(To::Round, To::Spot) }
             };
             match cur {
                 Some(i) if page(i) => (0..i).rev().find(|&k| page(k)).map_or_else(before, To::Spot),
-                Some(i) if docked(i) => (0..i).rev().find(|&k| docked(k)).or_else(|| (0..n).rev().find(|&k| from_bottom(k))).map_or_else(before, To::Spot),
-                Some(i) => (0..i).rev().find(|&k| held(k)).map_or(if scroll > 0.0 { To::Scroll } else { To::Round }, To::Spot),
+                Some(i) if docked(i) => {
+                    (0..i).rev().find(|&k| docked(k)).or_else(|| (0..n).rev().find(|&k| from_bottom(k))).map_or_else(before, To::Spot)
+                }
+                Some(i) => (0..i).rev().find(|&k| held(k)).map_or(if self.room_above(scroll) { To::Scroll } else { To::Round }, To::Spot),
                 None => (0..n).rev().find(|&k| from_bottom(k)).map_or_else(before, To::Spot),
             }
         };
@@ -159,6 +165,30 @@ impl App {
             }
         }
         self.dirty = true;
+    }
+
+    /// Whether the page has anywhere to go further down from `scroll`, the
+    /// half screen the keys would take it being where it would land.
+    ///
+    /// A page with only a few pixels left is not scrolled: a search bar
+    /// part folded settles whole or not at all, so a half screen on from the
+    /// top comes back to the top, and the light would stay on its control
+    /// for good instead of going round.
+    fn room_below(&self, scroll: f32) -> bool {
+        let (top, bottom) = self.band(scroll);
+        let half = (bottom - top) / 2.0;
+        let target = (scroll + half).min(self.max_scroll());
+        let target = self.frame.as_ref().map_or(target, |fr| fr.settle(target));
+        target > scroll
+    }
+
+    /// Whether the page has anywhere to go further up from `scroll`.
+    fn room_above(&self, scroll: f32) -> bool {
+        let (top, bottom) = self.band(scroll);
+        let half = (bottom - top) / 2.0;
+        let target = (scroll - half).max(0.0);
+        let target = self.frame.as_ref().map_or(target, |fr| fr.settle(target));
+        target < scroll
     }
 
     /// Scroll the page half a screen down or up for the keys. The light
@@ -297,22 +327,6 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::testing::*;
-
-    #[test]
-    fn diagnose_the_home_page_walk() {
-        let (f, i) = (fonts(), info());
-        let mut app = App::new(Screen::Home, W, H, PPD);
-        app.frame(&f, &i);
-        println!("DIAG max_scroll={}", app.max_scroll());
-        println!("DIAG band={:?}", app.band(0.0));
-        let mut seen = format!("max_scroll={} band={:?}; ", app.max_scroll(), app.band(0.0));
-        for step in 0..20 {
-            press(&mut app, Key::VolumeDown, 0);
-            let lit_now = lit(&mut app, &f, &i);
-            seen.push_str(&format!("{step}:{lit_now:?}@{:.0} ", app.resting()));
-        }
-        panic!("DIAG {seen}");
-    }
 
     #[test]
     fn the_keys_reach_the_last_row_of_a_home_page_grown_by_an_update_notice() {
