@@ -305,11 +305,13 @@ mod tests {
         app.frame(&f, &i);
         println!("DIAG max_scroll={}", app.max_scroll());
         println!("DIAG band={:?}", app.band(0.0));
-        for step in 0..24 {
+        let mut seen = format!("max_scroll={} band={:?}; ", app.max_scroll(), app.band(0.0));
+        for step in 0..20 {
             press(&mut app, Key::VolumeDown, 0);
             let lit_now = lit(&mut app, &f, &i);
-            println!("DIAG step={step} lit={lit_now:?} keys={} resting={} top={}", app.keys, app.resting(), app.top().1);
+            seen.push_str(&format!("{step}:{lit_now:?}@{:.0} ", app.resting()));
         }
+        panic!("DIAG {seen}");
     }
 
     #[test]
