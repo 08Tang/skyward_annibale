@@ -2245,10 +2245,17 @@ impl Pages<'_> {
     /// What reading the apps on the phone told: the list itself, then each
     /// name as it is read out of the app's manifest.
     fn apps_told(&mut self) {
-        let (told, ended) = match &self.app_reader {
+        let (mut told, ended) = match &self.app_reader {
             Some(reader) => (reader.events(), reader.ended()),
             None => return,
         };
+        // The thread may have ended with names still in the pipe: those are
+        // taken before it is let go, or the last of them would never show.
+        if ended
+            && let Some(reader) = &self.app_reader
+        {
+            told.extend(reader.events());
+        }
         let mut heard = false;
         for ev in told {
             match ev {
