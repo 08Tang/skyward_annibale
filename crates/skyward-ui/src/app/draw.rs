@@ -416,7 +416,7 @@ impl App {
             fmt::data(l, &self.state.data).to_owned(),
             info.slot.map_or_else(|| "\u{2014}".to_owned(), |s| s.letter().to_owned()),
             info.battery.as_ref().map_or_else(|| "\u{2014}".to_owned(), |b| format!("{}%", b.level)),
-            info.battery.as_ref().and_then(|b| b.temp).map_or_else(|| "\u{2014}".to_owned(), |t| fmt::celsius(t)),
+            info.battery.as_ref().and_then(|b| b.temp).map_or_else(|| "\u{2014}".to_owned(), fmt::celsius),
         ];
         let caps = [
             l.pick(["数据", "資料", "Data"]),
@@ -482,7 +482,7 @@ impl App {
 
     /// What a tile is called on the sheet: the network's own name for the
     /// WLAN, and a word for each of the others.
-    fn shade_label<'a>(l: Lang, hit: ShadeHit, wlan: &'a str) -> &'a str {
+    fn shade_label(l: Lang, hit: ShadeHit, wlan: &str) -> &str {
         match hit {
             ShadeHit::Wlan => wlan,
             ShadeHit::Vibrate => l.pick(["震动", "震動", "Vibration"]),
