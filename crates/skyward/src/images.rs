@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
-use skyward_ui::app::{ImageEnd, ImageFile, ImageFlow, ImagePart};
+use skyward_ui::app::{ImageEnd, ImageFile};
 
 /// The folder images go in and are found in, in a place.
 pub const FOLDER: &str = "Skyward/images";
@@ -73,7 +73,7 @@ pub fn kept(folder: &Path) -> Result<Vec<ImageFile>> {
         }
         let (Some(partition), Some(sha256)) = (partition_of(&name), sum_of(&path)) else { continue };
         out.push(ImageFile { name, partition, path: path.to_string_lossy().into_owned(), sha256, size: meta.len(), made: meta.mtime() });    }
-    out.sort_by(|a, b| b.made.cmp(&a.made));
+    out.sort_by_key(|f| std::cmp::Reverse(f.made));
     Ok(out)
 }
 
@@ -100,8 +100,6 @@ pub enum Task {
     Export { part: Part, into: PathBuf },
     /// Write the image at `path` back over `part`, checked against `sha256`.
     Import { part: Part, path: PathBuf, sha256: String },
-    /// Delete the image at `path`, with the sidecar that holds its digest.
-    Delete { path: PathBuf },
 }
 
 pub enum Event {
@@ -113,7 +111,6 @@ pub enum Event {
 pub enum End {
     Exported(PathBuf),
     Imported(String),
-    Deleted(PathBuf),
     /// The image does not hold what it should: what was wanted, and what was
     /// read. Nothing was written.
     Mismatched { wanted: String, found: String },
@@ -137,7 +134,6 @@ impl Worker {
             let ended = match task {
                 Task::Export { part, into } => export(&part, &into, &tell, &stop).map(End::Exported),
                 Task::Import { part, path, sha256 } => import(&part, &path, &sha256, &tell, &stop).map(|()| End::Imported(part.name.clone())),
-                Task::Delete { path } => delete(&path).map(|()| End::Deleted(path)),
             };
             let end = match ended {
                 Ok(end) => end,
@@ -152,20 +148,12 @@ impl Worker {
         Ok(Worker { cancel, worker })
     }
 
-    pub fn fd(&self) -> std::os::unix::io::RawFd {
-        self.worker.fd()
-    }
-
     pub fn events(&self) -> Vec<Event> {
         self.worker.events()
     }
 
     pub fn stop(&self) {
         self.cancel.store(true, Ordering::Relaxed);
-    }
-
-    pub fn ended(&self) -> bool {
-        self.worker.ended()
     }
 }
 
@@ -303,21 +291,11 @@ pub fn image_name(partition: &str, when: &str) -> String {
     format!("{partition}-{when}.img")
 }
 
-/// The kinds of work, as the page names them.
-pub fn kind_of(task: &Task) -> ImageFlow {
-    match task {
-        Task::Export { .. } => ImageFlow::Export,
-        Task::Import { .. } => ImageFlow::Import,
-        Task::Delete { .. } => ImageFlow::Export,
-    }
-}
-
 /// What an ended task says the page should show.
 pub fn end_of(end: End) -> ImageEnd {
     match end {
         End::Exported(path) => ImageEnd::Exported(path.to_string_lossy().into_owned()),
         End::Imported(part) => ImageEnd::Imported(part),
-        End::Deleted(path) => ImageEnd::Deleted(path.to_string_lossy().into_owned()),
         End::Mismatched { wanted, found } => ImageEnd::Mismatched { wanted, found },
         End::Stopped => ImageEnd::Stopped,
         End::Failed(why) => ImageEnd::Failed(why),
