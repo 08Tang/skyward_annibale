@@ -884,7 +884,8 @@ impl App {
                     widgets::bar_mask(out, t, stops, frame.bg, bar);
                 }
             }
-        }        if let Some((p, top)) = strip {
+        }
+        if let Some((p, top)) = strip {
             out.put(&p.canvas, top.round() as i32);
             shine(out, Group::Strip);
         }
