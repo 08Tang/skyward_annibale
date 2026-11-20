@@ -2065,6 +2065,7 @@ pub fn search(cx: &Ctx) -> Frame {
     // stands just under it and the rows start below that.
     let strip_top = widgets::bar_bottom(t);
     let mut pinned_canvas = Canvas::new(m.w, (at.h + m.dp(12.0)).ceil() as u32);
+    pinned_canvas.clear(t.pal.bg);
     let field = widgets::search_field(&mut pinned_canvas, t, f, at.x, at.w, at.h / 2.0, &s.search, hint);
     widgets::cancel_button(&mut pinned_canvas, t, Rect::new(cancel.x, 0.0, cancel.w, cancel.h));
     let pinned = Pinned { canvas: pinned_canvas, top: strip_top, hits: vec![Hit { rect: Rect::new(cancel.x, 0.0, cancel.w, cancel.h), action: Action::CloseSearch }] };
