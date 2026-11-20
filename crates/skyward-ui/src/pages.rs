@@ -2043,7 +2043,9 @@ fn keyboard_hits(c: &mut Canvas, t: &Theme, f: &Fonts, s: &State, enter: &str, o
 pub fn search(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let m = &t.m;
-    let mut c = page(cx);
+    // A long page: a query that finds many features lists more than one screen
+    // holds, and a page cut to one screen cannot be scrolled to reach them.
+    let mut c = long_page(cx);
     let mut out = Vec::new();
     let (at, cancel) = widgets::search_layout(t);
     // What the field is looking through says what it asks for: a page's apps
@@ -2058,6 +2060,9 @@ pub fn search(cx: &Ctx) -> Frame {
     out.push(Hit { rect: cancel, action: Action::CloseSearch });
     let top = field.field.y + field.field.h + m.dp(12.0);
     let kb_top = m.h as f32 - widgets::keyboard_height(t);
+    // Where what is found ends: the page is cut to it, so a short list is a
+    // short page and a long one can be scrolled.
+    let mut bottom = top;
     if s.search.trim().is_empty() {
         let how = match s.search_scope {
             SearchScope::Apps => l.pick(["输入应用名称或包名筛选，例如输入 chrome 可找到 Chrome。", "輸入應用程式名稱或套件名稱篩選，例如輸入 chrome 可找到 Chrome。", "Type an app's name or package, such as chrome to find Chrome."]),
@@ -2068,7 +2073,7 @@ pub fn search(cx: &Ctx) -> Frame {
                 "Type the name of a feature or partition, such as backup to find Backup.",
             ]),
         };
-        widgets::footnote(&mut c, t, f, top, how);
+        bottom = widgets::footnote(&mut c, t, f, top, how);
     } else {
         // A page's entries are filtered, and the row opens the one it names;
         // the whole of what the phone offers is searched, and the row opens
@@ -2080,13 +2085,14 @@ pub fn search(cx: &Ctx) -> Frame {
                 if found.is_empty() {
                     let typed = s.search.trim();
                     let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
-                    widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
+                    bottom = widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]).bottom;
                 } else {
                     let rows: Vec<Row> = found.iter().map(|e| Row::new(l.pick(e.title)).subtitle(l.pick(e.place))).collect();
                     let list = widgets::list(&mut c, t, f, top, &rows);
                     // The keyboard covers what does not fit above it.
                     let shown = list.rows.iter().zip(&found).filter(|(r, _)| r.y + r.h <= kb_top);
                     out.extend(shown.map(|(&rect, e)| Hit { rect, action: Action::Open(e.screen) }));
+                    bottom = list.bottom;
                 }
             }
             scope => {
@@ -2094,11 +2100,12 @@ pub fn search(cx: &Ctx) -> Frame {
                 if rows.is_empty() {
                     let typed = s.search.trim();
                     let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
-                    widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
+                    bottom = widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]).bottom;
                 } else {
                     let list = widgets::list(&mut c, t, f, top, &rows);
                     let shown = list.rows.iter().zip(&acts).filter(|(r, _)| r.y + r.h <= kb_top);
                     out.extend(shown.map(|(&rect, &action)| Hit { rect, action }));
+                    bottom = list.bottom;
                 }
             }
         }
@@ -2108,7 +2115,7 @@ pub fn search(cx: &Ctx) -> Frame {
     if let Some(rect) = field.clear {
         out.push(Hit { rect, action: Action::ClearSearch });
     }
-    Frame { back: false, header: false, caret: Some(field.caret), ..Frame::new(t, c, out, find, 0.0) }
+    Frame { back: false, header: false, caret: Some(field.caret), ..Frame::new(t, fit(c, t, bottom), out, find, 0.0) }
 }
 
 /// Backing up: what to take, where it goes, and how.
@@ -2684,7 +2691,9 @@ pub fn fetch(cx: &Ctx) -> Frame {
 
 pub fn advanced(cx: &Ctx) -> Frame {
     let (t, f, l) = (cx.t, cx.f, cx.state.lang);
-    let mut c = page(cx);
+    // A long page: fifteen rows reach past one screen, and a page cut to one
+    // screen has nothing to scroll, so the last rows would be out of reach.
+    let mut c = long_page(cx);
     let top = t.m.content_top;
     // Every day's work first -- the data partition, the partitions, the files'
     // labels and a shell -- then what reaches the network, then what checks or
@@ -2732,7 +2741,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
             Action::Open(Screen::Tasks),
         ],
     );
-    Frame::new(t, c, out, l.pick(ADVANCED), top)
+    Frame::new(t, fit(c, t, tools.bottom), out, l.pick(ADVANCED), top)
 }
 
 /// The modules the phone's own system loads — KernelSU's and Magisk's keep them
@@ -3356,21 +3365,27 @@ pub fn image_backup(cx: &Ctx) -> Frame {
     if let Some(job) = s.image_job.as_ref() {
         return image_job_page(cx, job);
     }
-    let mut y = top;
     // The two lists, as a pair of rows that say which is showing.
     let showing = |parts: bool| s.image_showing_parts == parts;
     let choose = widgets::list(
         &mut c,
         t,
         f,
-        y,
+        top,
         &[
             Row::new(l.pick(["分区", "分割區", "Partitions"])).subtitle(l.pick(["把分区写成镜像文件", "把分割區寫成映像檔", "Write a partition out as an image"])).trail(Trail::Check(showing(true))),
             Row::new(l.pick(["镜像", "映像檔", "Images"])).subtitle(l.pick(["写回分区，或删除", "寫回分割區，或刪除", "Write one back, or delete it"])).trail(Trail::Check(showing(false))),
         ],
     );
     out.extend(hits(&choose.rows, &[Action::ImageShows(true), Action::ImageShows(false)]));
-    y = choose.bottom;
+    // A section label between the two rows that choose a list and the list
+    // itself: without one the list's first row sits against the row above it
+    // and reads as a third choice rather than the start of another list.
+    let label = match s.image_showing_parts {
+        true => l.pick(["分区", "分割區", "Partitions"]),
+        false => l.pick(["镜像", "映像檔", "Images"]),
+    };
+    let mut y = widgets::section(&mut c, t, f, choose.bottom, label);
     y = if s.image_showing_parts {
         image_parts_list(cx, &mut c, &mut out, y)
     } else {
