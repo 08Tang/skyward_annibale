@@ -951,13 +951,12 @@ mod tests {
         let mut app = App::new(Screen::Search, W, H, PPD);
         app.frame(&f, &i);
         let (_, button) = widgets::search_layout(&t);
-        // The strip shows just under the bar, so the button stands there.
-        let top = widgets::bar_bottom(&t);
-        let (x, y) = (button.centre().0, top + button.h / 2.0);
+        // The page has no `<`, so its strip stands where the field does.
+        let (x, y) = button.centre();
         app.touch(Touch::Down(x, y), &f, 1000);
         app.compose(&mut c, &f, &i, "12:00", 1000);
         assert_eq!(grey_at(&c, x, y + button.h * 0.35), over(t.pal.button_press, t.pal.search).r);
-        let cross = darkest(&c, Rect::new(button.x, top, button.w, button.h));
+        let cross = darkest(&c, button);
         assert!(cross.abs_diff(70) <= 2, "the stock cross held down is 70, not {cross}");
     }
 
