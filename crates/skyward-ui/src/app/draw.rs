@@ -1250,13 +1250,8 @@ mod tests {
         app.set_images(Ok(parts), Ok(Vec::new()));
         let mut out = Canvas::new(W, H);
         app.compose(&mut out, &f, &i, "12:00", 0);
-        // Down the list, well past the first screen: dragged up and let go.
-        let x = app.theme().m.margin / 2.0;
-        app.touch(Touch::Down(x, 2400.0), &f, 100);
-        app.touch(Touch::Move(x, 1200.0), &f, 150);
-        app.touch(Touch::Up, &f, 200);
-        app.tick(1000);
-        app.compose(&mut out, &f, &i, "12:00", 1100);
+        // Down the list, well past the first screen.
+        scroll_to(&mut app, &f, 2000.0, 100);
         let held = app.frame.as_ref().expect("rendered").canvas.held();
         assert!(held.start > 0, "the page is scrolled past its first rows");
         let (x, y) = (W as f32 / 2.0, H as f32 - 40.0);
