@@ -1182,7 +1182,10 @@ mod tests {
             // The rows the page holds, drawn anew: the search page is longer
             // than the screen and draws the rest as it scrolls, so the part
             // drawn again is what is compared.
-            let band = app.frame.as_ref().map(|fr| Band { rows: fr.canvas.held(), cols: (0, W) });
+            let band = app.frame.as_ref().map(|fr| {
+                let held = fr.canvas.held();
+                Band { rows: (held.start, held.end), cols: (0, W) }
+            });
             pages::render(Screen::Search, &Ctx { t: &t, f: &f, info: &i, state: &app.state, term: None, band })
         };
         for cap in [Cap::Char('b'), Cap::Char('f'), Cap::Space, Cap::Backspace, Cap::Shift, Cap::Char('q')] {
