@@ -1244,28 +1244,16 @@ mod tests {
         // A page longer than the screen holds only the rows in view. A finger
         // held on a row that has been scrolled past has nothing to take, and
         // taking it anyway read past the rows that were drawn.
-        let (f, i) = (fonts(), info());
-        let parts: Vec<ImagePart> = (0..40).map(|k| ImagePart { name: format!("part{k}"), size: 1024 * 1024 }).collect();
-        let mut app = App::new(Screen::ImageBackup, W, H, PPD);
-        app.set_images(Ok(parts), Ok(Vec::new()));
-        let mut out = Canvas::new(W, H);
-        app.compose(&mut out, &f, &i, "12:00", 0);
-        // Down the list, well past the first screen.
-        let x = app.theme().m.margin / 2.0;
-        app.touch(Touch::Down(x, 2800.0), &f, 100);
-        for (k, y) in [2600.0, 2200.0, 1800.0, 1400.0].iter().enumerate() {
-            app.touch(Touch::Move(x, *y), &f, 120 + k as u64 * 20);
-        }
-        app.touch(Touch::Up, &f, 220);
-        app.tick(2000);
-        app.compose(&mut out, &f, &i, "12:00", 2100);
-        let held = app.frame.as_ref().expect("rendered").canvas.held();
-        assert!(held.start > 0, "the page is scrolled past its first rows: {held:?}");
-        let (x, y) = (W as f32 / 2.0, H as f32 - 40.0);
-        app.touch(Touch::Down(x, y), &f, 1200);
-        app.tick(1200 + ROW_PRESS_DELAY_MS + 10);
-        app.compose(&mut out, &f, &i, "12:00", 1200 + ROW_PRESS_DELAY_MS + 20);
-        assert_eq!(app.screen(), Screen::ImageBackup, "the page stays");
+        let page = Canvas::band(1440, 19200, 3200..6400, 0..1440, Rgba::rgb(0, 0, 0));
+        // A row well past the rows held: nothing of it is there to take.
+        let (_, _, w, h) = row_part(Rect::new(0.0, 12000.0, 1440.0, 250.0), &page);
+        assert_eq!((w, h), (0, 0), "a row off the rows drawn has no part");
+        // A row that is there is taken whole.
+        let (_, y, w, h) = row_part(Rect::new(0.0, 4000.0, 1440.0, 250.0), &page);
+        assert_eq!((y, w, h), (4000, 1440, 250), "a row in view is taken whole");
+        // One that runs off the bottom is cut at the last row held.
+        let (_, y, _, h) = row_part(Rect::new(0.0, 6300.0, 1440.0, 250.0), &page);
+        assert_eq!((y, h), (6300, 100), "a row running off the end stops there");
     }
 
     #[test]
