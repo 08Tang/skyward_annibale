@@ -662,6 +662,28 @@ impl App {
                             let on = self.state.wlan.as_ref().is_some_and(|w| w.power == Power::On);
                             fx.push(Effect::Wlan(!on));
                         }
+                        ShadeHit::Vibrate => fx.extend(self.act(Action::Toggle(Switch::Vibrate), now)),
+                        ShadeHit::Transfer => fx.extend(self.act(Action::Toggle(Switch::FileTransfer), now)),
+                        ShadeHit::UsbDrive => {
+                            self.close_shade();
+                            fx.extend(self.act(Action::FilesOtg, now));
+                        }
+                        ShadeHit::Files => {
+                            self.close_shade();
+                            fx.extend(self.act(Action::Open(Screen::Files), now));
+                        }
+                        ShadeHit::Modules => {
+                            self.close_shade();
+                            fx.extend(self.act(Action::Open(Screen::Modules), now));
+                        }
+                        ShadeHit::Partitions => {
+                            self.close_shade();
+                            fx.extend(self.act(Action::Open(Screen::Filesystems), now));
+                        }
+                        ShadeHit::Terminal => {
+                            self.close_shade();
+                            fx.extend(self.act(Action::Open(Screen::Terminal), now));
+                        }
                         ShadeHit::Screenshot => {
                             self.close_shade();
                             self.shot_when = Some(now + 130);
@@ -669,6 +691,10 @@ impl App {
                         ShadeHit::Reboot => {
                             self.close_shade();
                             fx.extend(self.act(Action::Open(Screen::Reboot), now));
+                        }
+                        ShadeHit::Settings => {
+                            self.close_shade();
+                            fx.extend(self.act(Action::Open(Screen::Settings), now));
                         }
                         ShadeHit::Sleep => {
                             self.close_shade();

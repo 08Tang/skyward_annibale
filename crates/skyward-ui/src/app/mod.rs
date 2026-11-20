@@ -1313,11 +1313,11 @@ const SHADE_PULL_DP: f32 = 320.0;
 const SHADE_PERIOD: f32 = 1.8;
 /// The share of the pull past which letting go opens the sheet.
 const SHADE_KEEPS: f32 = 0.36;
-/// How tall the control centre's sheet is, in dp, at full pull: the tiles and
-/// the two capsules, a little air under them, and the rounded foot with the
-/// grabber. It was 508 dp, which left a hand's width of empty sheet under the
-/// capsules; below about 460 dp the capsules' own feet are cut by the sheet's.
-const SHADE_HEIGHT_DP: f32 = 474.0;
+/// How tall the control centre's sheet is, in dp, at full pull: the time and
+/// the date, the twelve round tiles in three rows of four, the card saying
+/// how the phone stands, the two capsules, and the rounded foot with the
+/// grabber. It was 474 dp while the sheet held four square tiles.
+const SHADE_HEIGHT_DP: f32 = 556.0;
 
 /// The least a network's name is set at in its tile, in dp: shrunk to fit the
 /// tile it is set at `row_title_px` down to this, and no further.
@@ -1374,14 +1374,56 @@ fn smooth(k: f32) -> f32 {
 }
 
 /// What a finger can press in the control centre.
+///
+/// The first twelve are the tiles, in the order they are laid out: three
+/// rows of four, the ones that turn something on or off above the ones that
+/// open a page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ShadeHit {
     Wlan,
+    Vibrate,
+    Transfer,
+    UsbDrive,
+    Files,
+    Modules,
+    Partitions,
+    Terminal,
+    Sleep,
     Screenshot,
     Reboot,
-    Sleep,
+    Settings,
     Brightness,
     Vibration,
+}
+
+impl ShadeHit {
+    /// The tiles, in the order the sheet lays them out.
+    const TILES: [ShadeHit; 12] = [
+        ShadeHit::Wlan,
+        ShadeHit::Vibrate,
+        ShadeHit::Transfer,
+        ShadeHit::UsbDrive,
+        ShadeHit::Files,
+        ShadeHit::Modules,
+        ShadeHit::Partitions,
+        ShadeHit::Terminal,
+        ShadeHit::Sleep,
+        ShadeHit::Screenshot,
+        ShadeHit::Reboot,
+        ShadeHit::Settings,
+    ];
+
+    /// Whether the tile turns something on and off rather than opening a
+    /// page, and so shows lit while it is on.
+    fn lit(self, state: &State) -> bool {
+        match self {
+            ShadeHit::Wlan => state.wlan.as_ref().is_some_and(|w| w.power == Power::On),
+            ShadeHit::Vibrate => state.vibrate,
+            ShadeHit::Transfer => state.file_transfer,
+            ShadeHit::UsbDrive => matches!(state.usb_drive, Some(UsbDrive::Shown)),
+            _ => false,
+        }
+    }
 }
 
 /// A name in the control centre's WLAN tile, longer than the tile shows,
