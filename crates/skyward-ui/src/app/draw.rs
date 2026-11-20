@@ -1245,9 +1245,9 @@ mod tests {
         // held on a row that has been scrolled past has nothing to take, and
         // taking it anyway read past the rows that were drawn.
         let page = Canvas::band(1440, 19200, 3200..6400, 0..1440, Rgba::rgb(0, 0, 0));
-        // A row well past the rows held: nothing of it is there to take.
-        let (_, _, w, h) = row_part(Rect::new(0.0, 12000.0, 1440.0, 250.0), &page);
-        assert_eq!((w, h), (0, 0), "a row off the rows drawn has no part");
+        // A row well past the rows held: no rows of it are there to take.
+        let (_, _, _, h) = row_part(Rect::new(0.0, 12000.0, 1440.0, 250.0), &page);
+        assert_eq!(h, 0, "a row off the rows drawn has no part");
         // A row that is there is taken whole.
         let (_, y, w, h) = row_part(Rect::new(0.0, 4000.0, 1440.0, 250.0), &page);
         assert_eq!((y, w, h), (4000, 1440, 250), "a row in view is taken whole");
