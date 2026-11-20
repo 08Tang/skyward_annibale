@@ -2119,13 +2119,11 @@ pub fn search(cx: &Ctx) -> Frame {
     if let Some(rect) = field.clear {
         out.push(Hit { rect, action: Action::ClearSearch });
     }
-    // The page is cut to what it found: the keyboard's height is added to it
-    // by `Frame::height`, so a page whose rows fit above the keys does not
-    // scroll at all, and one that finds more scrolls by just as much. The
-    // screen's own height is not a floor here -- the keys take that room.
-    let room = (m.h as f32 - keys).max(0.0).ceil() as u32;
-    let canvas = c.crop_height(((bottom + m.margin * 2.0).ceil() as u32).max(room));
-    Frame { back: false, header: false, caret: Some(field.caret), dock: Some(dock), ..Frame::new(t, canvas, out, find, 0.0) }
+    // The page is as tall as three screens whatever it finds, so that drawing
+    // part of it again draws the same page: a canvas that grew and shrank with
+    // every key typed would not. What it scrolls to is where the rows stop,
+    // which `content_end` says.
+    Frame { back: false, header: false, caret: Some(field.caret), dock: Some(dock), content_end: Some(bottom.max(m.h as f32 - keys)), ..Frame::new(t, c, out, find, 0.0) }
 }
 
 /// Backing up: what to take, where it goes, and how.
