@@ -412,6 +412,55 @@ impl App {
                 self.state.fs_action = FsAction::Repair;
                 self.open(Screen::Filesystem);
             }
+            Action::ExportImage(k) => {
+                let parts = match &self.state.image_parts {
+                    Ok(parts) => parts,
+                    Err(_) => return Vec::new(),
+                };
+                let Some(part) = parts.get(k) else { return Vec::new() };
+                let (partition, size) = (part.name.clone(), part.size);
+                self.state.image_job = Some(ImageJob { kind: ImageKind::Export, partition: partition.clone(), done: 0, of: size, outcome: None });
+                self.refresh();
+                return vec![Effect::ExportImage { partition, size, drive: self.state.image_to_drive }];
+            }
+            Action::ImportImage(k) => {
+                let files = match &self.state.image_files {
+                    Ok(files) => files,
+                    Err(_) => return Vec::new(),
+                };
+                let Some(file) = files.get(k) else { return Vec::new() };
+                let (partition, path, sha256) = (file.partition.clone(), file.path.clone(), file.sha256.clone());
+                self.state.image_job = Some(ImageJob { kind: ImageKind::Import, partition: partition.clone(), done: 0, of: file.size, outcome: None });
+                self.refresh();
+                return vec![Effect::ImportImage { partition, path, sha256 }];
+            }
+            Action::DeleteImage(k) => {
+                let files = match &self.state.image_files {
+                    Ok(files) => files,
+                    Err(_) => return Vec::new(),
+                };
+                let Some(file) = files.get(k) else { return Vec::new() };
+                let path = file.path.clone();
+                self.refresh();
+                return vec![Effect::DeleteImage(path)];
+            }
+            Action::StopImage => {
+                if let Some(job) = self.state.image_job.as_mut()
+                    && job.outcome.is_none()
+                {
+                    job.stopping = true;
+                    self.refresh();
+                    return vec![Effect::StopImage];
+                }
+            }
+            Action::ImageShows(k) => {
+                self.state.image_showing_parts = k;
+                self.refresh();
+            }
+            Action::ImageTo(drive) => {
+                self.state.image_to_drive = drive;
+                self.refresh();
+            }
             Action::ChooseFs(choice) => {
                 let row = self.fs_row().expect("the page of a partition shows one that was read");
                 let action = match choice {

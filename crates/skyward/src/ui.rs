@@ -1241,6 +1241,9 @@ struct Pages<'a> {
     app_reader: Option<appread::Reader>,
     /// Backing up or restoring under way.
     backuper: Option<backup::Worker>,
+    /// Writing a partition out as an image, or an image back over one, or
+    /// deleting one.
+    imager: Option<images::Worker>,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1502,6 +1505,7 @@ impl<'a> Pages<'a> {
             relabeler: None,
             app_reader: None,
             backuper: None,
+            imager: None,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -1764,6 +1768,7 @@ impl<'a> Pages<'a> {
         self.relabel_told(now);
         self.parts_told(now)?;
         self.backup_told(now);
+        self.image_told(now);
         self.merge_told(now)?;
         self.systems_told(now)?;
         self.wlan_told()?;
@@ -2367,9 +2372,41 @@ impl Pages<'_> {
         }
     }
 
+    /// What work on an image told: how far it has come, and how it ended.
+    fn image_told(&mut self, now: u64) {
+        let told = self.imager.as_ref().map(images::Worker::events).unwrap_or_default();
+        let mut ended = false;
+        for ev in told {
+            match ev {
+                images::Event::At { done, of } => {
+                    let (kind, partition) = match self.app.state.image_job.as_ref() {
+                        Some(job) => (job.kind, job.partition.clone()),
+                        None => continue,
+                    };
+                    self.app.image_at(kind, &partition, done, of);
+                }
+                images::Event::Ended(end) => {
+                    let kind = self.app.state.image_job.as_ref().map(|job| job.kind);
+                    self.app.image_ended(images::end_of(end));
+                    // An image written or deleted changes the list of those
+                    // kept, so it is read again now that the work is done.
+                    if kind.is_some() {
+                        let parts = self.app.state.image_parts.clone();
+                        let kept = images::kept(&in_place(Place::Storage, images::FOLDER)).map_err(|e| format!("{e:#}"));
+                        self.app.set_images(parts, kept);
+                    }
+                    ended = true;
+                }
+            }
+        }
+        if ended {
+            self.imager = None;
+        }
+        let _ = now;
+    }
+
     /// What the merge followed told.
-    fn merge_told(&mut self, now: u64) -> Result<()> {
-        let Some(m) = &self.merger else { return Ok(()) };
+    fn merge_told(&mut self, now: u64) -> Result<()> {        let Some(m) = &self.merger else { return Ok(()) };
         let slot = self.info.slot.context("only an A/B phone merges an update")?;
         for ev in m.events() {
             match ev {
@@ -3191,6 +3228,18 @@ impl Pages<'_> {
             Effect::StopRelabel => self.relabeler.as_ref().context("there is no relabeling to stop")?.stop(),
             // Partitions that cannot be read are the page's to say.
             Effect::ReadFilesystems => self.app.set_filesystems(read_filesystems().map_err(|e| format!("{e:#}"))),
+            // The partitions an image can come from and the images kept are
+            // both read here: the page shows them together, and one that
+            // failed says so on its own list.
+            Effect::ReadImages => {
+                let parts = images::parts("/dev/block/by-name").map(|parts| parts.into_iter().map(|p| ImagePart { name: p.name, size: p.size }).collect()).map_err(|e| format!("{e:#}"));
+                let kept = images::kept(&in_place(Place::Storage, images::FOLDER)).map_err(|e| format!("{e:#}"));
+                self.app.set_images(parts, kept);
+            }
+            Effect::ExportImage { partition, size, drive } => self.export_image(partition, size, drive, now)?,
+            Effect::ImportImage { partition, path, sha256 } => self.import_image(partition, path, sha256, now)?,
+            Effect::DeleteImage(path) => self.delete_image(PathBuf::from(path), now)?,
+            Effect::StopImage => self.imager.as_ref().context("there is no work on an image to stop")?.stop(),
             Effect::Filesystem { name, action } => self.filesystem(&name, action, now)?,
             Effect::Backup { parts, place, compress, verify } => self.back_up(parts, place, compress, verify, now)?,
             Effect::Restore { place, name, parts } => self.restore(place, &name, parts, now)?,
@@ -3662,10 +3711,58 @@ impl Pages<'_> {
         Ok(())
     }
 
+    /// Write the partition `partition` out whole as an image file in internal
+    /// storage or on a USB drive. An install or a backup still running may
+    /// yet write to a partition, so the export waits for them.
+    fn export_image(&mut self, partition: String, size: u64, drive: bool, now: u64) -> Result<()> {
+        ensure!(self.imager.is_none(), "work on an image is under way already");
+        if self.installer.is_some() || self.backuper.is_some() {
+            self.app.report(self.app.state.lang.pick(INSTALL_UNFINISHED), now);
+            return Ok(());
+        }
+        let part = images::parts("/dev/block/by-name")?.into_iter().find(|p| p.name == partition).with_context(|| format!("{partition} is not a partition of this phone"))?;
+        ensure!(part.size == size, "the partition is {} bytes and was asked for as {size}", part.size);
+        let place = if drive { Place::UsbDrive } else { Place::Storage };
+        let folder = in_place(place, images::FOLDER);
+        let when = skyward_ui::fmt::stamp(unix_now()?, self.app.state.time_zone);
+        let into = folder.join(images::image_name(&partition, &when));
+        skyward_sys::kmsg(&format!("writing {partition} out as an image at {}", into.display()))?;
+        self.app.image_at(ImageKind::Export, &partition, 0, part.size);
+        self.imager = Some(images::Worker::start(images::Task::Export { part, into })?);
+        Ok(())
+    }
+
+    /// Write the image at `path` back over `partition`, checked whole against
+    /// `sha256` before a byte of the partition is touched.
+    fn import_image(&mut self, partition: String, path: String, sha256: String, now: u64) -> Result<()> {
+        ensure!(self.imager.is_none(), "work on an image is under way already");
+        if self.installer.is_some() || self.backuper.is_some() {
+            self.app.report(self.app.state.lang.pick(INSTALL_UNFINISHED), now);
+            return Ok(());
+        }
+        let part = images::parts("/dev/block/by-name")?.into_iter().find(|p| p.name == partition).with_context(|| format!("{partition} is not a partition of this phone"))?;
+        let path = PathBuf::from(path);
+        let size = fs::metadata(&path).with_context(|| format!("look at {}", path.display()))?.len();
+        skyward_sys::kmsg(&format!("writing {} back over {partition}", path.display()))?;
+        self.app.image_at(ImageKind::Import, &partition, 0, size);
+        self.imager = Some(images::Worker::start(images::Task::Import { part, path, sha256 })?);
+        Ok(())
+    }
+
+    /// Delete the image at `path`.
+    fn delete_image(&mut self, path: PathBuf, now: u64) -> Result<()> {
+        let ended = images::delete(&path).map_err(|e| format!("{e:#}"));
+        self.app.image_ended(ended.map_or_else(ImageEnd::Failed, |()| ImageEnd::Deleted(path.to_string_lossy().into_owned())));
+        // The list of images kept says what was there before, so it is read
+        // again now that one is gone.
+        self.app.set_images(self.app.state.image_parts.clone(), images::kept(&in_place(Place::Storage, images::FOLDER)).map_err(|e| format!("{e:#}")));
+        let _ = now;
+        Ok(())
+    }
+
     /// Back the parts chosen up into `place`. An install still stopping may
     /// yet write; a backup waits for it.
-    fn back_up(&mut self, parts: [bool; 4], place: Place, compress: bool, verify: bool, now: u64) -> Result<()> {
-        ensure!(self.backuper.is_none(), "a backup or restore is under way already");
+    fn back_up(&mut self, parts: [bool; 4], place: Place, compress: bool, verify: bool, now: u64) -> Result<()> {        ensure!(self.backuper.is_none(), "a backup or restore is under way already");
         if self.installer.is_some() {
             self.app.report(self.app.state.lang.pick(INSTALL_UNFINISHED), now);
             return Ok(());

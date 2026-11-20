@@ -380,7 +380,7 @@ impl App {
             // The tile's word, kept inside its cell however long it is: a name
             // wider than the cell would run under the tile beside it.
             let label = Self::shade_label(l, hit, &wlan);
-            let px = widgets::fitted_px(out, &f.body, label, m.row_title_px, m.dp(SHADE_NAME_LEAST_DP), cell);
+            let px = widgets::fitted_px(out, &f.body, label, m.dp(SHADE_LABEL_DP), m.dp(SHADE_NAME_LEAST_DP), cell);
             let travel = out.text_width(&f.body, label, px);
             let baseline = cy + disc / 2.0 + word_gap + m.dp(14.0);
             if travel <= cell {

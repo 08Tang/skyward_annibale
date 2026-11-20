@@ -26,6 +26,8 @@ mod haptics;
 #[cfg(target_os = "android")]
 mod input;
 #[cfg(target_os = "android")]
+mod images;
+#[cfg(target_os = "android")]
 mod keys;
 #[cfg(target_os = "android")]
 mod merge;

@@ -302,6 +302,13 @@ impl App {
                 }
             }
             Screen::Filesystems => vec![Effect::ReadFilesystems],
+            // The partitions and the images saved are read when the page is
+            // opened, and read again each time: an image written or deleted
+            // since the last look is one the page no longer knows about.
+            Screen::ImageBackup => {
+                self.state.image_showing_parts = true;
+                vec![Effect::ReadImages]
+            }
             // The table is read from the same place the filesystem page reads
             // it, and a reading already in hand shows at once.
             Screen::Partitions => {

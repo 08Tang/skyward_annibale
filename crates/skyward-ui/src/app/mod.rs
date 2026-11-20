@@ -43,6 +43,7 @@ mod draw;
 mod entry;
 mod filesystem;
 mod frame;
+mod image;
 mod input;
 mod install;
 mod keys;
@@ -71,6 +72,7 @@ pub use decrypt::*;
 pub use entry::*;
 pub use filesystem::*;
 pub use frame::*;
+pub use image::*;
 pub use install::*;
 pub use manager::*;
 pub use mount::*;
@@ -158,6 +160,9 @@ pub enum Screen {
     /// Every partition the phone's table lists, with its size: what a
     /// partition is, and what can be done with it.
     Partitions,
+    /// Partitions written out whole as image files, images written back over
+    /// the partitions they came from, and the images kept.
+    ImageBackup,
     Language,
     TimeZone,
     /// Saving the logs, as a bug report asks for them.
@@ -445,6 +450,20 @@ pub enum Action {
     ChooseFs(FsChoice),
     /// Stop copying, moving or deleting.
     StopJob,
+    /// Write the partition at this place in the image page's list out whole
+    /// as an image file.
+    ExportImage(usize),
+    /// Write the image at this place in the image page's list back over the
+    /// partition it came from.
+    ImportImage(usize),
+    /// Delete the image at this place in the image page's list.
+    DeleteImage(usize),
+    /// Stop work on an image.
+    StopImage,
+    /// Show the partitions to take an image from, or the images saved.
+    ImageShows(bool),
+    /// Send an image to internal storage, or to a USB drive.
+    ImageTo(bool),
     /// Join the network at this place in the list of those in range, or
     /// open the page of the one joined.
     JoinNetwork(usize),
@@ -700,6 +719,28 @@ pub enum Effect {
     /// Read the partitions for the filesystem page, which has just opened,
     /// telling them with [`App::set_filesystems`].
     ReadFilesystems,
+    /// Read the partitions an image can be taken from, and the images already
+    /// saved, telling them with [`App::set_images`].
+    ReadImages,
+    /// Write `partition` out whole as an image file, telling how it goes with
+    /// [`App::image_at`] and [`App::image_ended`].
+    ExportImage {
+        partition: String,
+        size: u64,
+        /// Where the image goes: internal storage, or a USB drive.
+        drive: bool,
+    },
+    /// Write the image at `path` back over `partition`, checking the whole of
+    /// it against `sha256` before a byte of the partition is touched.
+    ImportImage {
+        partition: String,
+        path: String,
+        sha256: String,
+    },
+    /// Delete the image at `path`.
+    DeleteImage(String),
+    /// Stop work on an image.
+    StopImage,
     /// Do `action` to the filesystem page's partition by its name, telling
     /// how it goes with [`App::part_work_started`], [`App::part_listed`],
     /// [`App::part_at`], [`App::part_ended`] and [`App::part_work_ended`];
@@ -1322,9 +1363,13 @@ const SHADE_KEEPS: f32 = 0.36;
 /// grabber. It was 474 dp while the sheet held four square tiles.
 const SHADE_HEIGHT_DP: f32 = 556.0;
 
-/// The least a network's name is set at in its tile, in dp: shrunk to fit the
-/// tile it is set at `row_title_px` down to this, and no further.
-const SHADE_NAME_LEAST_DP: f32 = 13.0;
+/// The size a tile's word is set at, in dp. A quarter of the sheet is narrow,
+/// so the word is set small: at the row title's own size the longer ones --
+/// 文件传输, Screenshot -- filled the cell and crowded the mark above them.
+const SHADE_LABEL_DP: f32 = 10.0;
+/// The least a word is set at in its tile, in dp: shrunk to fit from
+/// [`SHADE_LABEL_DP`] down to this, and no further.
+const SHADE_NAME_LEAST_DP: f32 = 9.0;
 /// How fast a name still too long at that size rolls past, in dp a second. A
 /// name that fits is never rolled: only one that cannot be read whole is.
 const SHADE_ROLL_DP_S: f32 = 22.0;
