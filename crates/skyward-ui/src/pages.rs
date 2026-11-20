@@ -2062,7 +2062,7 @@ pub fn search(cx: &Ctx) -> Frame {
     let kb_top = m.h as f32 - widgets::keyboard_height(t);
     // Where what is found ends: the page is cut to it, so a short list is a
     // short page and a long one can be scrolled.
-    let mut bottom = top;
+    let bottom;
     if s.search.trim().is_empty() {
         let how = match s.search_scope {
             SearchScope::Apps => l.pick(["输入应用名称或包名筛选，例如输入 chrome 可找到 Chrome。", "輸入應用程式名稱或套件名稱篩選，例如輸入 chrome 可找到 Chrome。", "Type an app's name or package, such as chrome to find Chrome."]),
