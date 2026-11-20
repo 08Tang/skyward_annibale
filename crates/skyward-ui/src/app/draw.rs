@@ -991,10 +991,6 @@ impl App {
         let mut morph = self.morph.take().expect("composing it");
         let (q, _) = morph.at(now);
         let (field, _) = widgets::search_layout(&t);
-        // The search page holds its field just under the bar, not where the
-        // page would put it: the bar eases to where the field ends up, or the
-        // page would jump by a field's height as the bar lands.
-        let field = Rect::new(field.x, widgets::bar_bottom(&t), field.w, field.h);
         let home = Rect::new(m.margin, m.content_top - morph.scroll, m.w as f32 - m.margin * 2.0, m.search_h);
         let along = |a: f32, b: f32| a + (b - a) * q;
         let bar = Rect::new(m.margin, along(home.y, field.y), along(home.w, field.w), m.search_h);

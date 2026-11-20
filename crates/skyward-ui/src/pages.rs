@@ -2061,14 +2061,13 @@ pub fn search(cx: &Ctx) -> Frame {
     // The field and the button that leaves the search are held at the top of
     // the screen rather than drawn on the page: the page scrolls, and a field
     // that went up with it would be gone as soon as there was anything to
-    // scroll to. A held strip never shows higher than the bar, so the field
-    // stands just under it and the rows start below that.
-    let strip_top = widgets::bar_bottom(t);
+    // scroll to. A page with no `<` holds its strip at the top of the screen.
+    let strip_top = at.y;
     let mut pinned_canvas = Canvas::new(m.w, (at.h + m.dp(12.0)).ceil() as u32);
     pinned_canvas.clear(t.pal.bg);
     let field = widgets::search_field(&mut pinned_canvas, t, f, at.x, at.w, at.h / 2.0, &s.search, hint);
     widgets::cancel_button(&mut pinned_canvas, t, Rect::new(cancel.x, 0.0, cancel.w, cancel.h));
-    let pinned = Pinned { canvas: pinned_canvas, top: strip_top, hits: vec![Hit { rect: Rect::new(cancel.x, 0.0, cancel.w, cancel.h), action: Action::CloseSearch }] };
+    let pinned = Pinned { canvas: pinned_canvas, top: strip_top, floor: strip_top, hits: vec![Hit { rect: Rect::new(cancel.x, 0.0, cancel.w, cancel.h), action: Action::CloseSearch }] };
     let top = strip_top + at.h + m.dp(12.0);
     let bottom;
     if s.search.trim().is_empty() {

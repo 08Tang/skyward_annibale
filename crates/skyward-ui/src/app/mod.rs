@@ -1199,9 +1199,11 @@ fn dim_span(after: u64) -> u64 {
 }
 
 /// Where a pinned strip shows on a page scrolled to `offset`: with the page,
-/// or just under the bar once the page has carried it that far.
-fn pinned_top(t: &Theme, p: &Pinned, offset: f32) -> f32 {
-    (p.top - offset).max(widgets::bar_bottom(t))
+/// or no higher than the strip's own floor once the page has carried it that
+/// far. A page with a `<` holds its strip under the bar; one without holds it
+/// nearer the top.
+fn pinned_top(_t: &Theme, p: &Pinned, offset: f32) -> f32 {
+    (p.top - offset).max(p.floor)
 }
 
 /// Whether `r` reaches into the band of the screen from `top` to `bottom`.

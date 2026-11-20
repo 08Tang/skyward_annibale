@@ -1,4 +1,4 @@
-use crate::app::{Action, FileKind, FileRow, Hit, Pinned, Rows};
+﻿use crate::app::{Action, FileKind, FileRow, Hit, Pinned, Rows};
 use crate::canvas::Canvas;
 use crate::color::{Rgba, mix};
 use crate::fmt;
@@ -28,7 +28,7 @@ pub const SORT_ROW_DP: f32 = 44.0;
 pub const LIST_TOP_DP: f32 = STRIP_TOP_DP + STRIP_DP + SORT_ROW_DP;
 /// The three labels of the sort row, as the tests give them.
 #[cfg(test)]
-const ORDER: [&str; 3] = ["名称", "升序 ↑", "文件夹置顶"];
+const ORDER: [&str; 3] = ["鍚嶇О", "鍗囧簭 鈫?, "鏂囦欢澶圭疆椤?];
 
 const PILL_TOP_DP: f32 = 13.0;
 const PILL_DP: f32 = 33.0;
@@ -205,7 +205,7 @@ fn middle(c: &Canvas, face: &Face, px: f32, text: &str, w: f32) -> String {
     if width(&chars) <= w {
         return text.to_string();
     }
-    let room = w - c.text_width(face, "…", px);
+    let room = w - c.text_width(face, "鈥?, px);
     let mut right = chars.len();
     while right > 0 && width(&chars[right - 1..]) <= room / 2.0 {
         right -= 1;
@@ -215,7 +215,7 @@ fn middle(c: &Canvas, face: &Face, px: f32, text: &str, w: f32) -> String {
     while left < right && width(&chars[..=left]) <= left_room {
         left += 1;
     }
-    format!("{}…{}", chars[..left].iter().collect::<String>(), chars[right..].iter().collect::<String>())
+    format!("{}鈥}", chars[..left].iter().collect::<String>(), chars[right..].iter().collect::<String>())
 }
 
 /// The list's rows for `entries`, the first starting where an unscrolled
@@ -532,7 +532,7 @@ pub fn strip_with(
     // climbs a step at a time, so nothing is unreachable.
     let widths: Vec<f32> = names.iter().map(|n| c.text_width(&f.value, n, px) + m.dp(PILL_PAD_DP) * 2.0).collect();
     let ellipsis = m.dp(PILL_TEXT_DP) * 0.86;
-    let dots_w = c.text_width(&f.value, "…", ellipsis) + m.dp(PILL_PAD_DP) * 2.0;
+    let dots_w = c.text_width(&f.value, "鈥?, ellipsis) + m.dp(PILL_PAD_DP) * 2.0;
     let whole = widths.iter().sum::<f32>() + step * (names.len().saturating_sub(1)) as f32;
     let (mut shown, mut elided) = (widths.clone(), 0usize);
     let mut fitted = whole;
@@ -545,12 +545,12 @@ pub fn strip_with(
     }
 
     // What is drawn: the first part, one pill standing for the parts left
-    // out, and the rest — the last of them being the folder shown, which does
+    // out, and the rest 鈥?the last of them being the folder shown, which does
     // not go up.
     let mut items: Vec<(String, f32)> = Vec::with_capacity(shown.len() + 1);
     items.push((names[0].clone(), widths[0]));
     if elided > 0 {
-        items.push(("…".to_string(), dots_w));
+        items.push(("鈥?.to_string(), dots_w));
         for k in (1 + elided)..names.len() {
             items.push((names[k].clone(), widths[k]));
         }
@@ -592,7 +592,7 @@ pub fn strip_with(
     // The order the entries are shown in, under the pills: the key, the side,
     // and whether folders stay on top. Each is touched where it is written.
     let Some(order) = order else {
-        return Pinned { canvas: c, top: m.dp(STRIP_TOP_DP), hits };
+        return Pinned { canvas: c, top: m.dp(STRIP_TOP_DP), floor: widgets::bar_bottom(t), hits };
     };
     let row_top = m.dp(PILL_TOP_DP) + m.dp(PILL_DP) + m.dp(7.0);
     let row_h = m.dp(PILL_DP);
@@ -623,7 +623,7 @@ pub fn strip_with(
             hits.push(Hit { rect: Rect::new(left, row_top, w, row_h), action });
         }
     }
-    Pinned { canvas: c, top: m.dp(STRIP_TOP_DP), hits }
+    Pinned { canvas: c, top: m.dp(STRIP_TOP_DP), floor: widgets::bar_bottom(t), hits }
 }
 /// What the page says in place of the list, centred below the path, with
 /// the reason under it when there is one.
@@ -653,12 +653,12 @@ mod tests {
         let two = name_lines(&f.heading, px, "1d9bf122-130e-4db7-ae55-460c84819f0e.pdf", w);
         assert_eq!(two.len(), 2, "{two:?}");
         assert_eq!(two.concat(), "1d9bf122-130e-4db7-ae55-460c84819f0e.pdf", "nothing is left out of two lines");
-        let long = "2021一带一路暨金砖大赛之物联网技术及其在智慧城市与工业互联网领域的应用创新赛表彰文件.pdf";
+        let long = "2021涓€甯︿竴璺毃閲戠爾澶ц禌涔嬬墿鑱旂綉鎶€鏈強鍏跺湪鏅烘収鍩庡競涓庡伐涓氫簰鑱旂綉棰嗗煙鐨勫簲鐢ㄥ垱鏂拌禌琛ㄥ桨鏂囦欢.pdf";
         let lines = name_lines(&f.heading, px, long, w);
         let c = Canvas::new(0, 0);
         assert_eq!(lines.len(), 2, "{lines:?}");
         assert!(long.starts_with(&lines[0]), "the first line is the start: {lines:?}");
-        assert!(lines[1].contains('…') && lines[1].ends_with("文件.pdf"), "the middle goes, the end stays: {lines:?}");
+        assert!(lines[1].contains('鈥?) && lines[1].ends_with("鏂囦欢.pdf"), "the middle goes, the end stays: {lines:?}");
         for line in &lines {
             assert!(c.text_width(&f.heading, line, px) <= w, "{line:?} fits");
         }
@@ -766,14 +766,14 @@ mod tests {
     fn the_path_goes_up_by_its_capsules_and_shows_its_end_when_long() {
         let f = crate::font::bundled();
         let t = Theme::light(1440, 3200, 3.5);
-        let path = strip(&t, &f, "根目录", "/system/bin", Some(ORDER));
+        let path = strip(&t, &f, "鏍圭洰褰?, "/system/bin", Some(ORDER));
         // The sort row is part of the strip where the page draws one, so only
         // the capsules above the folder shown are the ones going up.
         let ups = |p: &Pinned| -> Vec<Action> { p.hits.iter().map(|h| h.action).filter(|a| matches!(a, Action::OpenAncestor(_))).collect() };
         assert_eq!(ups(&path), [Action::OpenAncestor(0), Action::OpenAncestor(1)], "the root and system go up; bin is where we are");
-        let place = strip(&t, &f, "内部存储", "Download", Some(ORDER));
+        let place = strip(&t, &f, "鍐呴儴瀛樺偍", "Download", Some(ORDER));
         assert_eq!(ups(&place), [Action::OpenAncestor(0)], "a place's top goes up");
-        let deep = strip(&t, &f, "根目录", "/data/media/0/Android/data/com.example.something.long/files/cache/images", Some(ORDER));
+        let deep = strip(&t, &f, "鏍圭洰褰?, "/data/media/0/Android/data/com.example.something.long/files/cache/images", Some(ORDER));
         let last = deep.hits.last().expect("the capsules before the folder shown");
         assert!(last.rect.x + last.rect.w < t.m.w as f32, "the end shows");
         // A trail too long for the strip leaves the middle out rather than

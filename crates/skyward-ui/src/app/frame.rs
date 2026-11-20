@@ -109,6 +109,9 @@ impl Rows {
 pub struct Pinned {
     pub canvas: Canvas,
     pub top: f32,
+    /// The highest it may show: a page with a `<` holds its strip under the
+    /// bar, and one without holds it nearer the top.
+    pub floor: f32,
     /// In the strip's own coordinates.
     pub hits: Vec<Hit>,
 }
