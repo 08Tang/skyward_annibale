@@ -2043,9 +2043,9 @@ fn keyboard_hits(c: &mut Canvas, t: &Theme, f: &Fonts, s: &State, enter: &str, o
 pub fn search(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let m = &t.m;
-    // A long page: a query that finds many features lists more than one screen
-    // holds, and a page cut to one screen cannot be scrolled to reach them.
-    let mut c = long_page(cx);
+    // One screen tall: the keyboard is drawn at the bottom of the page and
+    // must stay there, so this page does not scroll as a whole.
+    let mut c = page(cx);
     let mut out = Vec::new();
     let (at, cancel) = widgets::search_layout(t);
     // What the field is looking through says what it asks for: a page's apps
