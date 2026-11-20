@@ -221,9 +221,9 @@ fn long_page_of(cx: &Ctx, screens: u32) -> Canvas {
 }
 
 /// How many screens a list of `rows` takes, at `top` down the page, with
-/// `room` for whatever stands above and below it.
-fn screens_for(t: &Theme, top: f32, room: f32, rows: usize) -> u32 {
-    let h = top + room + t.m.row_h * rows as f32;
+/// `room` for whatever stands above and below it, each row `row_h` tall.
+fn screens_for(t: &Theme, top: f32, room: f32, rows: usize, row_h: f32) -> u32 {
+    let h = top + room + row_h * rows as f32;
     (h / t.m.h as f32).ceil() as u32 + 1
 }/// How tall a long page whose content ends at `bottom` is: to the bottom
 /// margin after it, and never shorter than one screen.
@@ -2058,9 +2058,19 @@ pub fn search(cx: &Ctx) -> Frame {
     // A long page: a query that finds many features lists more than one
     // screen holds. The keyboard is held at the foot of the screen as a dock
     // rather than drawn on the page, so it stays put while the page scrolls.
-    // The sheet is three screens, which is more than the entries there are,
-    // and is cut to the results below.
-    let mut c = long_page(cx);
+    // How many rows the query finds is known before the page is drawn, so the
+    // sheet is made as tall as they need: a row with a subtitle wraps, and is
+    // taller than a bare one.
+    let found = match s.search_scope {
+        SearchScope::Features => search::find_on(&s.search, l, |screen| s.offers(screen)).len(),
+        scope => filtered(s, scope, &s.search.trim().to_lowercase()).0.len(),
+    };
+    let row_h = {
+        let probe = Canvas::band(m.w, 1, 0..1, 0..m.w, t.pal.bg);
+        widgets::one_height(&probe, t, f, &Row::new("Ag").subtitle("Ag"))
+    };
+    let screens = screens_for(t, m.content_top, row_h * 6.0, found, row_h);
+    let mut c = long_page_of(cx, screens);
     let mut out = Vec::new();
     let (at, cancel) = widgets::search_layout(t);
     // What the field is looking through says what it asks for: a page's apps
@@ -3391,12 +3401,22 @@ fn fs_held(l: Lang, row: &FsRow, data: &Data) -> String {
 pub fn image_backup(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     // The list of partitions is as long as the phone has partitions, which can
-    // be more than three screens' worth: the sheet is made to fit them.
+    // be more than three screens' worth: the sheet is made to fit them. A row
+    // with a subtitle is taller than a bare one, so the height is measured
+    // from a row of the list rather than assumed.
     let rows = match (&s.image_parts, s.image_showing_parts) {
         (Ok(parts), true) => parts.len(),
         _ => 0,
     };
-    let screens = screens_for(t, t.m.content_top, t.m.row_h * 6.0, rows);
+    let row_h = match &s.image_parts {
+        Ok(parts) if !parts.is_empty() => {
+            let probe = Canvas::band(t.m.w, 1, 0..1, 0..t.m.w, t.pal.bg);
+            let sample = Row::new(&parts[0].name).subtitle(fmt::bytes(parts[0].size));
+            widgets::one_height(&probe, t, f, &sample)
+        }
+        _ => t.m.row_h,
+    };
+    let screens = screens_for(t, t.m.content_top, row_h * 6.0, rows, row_h);
     let mut c = long_page_of(cx, screens);
     let mut out = Vec::new();
     let top = t.m.content_top;

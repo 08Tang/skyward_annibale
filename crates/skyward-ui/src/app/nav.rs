@@ -307,6 +307,12 @@ impl App {
             // since the last look is one the page no longer knows about.
             Screen::ImageBackup => {
                 self.state.image_showing_parts = true;
+                // An image that has ended stops being the page: it was shown
+                // once, to say how it went, and coming back to the page finds
+                // the lists again.
+                if self.state.image_job.as_ref().is_some_and(|job| job.outcome.is_some()) {
+                    self.state.image_job = None;
+                }
                 vec![Effect::ReadImages]
             }
             // The table is read from the same place the filesystem page reads
