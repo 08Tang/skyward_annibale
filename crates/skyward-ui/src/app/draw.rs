@@ -977,21 +977,27 @@ impl App {
             // there.
             morph.keyboard.get_or_insert_with(|| keyboard_strip(&t, frame));
             let (body, top) = morph.body.get_or_insert_with(|| {
-                let top = (field.y + field.h).ceil() as i32;
-                // What the page shows under the field, down to its foot: the
-                // keys are no longer on the page, so the page's own end is
-                // where the rows stop.
-                let end = frame.canvas.h as i32;
-                let mut body = Canvas::new(frame.canvas.w, (end - top).max(0) as u32);
-                body.put_rows(&frame.canvas, top, end, 0);
-                (body, top)
+                let field_bottom = (field.y + field.h).ceil() as i32;
+                // What the page shows under the field, down to the last row it
+                // holds: the keys are no longer on the page, and the page is
+                // longer than the screen, so only the rows it has drawn are
+                // there to take.
+                let held = frame.canvas.held();
+                let start = field_bottom.max(held.start as i32);
+                let end = (frame.canvas.h as i32).min(held.end as i32);
+                let mut body = Canvas::new(frame.canvas.w, (end - start).max(0) as u32);
+                body.put_rows(&frame.canvas, start, end, 0);
+                (body, start)
             });
             let (delay, span) = MORPH_BODY_MS;
             out.lay(body, 0, *top, (now.saturating_sub(morph.start + delay) as f32 / span as f32).min(1.0));
         } else {
             // The home page under its bar comes down with it.
             let below = m.content_top + m.search_h;
-            out.put_rows(&frame.canvas, below.floor() as i32, frame.canvas.h as i32, (below - morph.scroll + rise).floor() as i32);
+            let held = frame.canvas.held();
+            let from = (below.floor() as i32).max(held.start as i32);
+            let to = (frame.canvas.h as i32).min(held.end as i32);
+            out.put_rows(&frame.canvas, from, to, (below - morph.scroll + rise).floor() as i32);
         }
         let title = morph.title.get_or_insert_with(|| Blurs::new(widgets::big_title(&t, f, pages::HOME_TITLE)));
         let level = (1.0 - q / MORPH_TITLE_GONE).clamp(0.0, 1.0);
@@ -1169,6 +1175,33 @@ mod tests {
         let page = &app.frame.as_ref().unwrap().canvas;
         assert!(whole.h > H, "a page longer than the screen, drawn in {bands} more bands");
         assert!(page.whole() && page.data == whole.data, "the page drawn a band at a time is the page drawn whole");
+    }
+
+    #[test]
+    fn the_search_page_comes_up_from_the_home_page_bar_whole() {
+        // The bar on the home page lifts the search page up over it. The
+        // search page is longer than the screen and holds its keyboard as a
+        // dock, so what it shows under the field is only as much of it as
+        // has been drawn: taking the rest of it is a panic, and a panic here
+        // is the screen going black mid-gesture.
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        let mut out = Canvas::new(W, H);
+        app.compose(&mut out, &f, &i, "12:00", 0);
+        // The bar on the home page, touched where it stands.
+        let bar = app.frame.as_ref().and_then(|fr| fr.fold.map(|fd| fd.bar)).expect("the home page has its bar");
+        let (x, y) = bar.centre();
+        app.touch(Touch::Down(x, y), &f, 1000);
+        app.touch(Touch::Up, &f, 1000);
+        assert_eq!(app.screen(), Screen::Search, "the search page is the page shown");
+        // Every frame of the way up, the page as far along as it has come.
+        for now in [1000, 1050, 1150, 1300, 1600] {
+            app.compose(&mut out, &f, &i, "12:00", now);
+        }
+        let frame = app.frame(&f, &i);
+        assert!(frame.dock.is_some(), "the keys are held at the foot of the screen");
+        assert!(frame.canvas.h > H, "and the page runs on past the screen");
+        assert!(frame.canvas.whole() || !frame.canvas.held().is_empty(), "with its rows drawn");
     }
 
     #[test]
