@@ -4,6 +4,7 @@ use crate::decrypt::{self, Decryptor};
 use crate::fetch;
 use crate::filework;
 use crate::haptics::Haptics;
+use crate::images;
 use crate::input::{Event, Inputs, monotonic_ms};
 use crate::merge;
 use crate::partwork;
