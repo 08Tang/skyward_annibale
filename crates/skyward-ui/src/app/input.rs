@@ -422,11 +422,24 @@ impl App {
         };
         if held != self.state.held {
             let was = std::mem::replace(&mut self.state.held, held);
-            // Only the rows of what is let go and what is held change.
-            let rects: Option<Vec<Rect>> = self.frame.as_ref().and_then(|fr| [was, held].into_iter().flatten().map(|a| fr.hits.iter().find(|h| h.action == a).map(|h| h.rect)).collect());
-            match rects {
-                Some(rects) => rects.into_iter().for_each(|r| self.refresh_rows(r.y.floor() as u32, (r.y + r.h).ceil() as u32)),
-                None => self.refresh(),
+            // Only the rows of what is let go and what is held change. A key
+            // held at the foot of the screen is on the dock, not on the page:
+            // the rows it covers are the page's rows behind it, and drawing
+            // those again is what puts the key down and up.
+            let t = self.theme();
+            let keys_top = (t.m.h as f32 - widgets::keyboard_height(&t)).floor() as u32;
+            let on_dock = self.frame.as_ref().and_then(|fr| fr.dock.as_ref()).is_some_and(|d| [was, held].into_iter().flatten().any(|a| d.hits.iter().any(|h| h.action == a)));
+            if on_dock {
+                let page_h = self.frame.as_ref().map_or(0, |fr| fr.canvas.h);
+                let first = keys_top.min(page_h);
+                let last = (keys_top + self.frame.as_ref().and_then(|fr| fr.dock.as_ref()).map_or(0, |d| d.canvas.h)).min(page_h);
+                self.refresh_rows(first, last);
+            } else {
+                let rects: Option<Vec<Rect>> = self.frame.as_ref().and_then(|fr| [was, held].into_iter().flatten().map(|a| fr.hits.iter().find(|h| h.action == a).map(|h| h.rect)).collect());
+                match rects {
+                    Some(rects) => rects.into_iter().for_each(|r| self.refresh_rows(r.y.floor() as u32, (r.y + r.h).ceil() as u32)),
+                    None => self.refresh(),
+                }
             }
         }
         fx
