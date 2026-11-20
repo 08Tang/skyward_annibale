@@ -547,11 +547,11 @@ impl Canvas {
             return self.crop_height(h);
         }
         let held = self.held();
-        let row = self.span * 4;
-        self.data.resize(self.data.len() + row * (h - held.end) as usize, 0);
+        let row = self.span as usize * 4;
         let added = (h - held.end) as usize * row;
-        let start = self.data.len() - added;
-        for px in self.data[start..].as_chunks_mut::<4>().0 {
+        let at = self.data.len();
+        self.data.resize(at + added, 0);
+        for px in self.data[at..].as_chunks_mut::<4>().0 {
             *px = [color.r, color.g, color.b, color.a];
         }
         self.h = h;
