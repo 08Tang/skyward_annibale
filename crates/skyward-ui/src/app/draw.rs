@@ -1251,9 +1251,16 @@ mod tests {
         let mut out = Canvas::new(W, H);
         app.compose(&mut out, &f, &i, "12:00", 0);
         // Down the list, well past the first screen.
-        scroll_to(&mut app, &f, 2000.0, 100);
+        let x = app.theme().m.margin / 2.0;
+        app.touch(Touch::Down(x, 2800.0), &f, 100);
+        for (k, y) in [2600.0, 2200.0, 1800.0, 1400.0].iter().enumerate() {
+            app.touch(Touch::Move(x, *y), &f, 120 + k as u64 * 20);
+        }
+        app.touch(Touch::Up, &f, 220);
+        app.tick(2000);
+        app.compose(&mut out, &f, &i, "12:00", 2100);
         let held = app.frame.as_ref().expect("rendered").canvas.held();
-        assert!(held.start > 0, "the page is scrolled past its first rows");
+        assert!(held.start > 0, "the page is scrolled past its first rows: {held:?}");
         let (x, y) = (W as f32 / 2.0, H as f32 - 40.0);
         app.touch(Touch::Down(x, y), &f, 1200);
         app.tick(1200 + ROW_PRESS_DELAY_MS + 10);
