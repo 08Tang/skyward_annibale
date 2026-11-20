@@ -1095,10 +1095,10 @@ pub fn power_off(cx: &Ctx) -> Frame {
     let top = t.m.content_top;
     // The work that would be cut short, named as its own page names it.
     let mut going: Vec<&'static str> = Vec::new();
-    if s.installer.is_some() {
+    if !matches!(s.install, Install::Idle) {
         going.push(l.pick(["安装", "安裝", "An install"]));
     }
-    if s.backuper.is_some() {
+    if s.backup_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
         going.push(l.pick(["备份或恢复", "備份或還原", "A backup or restore"]));
     }
     if s.image_job.as_ref().is_some_and(|job| job.outcome.is_none()) {
@@ -3402,13 +3402,11 @@ fn image_files_list(cx: &Ctx, c: &mut Canvas, out: &mut Vec<Hit>, y: f32) -> f32
         }
         Ok(files) if files.is_empty() => widgets::list(c, t, f, y, &[Row::new(l.pick(["还没有保存的镜像", "還沒有儲存的映像檔", "No images saved yet"])).trail(Trail::None)]).bottom,
         Ok(files) => {
-            let shown: Vec<Row> = files
+            let subs: Vec<String> = files
                 .iter()
-                .map(|file| {
-                    let sub = format!("{} · {} · {}", file.partition, fmt::bytes(file.size), fmt::date(l, file.made, s.time_zone));
-                    Row::new(&file.name).subtitle(&sub).trail(Trail::Arrow)
-                })
+                .map(|file| format!("{} · {} · {}", file.partition, fmt::bytes(file.size), fmt::date(l, file.made, s.time_zone)))
                 .collect();
+            let shown: Vec<Row> = files.iter().zip(&subs).map(|(file, sub)| Row::new(&file.name).subtitle(sub).trail(Trail::Arrow)).collect();
             let list = widgets::list(c, t, f, y, &shown);
             out.extend(hits(&list.rows, &(0..files.len()).map(Action::ImportImage).collect::<Vec<_>>()));
             // Each image's own row opens it; the rows under the list are where
