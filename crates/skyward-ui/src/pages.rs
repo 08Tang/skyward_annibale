@@ -95,6 +95,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::Partitions => partitions(cx),
         Screen::ImageBackup => image_backup(cx),
         Screen::PowerOff => power_off(cx),
+        Screen::Tasks => tasks(cx),
         Screen::Filesystem => filesystem(cx),
         Screen::PartWork => part_work(cx),
         Screen::Language => language(cx),
@@ -973,6 +974,111 @@ pub fn reboot(cx: &Ctx) -> Frame {
     let track = widgets::confirm(&mut c, t, f, y + t.m.dp(28.0), label, danger, s.confirm);
     out.push(Hit { rect: track, action: Action::Confirm(Confirm::Reboot) });
     Frame::new(t, c, out, l.pick(REBOOT), top)
+}
+
+/// The work going on now, and where each stands, with a row that opens the
+/// page it is shown on.
+///
+/// The work has pages of its own, and those pages are where it is watched:
+/// this page is the one place that says what is running at all, so nothing
+/// started and then left is forgotten behind a page that is no longer open.
+pub fn tasks(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+    // Each row says what it is, where it stands, and which page shows it.
+    let mut rows: Vec<Row> = Vec::new();
+    let mut opens: Vec<Action> = Vec::new();
+    if !matches!(s.install, Install::Idle) {
+        rows.push(Row::new(l.pick(["安装", "安裝", "Install"])).subtitle(install_stage(cx)).trail(Trail::Arrow));
+        opens.push(Action::Open(Screen::Installing));
+    }
+    if let Some(job) = s.backup_job.as_ref() {
+        rows.push(Row::new(l.pick(["备份或恢复", "備份或還原", "Backup or restore"])).subtitle(backup_stage(cx, job)).trail(Trail::Arrow));
+        opens.push(Action::Open(Screen::BackupJob));
+    }
+    if let Some(job) = s.image_job.as_ref().filter(|j| j.outcome.is_none()) {
+        let share = match job.of {
+            0 => 0.0,
+            of => job.done.min(of) as f32 / of as f32,
+        };
+        let detail = format!("{} · {}%", job.partition, (share * 100.0).round() as u32);
+        rows.push(Row::new(l.pick(IMAGE_BACKUP)).subtitle(detail).trail(Trail::Arrow));
+        opens.push(Action::Open(Screen::ImageBackup));
+    }
+    if s.job.is_some() {
+        rows.push(Row::new(l.pick(["文件", "檔案", "Files"])).subtitle(l.pick(["正在复制、移动或删除", "正在複製、移動或刪除", "Copying, moving or deleting"])).trail(Trail::Arrow));
+        opens.push(Action::Open(Screen::Files));
+    }
+    if s.part_work.as_ref().is_some_and(|w| w.outcome.is_none()) {
+        rows.push(Row::new(l.pick(["分区", "分割區", "Partitions"])).subtitle(l.pick(["正在处理分区", "正在處理分割區", "Working on a partition"])).trail(Trail::Arrow));
+        opens.push(Action::Open(Screen::PartWork));
+    }
+    if s.relabel.as_ref().is_some_and(|j| j.outcome.is_none()) {
+        rows.push(Row::new(l.pick(RELABEL)).subtitle(l.pick(["正在写入文件标签", "正在寫入檔案標籤", "Writing the files' labels"])).trail(Trail::Arrow));
+        opens.push(Action::Open(Screen::Relabel));
+    }
+    if let Some(job) = s.download.as_ref().filter(|j| j.outcome.is_none()) {
+        let detail = match job.progress {
+            Some(Progress::Downloading { done, total }) => format!("{} / {}", fmt::bytes(done), fmt::bytes(total)),
+            Some(Progress::Checking { done, total }) => format!("{} / {}", fmt::bytes(done), fmt::bytes(total)),
+            None => l.pick(["正在连接", "正在連線", "Connecting"]).to_string(),
+        };
+        rows.push(Row::new(l.pick(["下载", "下載", "Download"])).subtitle(detail).trail(Trail::Arrow));
+        opens.push(Action::Open(Screen::Update));
+    }
+    let y = match rows.is_empty() {
+        true => {
+            let y = widgets::section_first(&mut c, t, f, top, l.pick(TASKS));
+            let note = l.pick(["现在没有正在进行的工作。", "現在沒有正在進行的工作。", "Nothing is running now."]);
+            widgets::footnote(&mut c, t, f, y, note)
+        }
+        false => {
+            let y = widgets::section_first(&mut c, t, f, top, l.pick(TASKS));
+            let list = widgets::list(&mut c, t, f, y, &rows);
+            out.extend(hits(&list.rows, &opens));
+            list.bottom
+        }
+    };
+    Frame::new(t, fit(c, t, y), out, l.pick(TASKS), top)
+}
+
+/// Where an install stands, in a few words.
+fn install_stage(cx: &Ctx) -> String {
+    let (s, l) = (cx.state, cx.state.lang);
+    match &s.install {
+        Install::Idle => String::new(),
+        Install::Starting => l.pick(["正在准备", "正在準備", "Getting ready"]).to_string(),
+        Install::Opening => l.pick(["正在打开数据分区", "正在開啟資料分割區", "Opening the data partition"]).to_string(),
+        Install::Locked(_) => l.pick(["等待解锁", "等待解鎖", "Waiting for the lock"]).to_string(),
+        Install::Waiting => l.pick(["等待选择安装包", "等待選擇安裝檔", "Waiting for a package"]).to_string(),
+        Install::Checking { .. } => l.pick(["正在检查安装包", "正在檢查安裝檔", "Checking the package"]).to_string(),
+        Install::Choosing(_) | Install::Confirming { .. } | Install::ConfirmingScript => l.pick(["等待确认", "等待確認", "Waiting to be agreed to"]).to_string(),
+        Install::Updating { .. } => l.pick(["正在安装系统更新", "正在安裝系統更新", "Installing the update"]).to_string(),
+        Install::Flashing { .. } => l.pick(["正在刷入分区镜像", "正在刷入分割區映像檔", "Flashing an image"]).to_string(),
+        Install::Scripting { .. } | Install::Script { .. } => l.pick(["正在运行安装脚本", "正在執行安裝指令碼", "Running the install script"]).to_string(),
+        _ => l.pick(["正在进行", "正在進行", "Under way"]).to_string(),
+    }
+}
+
+/// Where a backup or restore stands, in a few words.
+fn backup_stage(cx: &Ctx, job: &BackupJob) -> String {
+    let l = cx.state.lang;
+    match &job.outcome {
+        Some(_) => l.pick(["已完成", "已完成", "Done"]).to_string(),
+        None => match &job.at {
+            Some(at) => {
+                let share = match at.of {
+                    0 => 0.0,
+                    of => at.done.min(of) as f32 / of as f32,
+                };
+                let part = job.plan.get(at.item).map(|(name, _)| name.as_str()).unwrap_or("");
+                format!("{part} · {}%", (share * 100.0).round() as u32)
+            }
+            None => l.pick(["正在进行", "正在進行", "Under way"]).to_string(),
+        },
+    }
 }
 
 /// Turning the phone off: what is still going that turning it off would cut
@@ -2590,6 +2696,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
             Row::new(l.pick(["U 盘管理", "USB 隨身碟管理", "USB drive"])).icon(PURPLE, Icon::UsbDrive),
             Row::new(l.pick(RELABEL)).icon(PURPLE, Icon::Shield),
             Row::new(l.pick(POWER_OFF)).icon(SLATE, Icon::Power),
+            Row::new(l.pick(TASKS)).icon(BLUE, Icon::Layers),
         ],
     );
     let out = hits(
@@ -2609,6 +2716,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
             Action::FilesOtg,
             Action::Open(Screen::Relabel),
             Action::Open(Screen::PowerOff),
+            Action::Open(Screen::Tasks),
         ],
     );
     Frame::new(t, c, out, l.pick(ADVANCED), top)
@@ -2720,6 +2828,7 @@ const FILESYSTEMS: Text = ["文件系统", "檔案系統", "Filesystems"];
 const PARTITIONS: Text = ["分区管理", "分割區管理", "Partitions"];
 const IMAGE_BACKUP: Text = ["镜像备份", "映像檔備份", "Image backup"];
 const POWER_OFF: Text = ["关机", "關機", "Power off"];
+const TASKS: Text = ["任务", "任務", "Tasks"];
 const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
 const STOPPED: Text = ["已停止", "已停止", "Stopped"];
 const STOPPING: Text = ["正在停止", "正在停止", "Stopping"];

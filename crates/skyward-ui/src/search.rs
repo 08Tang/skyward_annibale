@@ -72,6 +72,12 @@ pub const ENTRIES: &[Entry] = &[
     ),
     entry(["导出日志", "匯出記錄", "Export logs"], ADVANCED, Screen::Logs, &["daochurizhi", "dcrz", "rizhi", "rz", "logs", "dmesg"]),
     entry(
+        ["任务", "任務", "Tasks"],
+        ADVANCED,
+        Screen::Tasks,
+        &["renwu", "rw", "task", "tasks", "jindu", "jd", "progress"],
+    ),
+    entry(
         ["关机", "關機", "Power off"],
         ADVANCED,
         Screen::PowerOff,

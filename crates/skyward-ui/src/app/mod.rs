@@ -166,6 +166,9 @@ pub enum Screen {
     /// Turning the phone off, and what is still going that turning it off
     /// would cut short.
     PowerOff,
+    /// The work going on now, and where each stands: an install, a backup, an
+    /// image being written, files being copied, an update being downloaded.
+    Tasks,
     Language,
     TimeZone,
     /// Saving the logs, as a bug report asks for them.
