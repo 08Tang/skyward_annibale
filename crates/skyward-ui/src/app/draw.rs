@@ -369,7 +369,7 @@ impl App {
             let (col, row) = (i % 4, i / 4);
             let cx = m.margin + col as f32 * (cell + gap) + cell / 2.0;
             let cy = tiles_top + row as f32 * (row_h + gap) + disc / 2.0;
-            let lit = hit.lit(self.state);
+            let lit = hit.lit(&self.state);
             // The whole cell answers a touch, not the disc alone: a finger is
             // not asked to find the middle of it.
             hits.push((Rect::new(cx - cell / 2.0, cy - disc / 2.0 - m.dp(2.0), cell, row_h + m.dp(4.0)), hit));
