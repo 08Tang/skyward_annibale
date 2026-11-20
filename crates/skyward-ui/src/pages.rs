@@ -3583,7 +3583,14 @@ fn image_job_page(cx: &Ctx, job: &ImageJob) -> Frame {
             } else {
                 l.pick(["完成", "完成", "Done"])
             };
-            let list = widgets::list(&mut c, t, f, y, &[standing(heading, ink, icon, &said)]);
+            // How it went stands apart from the progress above it, and what to
+            // do next is a row of its own: the card saying how it went is not
+            // itself a button, and the page is left with `<`.
+            let y = widgets::section(&mut c, t, f, y, l.pick(["结果", "結果", "Result"]));
+            let said_row = widgets::list(&mut c, t, f, y, &[standing(heading, ink, icon, &said)]);
+            let y = widgets::section(&mut c, t, f, said_row.bottom, l.pick(ACTIONS));
+            let back = l.pick(["返回", "返回", "Back"]);
+            let list = widgets::list(&mut c, t, f, y, &[Row::new(back)]);
             out.extend(hits(&list.rows, &[Action::Back]));
             list.bottom
         }
