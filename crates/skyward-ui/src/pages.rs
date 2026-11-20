@@ -2058,19 +2058,13 @@ pub fn search(cx: &Ctx) -> Frame {
     // A long page: a query that finds many features lists more than one
     // screen holds. The keyboard is held at the foot of the screen as a dock
     // rather than drawn on the page, so it stays put while the page scrolls.
-    // How many rows the query finds is known before the page is drawn, so the
-    // sheet is made as tall as they need: a row with a subtitle wraps, and is
-    // taller than a bare one.
-    let found = match s.search_scope {
-        SearchScope::Features => search::find_on(&s.search, l, |screen| s.offers(screen)).len(),
-        scope => filtered(s, scope, &s.search.trim().to_lowercase()).0.len(),
-    };
-    let row_h = {
-        let probe = Canvas::band(m.w, 1, 0..1, 0..m.w, t.pal.bg);
-        widgets::one_height(&probe, t, f, &Row::new("Ag").subtitle("Ag"))
-    };
-    let screens = screens_for(t, m.content_top, row_h * 6.0, found, row_h);
-    let mut c = long_page_of(cx, screens);
+    //
+    // The sheet is a fixed five screens whatever the query finds, so that a
+    // page drawn again in part is as tall as it was: a sheet that grew and
+    // shrank with every key typed could not be drawn again a band at a time.
+    // Five is more rows than any query can find, a wrapped subtitle and all,
+    // so nothing is cut off; what the page scrolls to is where its rows stop.
+    let mut c = long_page_of(cx, 5);
     let mut out = Vec::new();
     let (at, cancel) = widgets::search_layout(t);
     // What the field is looking through says what it asks for: a page's apps
