@@ -705,12 +705,16 @@ impl App {
         if let (Some(press), None) = (self.row_press.filter(|p| now >= p.rise), &self.row_art) {
             let page = &self.frame.as_ref().expect("rendered above").canvas;
             let (x, y, w, h) = row_part(press.rect, page);
-            let pressed = t.pressed();
-            let band = Band { rows: (y, y + h), cols: (x, x + w) };
-            let cx = Ctx { t: &pressed, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band) };
-            let down = pages::render(screen, &cx).canvas;
-            assert_eq!((down.w, down.h), (page.w, page.h), "a page held down is laid out as it was");
-            self.row_art = Some((page.crop(x, y, w, h), down.crop(x, y, w, h)));
+            // A row pressed where the page has nothing drawn has no part to
+            // take: the row under the finger is off the rows in view.
+            if w > 0 && h > 0 {
+                let pressed = t.pressed();
+                let band = Band { rows: (y, y + h), cols: (x, x + w) };
+                let cx = Ctx { t: &pressed, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band) };
+                let down = pages::render(screen, &cx).canvas;
+                assert_eq!((down.w, down.h), (page.w, page.h), "a page held down is laid out as it was");
+                self.row_art = Some((page.crop(x, y, w, h), down.crop(x, y, w, h)));
+            }
         }
         let view = View {
             scroll,
@@ -1233,6 +1237,33 @@ mod tests {
         assert!(frame.dock.is_some(), "the keys are held at the foot of the screen");
         assert!(frame.canvas.h > H, "and the page runs on past the screen");
         assert!(frame.canvas.whole() || !frame.canvas.held().is_empty(), "with its rows drawn");
+    }
+
+    #[test]
+    fn a_row_pressed_past_the_rows_in_view_is_left_alone() {
+        // A page longer than the screen holds only the rows in view. A finger
+        // held on a row that has been scrolled past has nothing to take, and
+        // taking it anyway read past the rows that were drawn.
+        let (f, i) = (fonts(), info());
+        let parts: Vec<ImagePart> = (0..40).map(|k| ImagePart { name: format!("part{k}"), size: 1024 * 1024 }).collect();
+        let mut app = App::new(Screen::ImageBackup, W, H, PPD);
+        app.set_images(Ok(parts), Ok(Vec::new()));
+        let mut out = Canvas::new(W, H);
+        app.compose(&mut out, &f, &i, "12:00", 0);
+        // Down the list, well past the first screen: dragged up and let go.
+        let x = app.theme().m.margin / 2.0;
+        app.touch(Touch::Down(x, 2400.0), &f, 100);
+        app.touch(Touch::Move(x, 1200.0), &f, 150);
+        app.touch(Touch::Up, &f, 200);
+        app.tick(1000);
+        app.compose(&mut out, &f, &i, "12:00", 1100);
+        let held = app.frame.as_ref().expect("rendered").canvas.held();
+        assert!(held.start > 0, "the page is scrolled past its first rows");
+        let (x, y) = (W as f32 / 2.0, H as f32 - 40.0);
+        app.touch(Touch::Down(x, y), &f, 1200);
+        app.tick(1200 + ROW_PRESS_DELAY_MS + 10);
+        app.compose(&mut out, &f, &i, "12:00", 1200 + ROW_PRESS_DELAY_MS + 20);
+        assert_eq!(app.screen(), Screen::ImageBackup, "the page stays");
     }
 
     #[test]

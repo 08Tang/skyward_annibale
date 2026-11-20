@@ -1340,10 +1340,16 @@ fn row_wide(t: &Theme, r: Rect) -> bool {
 }
 
 /// The whole pixels of the page's `canvas` a held row's `rect` covers:
-/// left, top, width and height.
+/// left, top, width and height. A page longer than the screen holds only the
+/// rows in view, so the part taken is the part that is there: a row pressed
+/// past them has nothing to draw again.
 fn row_part(r: Rect, canvas: &Canvas) -> (u32, u32, u32, u32) {
+    let held = canvas.held();
+    let cols = canvas.cols();
     let (x0, y0) = (r.x.floor().max(0.0) as u32, r.y.floor().max(0.0) as u32);
-    let (x1, y1) = (((r.x + r.w).ceil() as u32).min(canvas.w), ((r.y + r.h).ceil() as u32).min(canvas.h));
+    let (x0, y0) = (x0.max(cols.start), y0.max(held.start));
+    let x1 = ((r.x + r.w).ceil() as u32).min(canvas.w).min(cols.end).max(x0);
+    let y1 = ((r.y + r.h).ceil() as u32).min(canvas.h).min(held.end).max(y0);
     (x0, y0, x1 - x0, y1 - y0)
 }
 
