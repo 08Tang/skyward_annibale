@@ -38,7 +38,7 @@ use skyward_sys::uevent;
 use skyward_systems::Who;
 use skyward_ui::app::{
     App, Asked, AvbCheck, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ClashChoice, DATA_OPENING, DATA_PARTITION, DOWNLOADS, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp, FileRow,
-    FileTask, FsAction, FsRow, Have, Held, INSTALL_UNFINISHED, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place, RenameRefused, Screen, Shot, SkywardEnd, SkywardStage,
+    FileTask, FsAction, FsRow, Have, Held, INSTALL_UNFINISHED, ImageEnd, ImageFlow, ImagePart, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place, RenameRefused, Screen, Shot, SkywardEnd, SkywardStage,
     Target, USB_DRIVE, UsbDrive, UsbLink, Wipe,
 };
 use skyward_ui::settings::Keeper;
@@ -3727,7 +3727,7 @@ impl Pages<'_> {
         let when = skyward_ui::fmt::stamp(unix_now()?, self.app.state.time_zone);
         let into = folder.join(images::image_name(&partition, &when));
         skyward_sys::kmsg(&format!("writing {partition} out as an image at {}", into.display()))?;
-        self.app.image_at(ImageKind::Export, &partition, 0, part.size);
+        self.app.image_at(ImageFlow::Export, &partition, 0, part.size);
         self.imager = Some(images::Worker::start(images::Task::Export { part, into })?);
         Ok(())
     }
@@ -3744,7 +3744,7 @@ impl Pages<'_> {
         let path = PathBuf::from(path);
         let size = fs::metadata(&path).with_context(|| format!("look at {}", path.display()))?.len();
         skyward_sys::kmsg(&format!("writing {} back over {partition}", path.display()))?;
-        self.app.image_at(ImageKind::Import, &partition, 0, size);
+        self.app.image_at(ImageFlow::Import, &partition, 0, size);
         self.imager = Some(images::Worker::start(images::Task::Import { part, path, sha256 })?);
         Ok(())
     }

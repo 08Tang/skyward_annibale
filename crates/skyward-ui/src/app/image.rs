@@ -41,7 +41,7 @@ pub struct ImageFile {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImageJob {
     /// Whether this is an image being written out or written back.
-    pub kind: ImageKind,
+    pub kind: ImageFlow,
     /// The partition the work is on, and how many of its bytes are done.
     pub partition: String,
     pub done: u64,
@@ -54,7 +54,7 @@ pub struct ImageJob {
 
 /// Whether an image is being taken from a partition or put back over one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImageKind {
+pub enum ImageFlow {
     /// Written out to a file.
     Export,
     /// Written back over the partition from a file.
@@ -92,7 +92,7 @@ impl App {
     }
 
     /// Work on an image has begun, or has moved on: how far it has come.
-    pub fn image_at(&mut self, kind: ImageKind, partition: &str, done: u64, of: u64) {
+    pub fn image_at(&mut self, kind: ImageFlow, partition: &str, done: u64, of: u64) {
         self.state.image_job = Some(ImageJob { kind, partition: partition.to_owned(), done, of, stopping: false, outcome: None });
         self.refresh();
     }
@@ -124,12 +124,12 @@ mod tests {
     #[test]
     fn a_job_says_how_far_it_has_come_and_how_it_ended() {
         let mut app = App::new(Screen::ImageBackup, 1440, 3200, 3.5);
-        app.image_at(ImageKind::Export, "boot_a", 0, 1000);
+        app.image_at(ImageFlow::Export, "boot_a", 0, 1000);
         let job = app.state.image_job.as_ref().expect("a job under way");
         assert_eq!((job.done, job.of), (0, 1000), "nothing written yet");
         assert!(job.outcome.is_none(), "and it has not ended");
         assert!(!job.stopping, "and nothing has asked it to stop");
-        app.image_at(ImageKind::Export, "boot_a", 400, 1000);
+        app.image_at(ImageFlow::Export, "boot_a", 400, 1000);
         assert_eq!(app.state.image_job.as_ref().unwrap().done, 400, "it moves on");
         app.image_ended(ImageEnd::Exported("/data/media/0/skyward/boot_a.img".into()));
         let job = app.state.image_job.as_ref().expect("the job is kept to say how it ended");
@@ -142,7 +142,7 @@ mod tests {
         // beside what was found.
         let end = ImageEnd::Mismatched { wanted: "ab".repeat(32), found: "cd".repeat(32) };
         let mut app = App::new(Screen::ImageBackup, 1440, 3200, 3.5);
-        app.image_at(ImageKind::Import, "boot_a", 0, 1000);
+        app.image_at(ImageFlow::Import, "boot_a", 0, 1000);
         app.image_ended(end.clone());
         assert_eq!(app.state.image_job.unwrap().outcome, Some(end), "nothing was written, and it says why");
     }

@@ -163,6 +163,9 @@ pub enum Screen {
     /// Partitions written out whole as image files, images written back over
     /// the partitions they came from, and the images kept.
     ImageBackup,
+    /// Turning the phone off, and what is still going that turning it off
+    /// would cut short.
+    PowerOff,
     Language,
     TimeZone,
     /// Saving the logs, as a bug report asks for them.
@@ -228,6 +231,8 @@ pub enum Screen {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Confirm {
     Reboot,
+    /// Turn the phone off.
+    PowerOff,
     Wipe,
     Flash,
     Backup,

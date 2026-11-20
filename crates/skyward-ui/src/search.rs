@@ -59,12 +59,24 @@ pub const ENTRIES: &[Entry] = &[
         &["fenquguanli", "fqgl", "fenqu", "fq", "biao", "partition", "partitions", "size", "daxiao"],
     ),
     entry(
+        ["镜像备份", "映像檔備份", "Image backup"],
+        ADVANCED,
+        Screen::ImageBackup,
+        &["xiangbeifen", "xbf", "jingxiang", "jx", "beifen", "bf", "image", "img", "export", "daochu", "backup"],
+    ),
+    entry(
         ["文件系统", "檔案系統", "Filesystems"],
         ADVANCED,
         Screen::Filesystems,
         &["wenjianxitong", "wjxt", "genghuan", "gh", "fsck", "filesystem", "f2fs", "ext4"],
     ),
     entry(["导出日志", "匯出記錄", "Export logs"], ADVANCED, Screen::Logs, &["daochurizhi", "dcrz", "rizhi", "rz", "logs", "dmesg"]),
+    entry(
+        ["关机", "關機", "Power off"],
+        ADVANCED,
+        Screen::PowerOff,
+        &["guanji", "gj", "poweroff", "shutdown", "power", "off"],
+    ),
     entry(
         ["系统更新", "系統更新", "System update"],
         ADVANCED,

@@ -1,7 +1,7 @@
 use crate::app::{
     ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
-    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, Pick, Place, Rows,
+    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, Pick, Place, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
     USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
 };
@@ -94,6 +94,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::Filesystems => filesystems(cx),
         Screen::Partitions => partitions(cx),
         Screen::ImageBackup => image_backup(cx),
+        Screen::PowerOff => power_off(cx),
         Screen::Filesystem => filesystem(cx),
         Screen::PartWork => part_work(cx),
         Screen::Language => language(cx),
@@ -133,6 +134,7 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
             FsAction::Remake(_) => (["滑动以更换", "滑動以更換", "Slide to change"], true),
         },
         Confirm::Reboot => (["滑动以重启", "滑動以重新啟動", "Slide to reboot"], false),
+        Confirm::PowerOff => (["滑动以关机", "滑動以關機", "Slide to power off"], true),
         Confirm::Wipe => (["滑动以清除", "滑動以清除", "Slide to wipe"], true),
         Confirm::Flash => (["滑动以刷入", "滑動以刷入", "Slide to flash"], true),
         Confirm::Backup => (["滑动以备份", "滑動以備份", "Slide to back up"], false),
@@ -971,6 +973,68 @@ pub fn reboot(cx: &Ctx) -> Frame {
     let track = widgets::confirm(&mut c, t, f, y + t.m.dp(28.0), label, danger, s.confirm);
     out.push(Hit { rect: track, action: Action::Confirm(Confirm::Reboot) });
     Frame::new(t, c, out, l.pick(REBOOT), top)
+}
+
+/// Turning the phone off: what is still going that turning it off would cut
+/// short, and a swipe to turn it off.
+///
+/// A page of its own rather than a choice on the reboot page: a phone is
+/// turned off at the end of a session, and the work that a session leaves
+/// running -- an install, a backup, an image being written -- is what a
+/// swipe here would cut in half.
+pub fn power_off(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+    // The work that would be cut short, named as its own page names it.
+    let mut going: Vec<&'static str> = Vec::new();
+    if s.installer.is_some() {
+        going.push(l.pick(["安装", "安裝", "An install"]));
+    }
+    if s.backuper.is_some() {
+        going.push(l.pick(["备份或恢复", "備份或還原", "A backup or restore"]));
+    }
+    if s.image_job.as_ref().is_some_and(|job| job.outcome.is_none()) {
+        going.push(l.pick(["镜像的写入", "映像檔的寫入", "An image being written"]));
+    }
+    if s.job.is_some() {
+        going.push(l.pick(["复制或删除文件", "複製或刪除檔案", "Files being copied or deleted"]));
+    }
+    if s.part_work.as_ref().is_some_and(|w| w.outcome.is_none()) {
+        going.push(l.pick(["分区上的操作", "分割區上的操作", "Work on a partition"]));
+    }
+    if s.relabel.as_ref().is_some_and(|job| job.outcome.is_none()) {
+        going.push(l.pick(["写入文件标签", "寫入檔案標籤", "Files being relabelled"]));
+    }
+    let y = match going.is_empty() {
+        true => {
+            let y = widgets::section_first(&mut c, t, f, top, l.pick(["关机", "關機", "Power off"]));
+            let note = l.pick([
+                "关机后手机将完全断电。按电源键可以重新开机，开机后直接进入系统。",
+                "關機後手機將完全斷電。按電源鍵可以重新開機，開機後直接進入系統。",
+                "The phone goes fully off. The power key turns it back on, into the system.",
+            ]);
+            widgets::footnote(&mut c, t, f, y, note)
+        }
+        false => {
+            // The work is said first: a phone turned off halfway through an
+            // install is a phone that may not start again.
+            let y = widgets::section_first(&mut c, t, f, top, l.pick(["正在进行", "正在進行", "Still going"]));
+            let rows: Vec<Row> = going.iter().map(|what| Row::new(*what).tint(t.pal.danger)).collect();
+            let list = widgets::list(&mut c, t, f, y, &rows);
+            let note = l.pick([
+                "关机将中断这些操作，未完成的部分可能让手机无法正常启动。请先返回等待它们完成。",
+                "關機將中斷這些操作，未完成的部分可能讓手機無法正常啟動。請先返回等待它們完成。",
+                "Turning the phone off cuts these short, and what is left half done may keep it from starting. Go back and let them finish.",
+            ]);
+            widgets::footnote(&mut c, t, f, list.bottom, note)
+        }
+    };
+    let (label, danger) = confirm_label(Confirm::PowerOff, s);
+    let track = widgets::confirm(&mut c, t, f, y + t.m.dp(28.0), label, danger, s.confirm);
+    out.push(Hit { rect: track, action: Action::Confirm(Confirm::PowerOff) });
+    Frame::new(t, c, out, l.pick(POWER_OFF), top)
 }
 
 /// Installing, opened from the home page: the system on the phone now, and
@@ -2525,6 +2589,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
             Row::new(l.pick(LOGS)).icon(ORANGE, Icon::Log),
             Row::new(l.pick(["U 盘管理", "USB 隨身碟管理", "USB drive"])).icon(PURPLE, Icon::UsbDrive),
             Row::new(l.pick(RELABEL)).icon(PURPLE, Icon::Shield),
+            Row::new(l.pick(POWER_OFF)).icon(SLATE, Icon::Power),
         ],
     );
     let out = hits(
@@ -2543,6 +2608,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
             Action::Open(Screen::Logs),
             Action::FilesOtg,
             Action::Open(Screen::Relabel),
+            Action::Open(Screen::PowerOff),
         ],
     );
     Frame::new(t, c, out, l.pick(ADVANCED), top)
@@ -2653,6 +2719,7 @@ const RELABEL: Text = ["修复 SELinux 上下文", "修復 SELinux 上下文", "
 const FILESYSTEMS: Text = ["文件系统", "檔案系統", "Filesystems"];
 const PARTITIONS: Text = ["分区管理", "分割區管理", "Partitions"];
 const IMAGE_BACKUP: Text = ["镜像备份", "映像檔備份", "Image backup"];
+const POWER_OFF: Text = ["关机", "關機", "Power off"];
 const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
 const STOPPED: Text = ["已停止", "已停止", "Stopped"];
 const STOPPING: Text = ["正在停止", "正在停止", "Stopping"];
@@ -3201,7 +3268,8 @@ fn image_parts_list(cx: &Ctx, c: &mut Canvas, out: &mut Vec<Hit>, y: f32) -> f32
         }
         Ok(parts) if parts.is_empty() => widgets::list(c, t, f, y, &[Row::new(l.pick(["本机没有分区", "本機沒有分割區", "This phone lists no partitions"])).trail(Trail::None)]).bottom,
         Ok(parts) => {
-            let shown: Vec<Row> = parts.iter().map(|p| Row::new(&p.name).subtitle(fmt::bytes(p.size)).trail(Trail::Arrow)).collect();
+            let sizes: Vec<String> = parts.iter().map(|p| fmt::bytes(p.size)).collect();
+            let shown: Vec<Row> = parts.iter().zip(&sizes).map(|(p, size)| Row::new(&p.name).subtitle(size).trail(Trail::Arrow)).collect();
             let list = widgets::list(c, t, f, y, &shown);
             out.extend(hits(&list.rows, &(0..parts.len()).map(Action::ExportImage).collect::<Vec<_>>()));
             let note = l.pick([
@@ -3229,7 +3297,7 @@ fn image_files_list(cx: &Ctx, c: &mut Canvas, out: &mut Vec<Hit>, y: f32) -> f32
                 .iter()
                 .map(|file| {
                     let sub = format!("{} · {} · {}", file.partition, fmt::bytes(file.size), fmt::date(l, file.made, s.time_zone));
-                    Row::new(&file.name).subtitle(sub).trail(Trail::Arrow)
+                    Row::new(&file.name).subtitle(&sub).trail(Trail::Arrow)
                 })
                 .collect();
             let list = widgets::list(c, t, f, y, &shown);
@@ -3237,10 +3305,9 @@ fn image_files_list(cx: &Ctx, c: &mut Canvas, out: &mut Vec<Hit>, y: f32) -> f32
             // Each image's own row opens it; the rows under the list are where
             // one is deleted, since deleting asks nothing of the partition.
             let mut below = list.bottom;
-            let actions: Vec<Row> = files
-                .iter()
-                .map(|file| Row::new(format!("{} {}", l.pick(["删除", "刪除", "Delete"]), file.name)).tint(t.pal.danger))
-                .collect();
+            let deletes_word = l.pick(["删除", "刪除", "Delete"]);
+            let names: Vec<String> = files.iter().map(|file| format!("{deletes_word} {}", file.name)).collect();
+            let actions: Vec<Row> = names.iter().map(|name| Row::new(name).tint(t.pal.danger)).collect();
             if !actions.is_empty() {
                 let y = widgets::section(c, t, f, below, l.pick(ACTIONS));
                 let deletes = widgets::list(c, t, f, y, &actions);
@@ -3264,7 +3331,7 @@ fn image_job_page(cx: &Ctx, job: &ImageJob) -> Frame {
     let mut c = long_page(cx);
     let mut out = Vec::new();
     let top = t.m.content_top;
-    let exporting = job.kind == ImageKind::Export;
+    let exporting = job.kind == ImageFlow::Export;
     let (title, going) = if exporting {
         (["正在写入镜像", "正在寫入映像檔", "Writing the image"], l.pick(["正在读取分区", "正在讀取分割區", "Reading the partition"]))
     } else {

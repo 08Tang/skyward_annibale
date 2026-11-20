@@ -419,7 +419,7 @@ impl App {
                 };
                 let Some(part) = parts.get(k) else { return Vec::new() };
                 let (partition, size) = (part.name.clone(), part.size);
-                self.state.image_job = Some(ImageJob { kind: ImageKind::Export, partition: partition.clone(), done: 0, of: size, outcome: None });
+                self.state.image_job = Some(ImageJob { kind: ImageFlow::Export, partition: partition.clone(), done: 0, of: size, stopping: false, outcome: None });
                 self.refresh();
                 return vec![Effect::ExportImage { partition, size, drive: self.state.image_to_drive }];
             }
@@ -430,7 +430,7 @@ impl App {
                 };
                 let Some(file) = files.get(k) else { return Vec::new() };
                 let (partition, path, sha256) = (file.partition.clone(), file.path.clone(), file.sha256.clone());
-                self.state.image_job = Some(ImageJob { kind: ImageKind::Import, partition: partition.clone(), done: 0, of: file.size, outcome: None });
+                self.state.image_job = Some(ImageJob { kind: ImageFlow::Import, partition: partition.clone(), done: 0, of: file.size, stopping: false, outcome: None });
                 self.refresh();
                 return vec![Effect::ImportImage { partition, path, sha256 }];
             }
@@ -1110,6 +1110,7 @@ impl App {
         }
         match which {
             Confirm::Reboot => fx.push(Effect::Reboot(TARGETS[self.state.reboot])),
+            Confirm::PowerOff => fx.push(Effect::Reboot(Target::PowerOff)),
             // The slider taken across: the lock is kept from now on. The risk
             // is asked again the next time it is turned on.
             Confirm::KeepLock => {

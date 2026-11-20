@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
-use skyward_ui::app::{ImageEnd, ImageFile, ImageKind, ImagePart};
+use skyward_ui::app::{ImageEnd, ImageFile, ImageFlow, ImagePart};
 
 /// The folder images go in and are found in, in a place.
 pub const FOLDER: &str = "Skyward/images";
@@ -304,11 +304,11 @@ pub fn image_name(partition: &str, when: &str) -> String {
 }
 
 /// The kinds of work, as the page names them.
-pub fn kind_of(task: &Task) -> ImageKind {
+pub fn kind_of(task: &Task) -> ImageFlow {
     match task {
-        Task::Export { .. } => ImageKind::Export,
-        Task::Import { .. } => ImageKind::Import,
-        Task::Delete { .. } => ImageKind::Export,
+        Task::Export { .. } => ImageFlow::Export,
+        Task::Import { .. } => ImageFlow::Import,
+        Task::Delete { .. } => ImageFlow::Export,
     }
 }
 
