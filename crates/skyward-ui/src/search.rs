@@ -59,10 +59,12 @@ pub const ENTRIES: &[Entry] = &[
         &["fenquguanli", "fqgl", "fenqu", "fq", "biao", "partition", "partitions", "size", "daxiao"],
     ),
     entry(
-        ["镜像备份", "映像檔備份", "Image backup"],
+        ["镜像备份", "映像檔備份", "Partition images"],
         ADVANCED,
         Screen::ImageBackup,
-        &["xiangbeifen", "xbf", "jingxiang", "jx", "beifen", "bf", "image", "img", "export", "daochu", "backup"],
+        // No key holds "bf" or "beifen": those are the backup page's, and a
+        // query that finds two pages for one word finds neither well.
+        &["jingxiang", "jx", "image", "img", "export", "daochu", "fenqujingxiang"],
     ),
     entry(
         ["文件系统", "檔案系統", "Filesystems"],
@@ -81,7 +83,7 @@ pub const ENTRIES: &[Entry] = &[
         ["关机", "關機", "Power off"],
         ADVANCED,
         Screen::PowerOff,
-        &["guanji", "gj", "poweroff", "shutdown", "power", "off"],
+        &["guanji", "poweroff", "shutdown", "power", "off"],
     ),
     entry(
         ["系统更新", "系統更新", "System update"],
