@@ -987,15 +987,17 @@ pub fn tasks(cx: &Ctx) -> Frame {
     let mut c = long_page(cx);
     let mut out = Vec::new();
     let top = t.m.content_top;
-    // Each row says what it is, where it stands, and which page shows it.
-    let mut rows: Vec<Row> = Vec::new();
+    // Each row says what it is, where it stands, and which page shows it. The
+    // words are kept beside the rows so each subtitle outlives the row it is
+    // set in.
+    let mut said: Vec<String> = Vec::new();
     let mut opens: Vec<Action> = Vec::new();
     if !matches!(s.install, Install::Idle) {
-        rows.push(Row::new(l.pick(["安装", "安裝", "Install"])).subtitle(install_stage(cx)).trail(Trail::Arrow));
+        said.push(install_stage(cx));
         opens.push(Action::Open(Screen::Installing));
     }
     if let Some(job) = s.backup_job.as_ref() {
-        rows.push(Row::new(l.pick(["备份或恢复", "備份或還原", "Backup or restore"])).subtitle(backup_stage(cx, job)).trail(Trail::Arrow));
+        said.push(backup_stage(cx, job));
         opens.push(Action::Open(Screen::BackupJob));
     }
     if let Some(job) = s.image_job.as_ref().filter(|j| j.outcome.is_none()) {
@@ -1003,31 +1005,42 @@ pub fn tasks(cx: &Ctx) -> Frame {
             0 => 0.0,
             of => job.done.min(of) as f32 / of as f32,
         };
-        let detail = format!("{} · {}%", job.partition, (share * 100.0).round() as u32);
-        rows.push(Row::new(l.pick(IMAGE_BACKUP)).subtitle(detail).trail(Trail::Arrow));
+        said.push(format!("{} · {}%", job.partition, (share * 100.0).round() as u32));
         opens.push(Action::Open(Screen::ImageBackup));
     }
     if s.job.is_some() {
-        rows.push(Row::new(l.pick(["文件", "檔案", "Files"])).subtitle(l.pick(["正在复制、移动或删除", "正在複製、移動或刪除", "Copying, moving or deleting"])).trail(Trail::Arrow));
+        said.push(l.pick(["正在复制、移动或删除", "正在複製、移動或刪除", "Copying, moving or deleting"]).to_string());
         opens.push(Action::Open(Screen::Files));
     }
     if s.part_work.as_ref().is_some_and(|w| w.outcome.is_none()) {
-        rows.push(Row::new(l.pick(["分区", "分割區", "Partitions"])).subtitle(l.pick(["正在处理分区", "正在處理分割區", "Working on a partition"])).trail(Trail::Arrow));
+        said.push(l.pick(["正在处理分区", "正在處理分割區", "Working on a partition"]).to_string());
         opens.push(Action::Open(Screen::PartWork));
     }
     if s.relabel.as_ref().is_some_and(|j| j.outcome.is_none()) {
-        rows.push(Row::new(l.pick(RELABEL)).subtitle(l.pick(["正在写入文件标签", "正在寫入檔案標籤", "Writing the files' labels"])).trail(Trail::Arrow));
+        said.push(l.pick(["正在写入文件标签", "正在寫入檔案標籤", "Writing the files' labels"]).to_string());
         opens.push(Action::Open(Screen::Relabel));
     }
     if let Some(job) = s.download.as_ref().filter(|j| j.outcome.is_none()) {
-        let detail = match job.progress {
+        said.push(match job.progress {
             Some(Progress::Downloading { done, total }) => format!("{} / {}", fmt::bytes(done), fmt::bytes(total)),
             Some(Progress::Checking { done, total }) => format!("{} / {}", fmt::bytes(done), fmt::bytes(total)),
             None => l.pick(["正在连接", "正在連線", "Connecting"]).to_string(),
-        };
-        rows.push(Row::new(l.pick(["下载", "下載", "Download"])).subtitle(detail).trail(Trail::Arrow));
+        });
         opens.push(Action::Open(Screen::Update));
     }
+    let names: Vec<&str> = opens
+        .iter()
+        .map(|action| match action {
+            Action::Open(Screen::Installing) => l.pick(["安装", "安裝", "Install"]),
+            Action::Open(Screen::BackupJob) => l.pick(["备份或恢复", "備份或還原", "Backup or restore"]),
+            Action::Open(Screen::ImageBackup) => l.pick(IMAGE_BACKUP),
+            Action::Open(Screen::Files) => l.pick(["文件", "檔案", "Files"]),
+            Action::Open(Screen::PartWork) => l.pick(["分区", "分割區", "Partitions"]),
+            Action::Open(Screen::Relabel) => l.pick(RELABEL),
+            _ => l.pick(["下载", "下載", "Download"]),
+        })
+        .collect();
+    let rows: Vec<Row> = names.iter().zip(&said).map(|(name, said)| Row::new(name).subtitle(said).trail(Trail::Arrow)).collect();
     let y = match rows.is_empty() {
         true => {
             let y = widgets::section_first(&mut c, t, f, top, l.pick(TASKS));
@@ -1057,7 +1070,7 @@ fn install_stage(cx: &Ctx) -> String {
         Install::Choosing(_) | Install::Confirming { .. } | Install::ConfirmingScript => l.pick(["等待确认", "等待確認", "Waiting to be agreed to"]).to_string(),
         Install::Updating { .. } => l.pick(["正在安装系统更新", "正在安裝系統更新", "Installing the update"]).to_string(),
         Install::Flashing { .. } => l.pick(["正在刷入分区镜像", "正在刷入分割區映像檔", "Flashing an image"]).to_string(),
-        Install::Scripting { .. } | Install::Script { .. } => l.pick(["正在运行安装脚本", "正在執行安裝指令碼", "Running the install script"]).to_string(),
+        Install::Scripting { .. } => l.pick(["正在运行安装脚本", "正在執行安裝指令碼", "Running the install script"]).to_string(),
         _ => l.pick(["正在进行", "正在進行", "Under way"]).to_string(),
     }
 }
@@ -3434,23 +3447,29 @@ fn image_files_list(cx: &Ctx, c: &mut Canvas, out: &mut Vec<Hit>, y: f32) -> f32
 /// Work on an image under way, or how it ended: the partition, how far it has
 /// come, and a way to stop it while it runs.
 fn image_job_page(cx: &Ctx, job: &ImageJob) -> Frame {
-    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let (t, f, l) = (cx.t, cx.f, cx.state.lang);
     let mut c = long_page(cx);
     let mut out = Vec::new();
     let top = t.m.content_top;
     let exporting = job.kind == ImageFlow::Export;
-    let (title, going) = if exporting {
-        (["正在写入镜像", "正在寫入映像檔", "Writing the image"], l.pick(["正在读取分区", "正在讀取分割區", "Reading the partition"]))
-    } else {
-        (["正在写回镜像", "正在寫回映像檔", "Writing the image back"], l.pick(["正在核对镜像", "正在核對映像檔", "Checking the image"]))
+    let title = match exporting {
+        true => ["正在写入镜像", "正在寫入映像檔", "Writing the image"],
+        false => ["正在写回镜像", "正在寫回映像檔", "Writing the image back"],
     };
     let done = job.done.min(job.of);
-    let detail = format!("{} · {} / {}", job.partition, fmt::bytes(done), fmt::bytes(job.of));
+    // While it runs, the detail says what it is doing; once it has ended, how
+    // much of the partition went through.
+    let doing = match (exporting, job.outcome.is_some()) {
+        (true, false) => l.pick(["正在读取分区", "正在讀取分割區", "Reading the partition"]),
+        (false, false) => l.pick(["正在核对镜像", "正在核對映像檔", "Checking the image"]),
+        _ => l.pick(["镜像", "映像檔", "Image"]),
+    };
+    let detail = format!("{doing} · {} · {} / {}", job.partition, fmt::bytes(done), fmt::bytes(job.of));
     let share = match job.of {
         0 => 0.0,
         of => done as f32 / of as f32,
     };
-    let mut y = widgets::progress_card(&mut c, t, f, top, l.pick(title), &detail, Some(share));
+    let y = widgets::progress_card(&mut c, t, f, top, l.pick(title), &detail, Some(share));
     match &job.outcome {
         None => {
             let y = widgets::section(&mut c, t, f, y, l.pick(ACTIONS));
