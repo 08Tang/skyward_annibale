@@ -991,6 +991,10 @@ impl App {
         let mut morph = self.morph.take().expect("composing it");
         let (q, _) = morph.at(now);
         let (field, _) = widgets::search_layout(&t);
+        // The search page holds its field just under the bar, not where the
+        // page would put it: the bar eases to where the field ends up, or the
+        // page would jump by a field's height as the bar lands.
+        let field = Rect::new(field.x, widgets::bar_bottom(&t), field.w, field.h);
         let home = Rect::new(m.margin, m.content_top - morph.scroll, m.w as f32 - m.margin * 2.0, m.search_h);
         let along = |a: f32, b: f32| a + (b - a) * q;
         let bar = Rect::new(m.margin, along(home.y, field.y), along(home.w, field.w), m.search_h);
@@ -1036,9 +1040,10 @@ impl App {
             out.put(keys, (*top as f32 + (1.0 - q) * keys.h as f32).round() as i32);
         }
         widgets::search_capsule(out, &t, f, bar, self.state.lang.pick(pages::SEARCH_HINT));
-        // The cursor shows from the start, going up with the field.
+        // The cursor shows from the start, going up with the field. It stands
+        // in the field's own band, so it goes where the bar has got to.
         if let Some(caret) = frame.caret.as_ref().filter(|_| morph.into && caret_on) {
-            out.lay(&caret.art, caret.x, caret.y + (bar.y - field.y).round() as i32, 1.0);
+            out.lay(&caret.art, caret.x, bar.y.round() as i32 + caret.y, 1.0);
         }
         let (disc, cross) = morph.cancel.get_or_insert_with(|| {
             let (disc, cross) = widgets::cancel_art(&t);
