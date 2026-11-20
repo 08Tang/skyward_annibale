@@ -1255,8 +1255,9 @@ mod tests {
         let t = Theme::light(W, H, PPD);
         let mut app = App::new(Screen::Home, W, H, PPD);
         let mut c = Canvas::new(W, H);
-        // A name that fits at the tile's own size is not rolled.
-        app.state.wlan = Some(connected("Redmi-AX6000"));
+        // A name that fits at the tile's own size is not rolled. The tiles
+        // are a quarter of the sheet wide, so the name has to be short.
+        app.state.wlan = Some(connected("Mi"));
         app.shade = 1.0;
         app.compose(&mut c, &f, &i, "12:00", 1000);
         assert!(app.shade_roll.is_none(), "a name that fits is still");
