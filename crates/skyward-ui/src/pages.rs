@@ -213,18 +213,28 @@ fn long_page(cx: &Ctx) -> Canvas {
     sheet(cx, cx.t.m.h * 3, cx.t.pal.bg)
 }
 
-/// How tall a long page whose content ends at `bottom` is: to the bottom
+/// [`long_page`] for a page that may hold more rows than three screens: the
+/// sheet is `screens` screens tall, and [`fit`] trims it to the content. A
+/// list of every partition on the phone runs past three.
+fn long_page_of(cx: &Ctx, screens: u32) -> Canvas {
+    sheet(cx, cx.t.m.h * screens.max(1), cx.t.pal.bg)
+}
+
+/// How many screens a list of `rows` takes, at `top` down the page, with
+/// `room` for whatever stands above and below it.
+fn screens_for(t: &Theme, top: f32, room: f32, rows: usize) -> u32 {
+    let h = top + room + t.m.row_h * rows as f32;
+    (h / t.m.h as f32).ceil() as u32 + 1
+}/// How tall a long page whose content ends at `bottom` is: to the bottom
 /// margin after it, and never shorter than one screen.
 fn fitted(t: &Theme, bottom: f32) -> u32 {
     ((bottom + t.m.margin * 2.0).ceil() as u32).max(t.m.h)
 }
 
 /// Trim a long page to its content plus the bottom margin, and never shorter
-/// than one screen. A page with more rows than the sheet it was drawn on is
-/// made taller rather than cut short: a list of partitions can run past three
-/// screens.
+/// than one screen.
 fn fit(c: Canvas, t: &Theme, bottom: f32) -> Canvas {
-    c.height_at(fitted(t, bottom), t.pal.bg)
+    c.crop_height(fitted(t, bottom))
 }
 
 fn hits(rects: &[Rect], actions: &[Action]) -> Vec<Hit> {
@@ -2134,9 +2144,10 @@ pub fn search(cx: &Ctx) -> Frame {
     // The page is as tall as three screens whatever it finds, so that drawing
     // part of it again draws the same page: a canvas that grew and shrank with
     // every key typed would not. What it scrolls to is where the rows stop,
-    // which `content_end` says: the last row's foot and the margin under it,
-    // so that the card's own edge is not left under the keys.
-    let end = bottom.max(m.h as f32 - keys - m.margin);
+    // which `content_end` says: the last row's foot and the margin under it.
+    // Taking the keys' own top as a floor as well would let a short list
+    // scroll, and a long one stop before its last row.
+    let end = bottom + m.margin;
     Frame { back: false, header: false, caret: Some(field.caret), pinned: Some(pinned), dock: Some(dock), content_end: Some(end), ..Frame::new(t, c, out, find, 0.0) }
 }
 
@@ -3379,7 +3390,14 @@ fn fs_held(l: Lang, row: &FsRow, data: &Data) -> String {
 /// still going.
 pub fn image_backup(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-    let mut c = long_page(cx);
+    // The list of partitions is as long as the phone has partitions, which can
+    // be more than three screens' worth: the sheet is made to fit them.
+    let rows = match (&s.image_parts, s.image_showing_parts) {
+        (Ok(parts), true) => parts.len(),
+        _ => 0,
+    };
+    let screens = screens_for(t, t.m.content_top, t.m.row_h * 6.0, rows);
+    let mut c = long_page_of(cx, screens);
     let mut out = Vec::new();
     let top = t.m.content_top;
     // Work under way, or how it last ended, takes the page over: a second
