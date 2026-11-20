@@ -302,6 +302,15 @@ impl App {
                 }
             }
             Screen::Filesystems => vec![Effect::ReadFilesystems],
+            // The table is read from the same place the filesystem page reads
+            // it, and a reading already in hand shows at once.
+            Screen::Partitions => {
+                if matches!(self.state.filesystems, Some(Ok(_))) {
+                    Vec::new()
+                } else {
+                    vec![Effect::ReadFilesystems]
+                }
+            }
             Screen::Slot | Screen::Reboot => vec![Effect::ReadSlots],
             Screen::Systems => vec![Effect::ReadSystems],
             Screen::Restore => vec![self.find_backups()],

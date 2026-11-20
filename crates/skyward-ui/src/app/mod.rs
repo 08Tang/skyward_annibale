@@ -155,6 +155,9 @@ pub enum Screen {
     /// filesystem page's, or what the system asked for before the recovery
     /// started.
     PartWork,
+    /// Every partition the phone's table lists, with its size: what a
+    /// partition is, and what can be done with it.
+    Partitions,
     Language,
     TimeZone,
     /// Saving the logs, as a bug report asks for them.
