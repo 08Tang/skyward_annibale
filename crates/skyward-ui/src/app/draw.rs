@@ -874,11 +874,23 @@ impl App {
         // The search page's round button and the home page's search bar
         // darken at once under a finger.
         if let Some(a) = pressing.filter(|a| matches!(a, Action::CloseSearch | Action::Open(Screen::About))) {
-            let r = frame.hits.iter().find(|h| h.action == a).expect("a button held down is on its page").rect;
-            match frame.shown(r, offset) {
-                Some(r) if a == Action::CloseSearch => widgets::cancel_held(out, t, r),
-                Some(r) => widgets::search_bar_held(out, t, r),
-                None => {}
+            // The search page's button is on the strip held at the top, in the
+            // strip's own coordinates; the home page's bar is on the page.
+            let on_strip = frame.pinned.as_ref().and_then(|p| p.hits.iter().find(|h| h.action == a).map(|h| (h.rect, p)));
+            match on_strip {
+                Some((r, p)) => {
+                    let top = pinned_top(t, p, offset);
+                    let r = Rect::new(r.x, r.y + top, r.w, r.h);
+                    widgets::cancel_held(out, t, r);
+                }
+                None => {
+                    let r = frame.hits.iter().find(|h| h.action == a).expect("a button held down is on its page").rect;
+                    match frame.shown(r, offset) {
+                        Some(r) if a == Action::CloseSearch => widgets::cancel_held(out, t, r),
+                        Some(r) => widgets::search_bar_held(out, t, r),
+                        None => {}
+                    }
+                }
             }
         }
         let bar = view.bar;
