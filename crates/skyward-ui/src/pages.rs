@@ -3411,8 +3411,8 @@ pub fn image_backup(cx: &Ctx) -> Frame {
     let row_h = match &s.image_parts {
         Ok(parts) if !parts.is_empty() => {
             let probe = Canvas::band(t.m.w, 1, 0..1, 0..t.m.w, t.pal.bg);
-            let sample = Row::new(&parts[0].name).subtitle(fmt::bytes(parts[0].size));
-            widgets::one_height(&probe, t, f, &sample)
+            let size = fmt::bytes(parts[0].size);
+            widgets::one_height(&probe, t, f, &Row::new(&parts[0].name).subtitle(&size))
         }
         _ => t.m.row_h,
     };
