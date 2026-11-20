@@ -871,41 +871,8 @@ impl App {
                 draw_faded(out, big, 0.0, -frame.title_lift(offset), t.pal.text, level, (1.0 - level) * m.dp(TITLE_BLUR_DP));
             }
         }
-        // The search page's round button and the home page's search bar
-        // darken at once under a finger.
-        if let Some(a) = pressing.filter(|a| matches!(a, Action::CloseSearch | Action::Open(Screen::About))) {
-            // The search page's button is on the strip held at the top, in the
-            // strip's own coordinates; the home page's bar is on the page.
-            let on_strip = frame.pinned.as_ref().and_then(|p| p.hits.iter().find(|h| h.action == a).map(|h| (h.rect, p)));
-            match on_strip {
-                Some((r, p)) => {
-                    let top = pinned_top(t, p, offset);
-                    let r = Rect::new(r.x, r.y + top, r.w, r.h);
-                    widgets::cancel_held(out, t, r);
-                }
-                None => {
-                    let r = frame.hits.iter().find(|h| h.action == a).expect("a button held down is on its page").rect;
-                    match frame.shown(r, offset) {
-                        Some(r) if a == Action::CloseSearch => widgets::cancel_held(out, t, r),
-                        Some(r) => widgets::search_bar_held(out, t, r),
-                        None => {}
-                    }
-                }
-            }
-        }
         let bar = view.bar;
         let strip = frame.pinned.as_ref().map(|p| (p, pinned_top(t, p, offset)));
-        // A cursor in a held strip stays with it: the field does not go up
-        // with the page.
-        if let Some(caret) = frame.caret.as_ref().filter(|_| view.caret) {
-            // The cursor is in the strip's own coordinates, so it goes where
-            // the strip shows: the strip's top on screen plus its own offset.
-            let y = match strip {
-                Some((_, top)) => caret.y + top.round() as i32,
-                None => caret.y - offset as i32,
-            };
-            out.lay(&caret.art, caret.x, y, 1.0);
-        }
         shine(out, Group::Page);
         if bar > 0.0 {
             match strip {
@@ -917,10 +884,41 @@ impl App {
                     widgets::bar_mask(out, t, stops, frame.bg, bar);
                 }
             }
-        }
-        if let Some((p, top)) = strip {
+        }        if let Some((p, top)) = strip {
             out.put(&p.canvas, top.round() as i32);
             shine(out, Group::Strip);
+        }
+        // What is held down on the strip, and the strip's cursor, go over it:
+        // they are drawn after the strip or the strip would cover them.
+        if let Some(a) = pressing.filter(|a| matches!(a, Action::CloseSearch | Action::Open(Screen::About))) {
+            // The search page's button is on the strip held at the top, in the
+            // strip's own coordinates; the home page's bar is on the page.
+            let on_strip = frame.pinned.as_ref().and_then(|p| p.hits.iter().find(|h| h.action == a).map(|h| (h.rect, p)));
+            match on_strip {
+                Some((r, p)) => {
+                    let top = pinned_top(t, p, offset);
+                    widgets::cancel_held(out, t, Rect::new(r.x, r.y + top, r.w, r.h));
+                }
+                None => {
+                    let r = frame.hits.iter().find(|h| h.action == a).expect("a button held down is on its page").rect;
+                    match frame.shown(r, offset) {
+                        Some(r) if a == Action::CloseSearch => widgets::cancel_held(out, t, r),
+                        Some(r) => widgets::search_bar_held(out, t, r),
+                        None => {}
+                    }
+                }
+            }
+        }
+        // A cursor in a held strip stays with it: the field does not go up
+        // with the page.
+        if let Some(caret) = frame.caret.as_ref().filter(|_| view.caret) {
+            // The cursor is in the strip's own coordinates, so it goes where
+            // the strip shows: the strip's top on screen plus its own offset.
+            let y = match strip {
+                Some((_, top)) => caret.y + top.round() as i32,
+                None => caret.y - offset as i32,
+            };
+            out.lay(&caret.art, caret.x, y, 1.0);
         }
         if let Some(d) = &frame.dock {
             out.put(&d.canvas, (out.h - d.canvas.h) as i32);
