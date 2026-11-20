@@ -1140,7 +1140,7 @@ pub fn power_off(cx: &Ctx) -> Frame {
             // The work is said first: a phone turned off halfway through an
             // install is a phone that may not start again.
             let y = widgets::section_first(&mut c, t, f, top, l.pick(["正在进行", "正在進行", "Still going"]));
-            let rows: Vec<Row> = going.iter().map(|what| Row::new(*what).tint(t.pal.danger)).collect();
+            let rows: Vec<Row> = going.iter().map(|what| Row::new(what).tint(t.pal.danger)).collect();
             let list = widgets::list(&mut c, t, f, y, &rows);
             let note = l.pick([
                 "关机将中断这些操作，未完成的部分可能让手机无法正常启动。请先返回等待它们完成。",
