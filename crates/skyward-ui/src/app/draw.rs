@@ -72,6 +72,17 @@ impl App {
                 self.title.jump(title);
                 self.bar.jump(bar);
             }
+        } else {
+            // The page drawn again, whole or in part, may be a different
+            // height than it was: a page whose rows depend on what is typed,
+            // as the search page's do, is as tall as what it found. Its
+            // scroll is worked out from the height it has now.
+            let t = self.theme();
+            let height = self.frame.as_ref().expect("checked above").height(&t);
+            if height != self.height {
+                self.height = height;
+                self.clamp_scroll();
+            }
         }
         self.frame.as_ref().expect("rendered above")
     }
@@ -870,11 +881,19 @@ impl App {
                 None => {}
             }
         }
-        if let Some(caret) = frame.caret.as_ref().filter(|_| view.caret) {
-            out.lay(&caret.art, caret.x, caret.y - offset as i32, 1.0);
-        }
         let bar = view.bar;
         let strip = frame.pinned.as_ref().map(|p| (p, pinned_top(t, p, offset)));
+        // A cursor in a held strip stays with it: the field does not go up
+        // with the page.
+        if let Some(caret) = frame.caret.as_ref().filter(|_| view.caret) {
+            // The cursor is in the strip's own coordinates, so it goes where
+            // the strip shows: the strip's top on screen plus its own offset.
+            let y = match strip {
+                Some((_, top)) => caret.y + top.round() as i32,
+                None => caret.y - offset as i32,
+            };
+            out.lay(&caret.art, caret.x, y, 1.0);
+        }
         shine(out, Group::Page);
         if bar > 0.0 {
             match strip {

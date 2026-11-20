@@ -1,7 +1,7 @@
 use crate::app::{
     ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
-    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, Pick, Place, Rows,
+    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, Pick, Pinned, Place, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
     USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
 };
@@ -2058,10 +2058,17 @@ pub fn search(cx: &Ctx) -> Frame {
         SearchScope::Modules => l.pick(["搜索模块", "搜尋模組", "Search modules"]),
         SearchScope::Features => l.pick(SEARCH_HINT),
     };
-    let field = widgets::search_field(&mut c, t, f, at.x, at.w, at.y + at.h / 2.0, &s.search, hint);
-    widgets::cancel_button(&mut c, t, cancel);
-    out.push(Hit { rect: cancel, action: Action::CloseSearch });
-    let top = field.field.y + field.field.h + m.dp(12.0);
+    // The field and the button that leaves the search are held at the top of
+    // the screen rather than drawn on the page: the page scrolls, and a field
+    // that went up with it would be gone as soon as there was anything to
+    // scroll to. A held strip never shows higher than the bar, so the field
+    // stands just under it and the rows start below that.
+    let strip_top = widgets::bar_bottom(t);
+    let mut pinned_canvas = Canvas::new(m.w, (at.h + m.dp(12.0)).ceil() as u32);
+    let field = widgets::search_field(&mut pinned_canvas, t, f, at.x, at.w, at.h / 2.0, &s.search, hint);
+    widgets::cancel_button(&mut pinned_canvas, t, Rect::new(cancel.x, 0.0, cancel.w, cancel.h));
+    let pinned = Pinned { canvas: pinned_canvas, top: strip_top, hits: vec![Hit { rect: Rect::new(cancel.x, 0.0, cancel.w, cancel.h), action: Action::CloseSearch }] };
+    let top = strip_top + at.h + m.dp(12.0);
     let bottom;
     if s.search.trim().is_empty() {
         let how = match s.search_scope {
@@ -2116,14 +2123,17 @@ pub fn search(cx: &Ctx) -> Frame {
     let mut key_canvas = Canvas::new(m.w, keys.ceil() as u32);
     let held = widgets::keyboard(&mut key_canvas, t, f, s.lang, 0.0, s.layer, s.key_held(), find);
     let dock = Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect() };
+    // The field's clear button is on the strip too, in the strip's own
+    // coordinates.
+    let mut pinned = pinned;
     if let Some(rect) = field.clear {
-        out.push(Hit { rect, action: Action::ClearSearch });
+        pinned.hits.push(Hit { rect, action: Action::ClearSearch });
     }
     // The page is as tall as three screens whatever it finds, so that drawing
     // part of it again draws the same page: a canvas that grew and shrank with
     // every key typed would not. What it scrolls to is where the rows stop,
     // which `content_end` says.
-    Frame { back: false, header: false, caret: Some(field.caret), dock: Some(dock), content_end: Some(bottom.max(m.h as f32 - keys)), ..Frame::new(t, c, out, find, 0.0) }
+    Frame { back: false, header: false, caret: Some(field.caret), pinned: Some(pinned), dock: Some(dock), content_end: Some(bottom.max(m.h as f32 - keys)), ..Frame::new(t, c, out, find, 0.0) }
 }
 
 /// Backing up: what to take, where it goes, and how.
