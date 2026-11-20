@@ -975,11 +975,15 @@ impl App {
             // The search page's keyboard and what it shows under its
             // field, from its frame; that comes in once the bar is nearly
             // there.
-            let (_, keys_top) = *morph.keyboard.get_or_insert_with(|| keyboard_strip(&t, frame));
+            morph.keyboard.get_or_insert_with(|| keyboard_strip(&t, frame));
             let (body, top) = morph.body.get_or_insert_with(|| {
                 let top = (field.y + field.h).ceil() as i32;
-                let mut body = Canvas::new(frame.canvas.w, (keys_top - top).max(0) as u32);
-                body.put_rows(&frame.canvas, top, keys_top, 0);
+                // What the page shows under the field, down to its foot: the
+                // keys are no longer on the page, so the page's own end is
+                // where the rows stop.
+                let end = frame.canvas.h as i32;
+                let mut body = Canvas::new(frame.canvas.w, (end - top).max(0) as u32);
+                body.put_rows(&frame.canvas, top, end, 0);
                 (body, top)
             });
             let (delay, span) = MORPH_BODY_MS;

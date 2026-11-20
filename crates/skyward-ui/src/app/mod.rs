@@ -1346,11 +1346,18 @@ fn row_part(r: Rect, canvas: &Canvas) -> (u32, u32, u32, u32) {
 }
 
 /// The keyboard at the foot of a typing page's `frame`, and where it rests.
+/// A page that scrolls holds its keyboard as a dock rather than on itself,
+/// so the keys stay put while its rows go by.
 fn keyboard_strip(t: &Theme, frame: &Frame) -> (Canvas, i32) {
     let top = (t.m.h as f32 - widgets::keyboard_height(t)).floor() as i32;
-    let mut strip = Canvas::new(frame.canvas.w, (frame.canvas.h as i32 - top).max(0) as u32);
-    strip.put_rows(&frame.canvas, top, frame.canvas.h as i32, 0);
-    (strip, top)
+    match &frame.dock {
+        Some(dock) => (dock.canvas.clone(), top),
+        None => {
+            let mut strip = Canvas::new(frame.canvas.w, (frame.canvas.h as i32 - top).max(0) as u32);
+            strip.put_rows(&frame.canvas, top, frame.canvas.h as i32, 0);
+            (strip, top)
+        }
+    }
 }
 
 /// How far the control centre has to be pulled, in dp, for it to stay open

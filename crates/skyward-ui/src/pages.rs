@@ -2043,9 +2043,12 @@ fn keyboard_hits(c: &mut Canvas, t: &Theme, f: &Fonts, s: &State, enter: &str, o
 pub fn search(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let m = &t.m;
-    // One screen tall: the keyboard is drawn at the bottom of the page and
-    // must stay there, so this page does not scroll as a whole.
-    let mut c = page(cx);
+    // A long page: a query that finds many features lists more than one
+    // screen holds. The keyboard is held at the foot of the screen as a dock
+    // rather than drawn on the page, so it stays put while the page scrolls.
+    // The sheet is three screens, which is more than the entries there are,
+    // and is cut to the results below.
+    let mut c = long_page(cx);
     let mut out = Vec::new();
     let (at, cancel) = widgets::search_layout(t);
     // What the field is looking through says what it asks for: a page's apps
@@ -2059,7 +2062,7 @@ pub fn search(cx: &Ctx) -> Frame {
     widgets::cancel_button(&mut c, t, cancel);
     out.push(Hit { rect: cancel, action: Action::CloseSearch });
     let top = field.field.y + field.field.h + m.dp(12.0);
-    let kb_top = m.h as f32 - widgets::keyboard_height(t);
+    let mut bottom = top;
     if s.search.trim().is_empty() {
         let how = match s.search_scope {
             SearchScope::Apps => l.pick(["输入应用名称或包名筛选，例如输入 chrome 可找到 Chrome。", "輸入應用程式名稱或套件名稱篩選，例如輸入 chrome 可找到 Chrome。", "Type an app's name or package, such as chrome to find Chrome."]),
@@ -2070,7 +2073,7 @@ pub fn search(cx: &Ctx) -> Frame {
                 "Type the name of a feature or partition, such as backup to find Backup.",
             ]),
         };
-        widgets::footnote(&mut c, t, f, top, how);
+        bottom = widgets::footnote(&mut c, t, f, top, how);
     } else {
         // A page's entries are filtered, and the row opens the one it names;
         // the whole of what the phone offers is searched, and the row opens
@@ -2082,13 +2085,14 @@ pub fn search(cx: &Ctx) -> Frame {
                 if found.is_empty() {
                     let typed = s.search.trim();
                     let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
-                    widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
+                    bottom = widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]).bottom;
                 } else {
                     let rows: Vec<Row> = found.iter().map(|e| Row::new(l.pick(e.title)).subtitle(l.pick(e.place))).collect();
                     let list = widgets::list(&mut c, t, f, top, &rows);
-                    // The keyboard covers what does not fit above it.
-                    let shown = list.rows.iter().zip(&found).filter(|(r, _)| r.y + r.h <= kb_top);
-                    out.extend(shown.map(|(&rect, e)| Hit { rect, action: Action::Open(e.screen) }));
+                    // Every row answers, the ones under the keyboard too: the
+                    // page scrolls them up above it.
+                    out.extend(list.rows.iter().zip(&found).map(|(&rect, e)| Hit { rect, action: Action::Open(e.screen) }));
+                    bottom = list.bottom;
                 }
             }
             scope => {
@@ -2096,25 +2100,32 @@ pub fn search(cx: &Ctx) -> Frame {
                 if rows.is_empty() {
                     let typed = s.search.trim();
                     let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
-                    widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
+                    bottom = widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]).bottom;
                 } else {
                     let list = widgets::list(&mut c, t, f, top, &rows);
-                    let shown = list.rows.iter().zip(&acts).filter(|(r, _)| r.y + r.h <= kb_top);
-                    out.extend(shown.map(|(&rect, &action)| Hit { rect, action }));
+                    out.extend(list.rows.iter().zip(&acts).map(|(&rect, &action)| Hit { rect, action }));
+                    bottom = list.bottom;
                 }
             }
         }
     }
     let find = l.pick(["搜索", "搜尋", "Search"]);
-    keyboard_hits(&mut c, t, f, s, find, &mut out);
+    // The keyboard is held at the foot of the screen rather than drawn on the
+    // page: a page that scrolls would take the keys with it.
+    let keys = widgets::keyboard_height(t);
+    let mut key_canvas = Canvas::new(m.w, keys.ceil() as u32);
+    let held = widgets::keyboard(&mut key_canvas, t, f, s.lang, 0.0, s.layer, s.key_held(), find);
+    let dock = Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect() };
     if let Some(rect) = field.clear {
         out.push(Hit { rect, action: Action::ClearSearch });
     }
-    // Cut to what was found, but never shorter than the screen and never
-    // shorter than it was: a page that grows and shrinks with every key typed
-    // is a page whose scroll has to be worked out afresh on each key, and the
-    // part drawn again would not be the page it was.
-    Frame { back: false, header: false, caret: Some(field.caret), ..Frame::new(t, c, out, find, 0.0) }
+    // The page is cut to what it found: the keyboard's height is added to it
+    // by `Frame::height`, so a page whose rows fit above the keys does not
+    // scroll at all, and one that finds more scrolls by just as much. The
+    // screen's own height is not a floor here -- the keys take that room.
+    let room = (m.h as f32 - keys).max(0.0).ceil() as u32;
+    let canvas = c.crop_height(((bottom + m.margin * 2.0).ceil() as u32).max(room));
+    Frame { back: false, header: false, caret: Some(field.caret), dock: Some(dock), ..Frame::new(t, canvas, out, find, 0.0) }
 }
 
 /// Backing up: what to take, where it goes, and how.
