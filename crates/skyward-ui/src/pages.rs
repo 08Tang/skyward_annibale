@@ -220,9 +220,11 @@ fn fitted(t: &Theme, bottom: f32) -> u32 {
 }
 
 /// Trim a long page to its content plus the bottom margin, and never shorter
-/// than one screen.
+/// than one screen. A page with more rows than the sheet it was drawn on is
+/// made taller rather than cut short: a list of partitions can run past three
+/// screens.
 fn fit(c: Canvas, t: &Theme, bottom: f32) -> Canvas {
-    c.crop_height(fitted(t, bottom))
+    c.height_at(fitted(t, bottom), t.pal.bg)
 }
 
 fn hits(rects: &[Rect], actions: &[Action]) -> Vec<Hit> {
@@ -2132,8 +2134,10 @@ pub fn search(cx: &Ctx) -> Frame {
     // The page is as tall as three screens whatever it finds, so that drawing
     // part of it again draws the same page: a canvas that grew and shrank with
     // every key typed would not. What it scrolls to is where the rows stop,
-    // which `content_end` says.
-    Frame { back: false, header: false, caret: Some(field.caret), pinned: Some(pinned), dock: Some(dock), content_end: Some(bottom.max(m.h as f32 - keys)), ..Frame::new(t, c, out, find, 0.0) }
+    // which `content_end` says: the last row's foot and the margin under it,
+    // so that the card's own edge is not left under the keys.
+    let end = bottom.max(m.h as f32 - keys - m.margin);
+    Frame { back: false, header: false, caret: Some(field.caret), pinned: Some(pinned), dock: Some(dock), content_end: Some(end), ..Frame::new(t, c, out, find, 0.0) }
 }
 
 /// Backing up: what to take, where it goes, and how.

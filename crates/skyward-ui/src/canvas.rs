@@ -539,6 +539,26 @@ impl Canvas {
         self
     }
 
+    /// Set the height to `h`, keeping what is drawn and filling any rows
+    /// added below with `color`: a page measured after drawing is as tall as
+    /// its rows, and may want more room than the sheet it was drawn on gave.
+    pub fn height_at(mut self, h: u32, color: Rgba) -> Canvas {
+        if h <= self.h {
+            return self.crop_height(h);
+        }
+        let held = self.held();
+        let row = self.span * 4;
+        self.data.resize(self.data.len() + row * (h - held.end) as usize, 0);
+        let added = (h - held.end) as usize * row;
+        let start = self.data.len() - added;
+        for px in self.data[start..].as_chunks_mut::<4>().0 {
+            *px = [color.r, color.g, color.b, color.a];
+        }
+        self.h = h;
+        self.bottom = h;
+        self
+    }
+
     /// A rounded rectangle in one colour.
     pub fn fill_round_rect(&mut self, x: f32, y: f32, w: f32, h: f32, r: f32, color: Rgba) {
         self.fill_round_rect_graded(x, y, w, h, r, &|_| color);
