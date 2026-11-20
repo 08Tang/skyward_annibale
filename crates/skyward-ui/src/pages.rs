@@ -2060,9 +2060,6 @@ pub fn search(cx: &Ctx) -> Frame {
     out.push(Hit { rect: cancel, action: Action::CloseSearch });
     let top = field.field.y + field.field.h + m.dp(12.0);
     let kb_top = m.h as f32 - widgets::keyboard_height(t);
-    // Where what is found ends: the page is cut to it, so a short list is a
-    // short page and a long one can be scrolled.
-    let bottom;
     if s.search.trim().is_empty() {
         let how = match s.search_scope {
             SearchScope::Apps => l.pick(["输入应用名称或包名筛选，例如输入 chrome 可找到 Chrome。", "輸入應用程式名稱或套件名稱篩選，例如輸入 chrome 可找到 Chrome。", "Type an app's name or package, such as chrome to find Chrome."]),
@@ -2073,7 +2070,7 @@ pub fn search(cx: &Ctx) -> Frame {
                 "Type the name of a feature or partition, such as backup to find Backup.",
             ]),
         };
-        bottom = widgets::footnote(&mut c, t, f, top, how);
+        widgets::footnote(&mut c, t, f, top, how);
     } else {
         // A page's entries are filtered, and the row opens the one it names;
         // the whole of what the phone offers is searched, and the row opens
@@ -2085,14 +2082,13 @@ pub fn search(cx: &Ctx) -> Frame {
                 if found.is_empty() {
                     let typed = s.search.trim();
                     let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
-                    bottom = widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]).bottom;
+                    widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
                 } else {
                     let rows: Vec<Row> = found.iter().map(|e| Row::new(l.pick(e.title)).subtitle(l.pick(e.place))).collect();
                     let list = widgets::list(&mut c, t, f, top, &rows);
                     // The keyboard covers what does not fit above it.
                     let shown = list.rows.iter().zip(&found).filter(|(r, _)| r.y + r.h <= kb_top);
                     out.extend(shown.map(|(&rect, e)| Hit { rect, action: Action::Open(e.screen) }));
-                    bottom = list.bottom;
                 }
             }
             scope => {
@@ -2100,12 +2096,11 @@ pub fn search(cx: &Ctx) -> Frame {
                 if rows.is_empty() {
                     let typed = s.search.trim();
                     let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
-                    bottom = widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]).bottom;
+                    widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
                 } else {
                     let list = widgets::list(&mut c, t, f, top, &rows);
                     let shown = list.rows.iter().zip(&acts).filter(|(r, _)| r.y + r.h <= kb_top);
                     out.extend(shown.map(|(&rect, &action)| Hit { rect, action }));
-                    bottom = list.bottom;
                 }
             }
         }
@@ -2115,7 +2110,11 @@ pub fn search(cx: &Ctx) -> Frame {
     if let Some(rect) = field.clear {
         out.push(Hit { rect, action: Action::ClearSearch });
     }
-    Frame { back: false, header: false, caret: Some(field.caret), ..Frame::new(t, fit(c, t, bottom), out, find, 0.0) }
+    // Cut to what was found, but never shorter than the screen and never
+    // shorter than it was: a page that grows and shrinks with every key typed
+    // is a page whose scroll has to be worked out afresh on each key, and the
+    // part drawn again would not be the page it was.
+    Frame { back: false, header: false, caret: Some(field.caret), ..Frame::new(t, c, out, find, 0.0) }
 }
 
 /// Backing up: what to take, where it goes, and how.
