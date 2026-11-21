@@ -749,7 +749,9 @@ impl App {
         let level = ((x - track.x) / track.w).clamp(0.0, 1.0);
         match which {
             Slider::Brightness => self.state.brightness = level.max(MIN_BRIGHTNESS),
-            Slider::Vibration => self.state.vibration = level,
+            // The sheet holds the two above; the charge page's sliders are
+            // moved by the charge page.
+            _ => self.state.vibration = level,
         }
         self.dirty = true;
     }

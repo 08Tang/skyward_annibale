@@ -454,7 +454,9 @@ impl App {
         for (col, (which, hit)) in [(Slider::Brightness, ShadeHit::Brightness), (Slider::Vibration, ShadeHit::Vibration)].into_iter().enumerate() {
             let value = match which {
                 Slider::Brightness => self.state.brightness,
-                Slider::Vibration => self.state.vibration,
+                // The sheet's two are the only ones it holds; the charge
+                // page's are drawn on the charge page.
+                _ => self.state.vibration,
             }
             .clamp(0.0, 1.0);
             let cap = Rect::new(m.margin + col as f32 * (cap_w + gap), row, cap_w, cap_h);
