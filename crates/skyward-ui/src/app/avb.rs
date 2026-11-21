@@ -1,4 +1,4 @@
-//! The AVB page's state and the answers the runtime gives it.
+﻿//! The AVB page's state and the answers the runtime gives it.
 
 use super::*;
 
@@ -56,3 +56,57 @@ impl App {
         self.refresh();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::testing::*;
+
+    /// The page with `state` read, unlocked so the switches show.
+    fn page(state: AvbInfo) -> (App, Fonts, DeviceInfo) {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Avb, &f, &i);
+        app.set_avb(Ok(state));
+        (app, f, i)
+    }
+
+    fn unlocked(verity: bool, verification: bool) -> AvbInfo {
+        AvbInfo { verity, verification, rollback_index: 3, unlocked: Some(true), backup: true }
+    }
+
+    #[test]
+    fn the_page_says_what_turning_a_check_off_costs_and_how_to_come_back() {
+        let (mut app, f, i) = page(unlocked(true, true));
+        let h = app.frame(&f, &i).canvas.h;
+        // The warning stands below the switches and their room, so the page
+        // runs past the three screens a list of rows would take.
+        assert!(h as f32 > 3.0 * H as f32, "the page carries the warning and the way back");
+        assert_eq!(app.screen(), Screen::Avb);
+    }
+
+    #[test]
+    fn the_switches_stay_above_the_warning_and_are_still_reachable() {
+        let (mut app, f, i) = page(unlocked(true, true));
+        let (toggles, backup) = {
+            let frame = app.frame(&f, &i);
+            let toggles: Vec<Rect> = frame.hits.iter().filter(|h| matches!(h.action, Action::ToggleAvb(_))).map(|h| h.rect).collect();
+            let backup = frame.hits.iter().find(|h| h.action == Action::BackupVbmeta).map(|h| h.rect);
+            (toggles, backup)
+        };
+        assert_eq!(toggles.len(), 2, "both checks are offered");
+        let backup = backup.expect("a backup is offered");
+        assert!(toggles.iter().all(|t| t.y < backup.y), "the checks come before the copy of what they change");
+    }
+
+    #[test]
+    fn a_locked_bootloader_still_shows_what_turning_a_check_off_would_cost() {
+        let (mut app, f, i) = page(AvbInfo { unlocked: Some(false), ..unlocked(true, true) });
+        let (h, toggles) = {
+            let frame = app.frame(&f, &i);
+            (frame.canvas.h, frame.hits.iter().filter(|h| matches!(h.action, Action::ToggleAvb(_))).count())
+        };
+        assert!(h as f32 > 3.0 * H as f32, "the warning is shown whether or not the switches work");
+        assert_eq!(toggles, 0, "but nothing can be changed");
+    }
+}
+

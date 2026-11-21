@@ -3201,7 +3201,9 @@ pub fn data_app_info(cx: &Ctx) -> Frame {
 /// top-level vbmeta image to back up or restore.
 pub fn avb(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-    let mut c = long_page(cx);
+    // The page carries what turning a check off costs and how a phone that
+    // no longer starts is brought back, which runs past three screens.
+    let mut c = long_page_of(cx, 4);
     let mut out = Vec::new();
     let top = t.m.content_top;
     let title = l.pick(AVB);
@@ -3258,6 +3260,7 @@ pub fn avb(cx: &Ctx) -> Frame {
         }
     }
     let mut y = actions.bottom;
+    y = avb_warning(&mut c, cx, y);
     match state.unlocked {
         Some(true) => {}
         Some(false) => {
@@ -3287,6 +3290,54 @@ pub fn avb(cx: &Ctx) -> Frame {
         y = widgets::footnote(&mut c, t, f, y + t.m.card_gap, notice);
     }
     Frame::new(t, fit(c, t, y), out, title, top)
+}
+
+/// What turning a check off does to the system already installed, and how a
+/// phone that no longer starts is brought back: the page that offers the
+/// switch is the one place someone can read this before using it, and the
+/// one place they can still reach once it has gone wrong.
+fn avb_warning(c: &mut Canvas, cx: &Ctx, y: f32) -> f32 {
+    let (t, f, l) = (cx.t, cx.f, cx.state.lang);
+    let title = l.pick([
+        "关闭校验后官方系统将无法启动",
+        "關閉驗證後官方系統將無法啟動",
+        "Turning a check off stops the official system from starting",
+    ]);
+    let detail = l.pick([
+        "这不是签名问题，解锁与否都一样：系统的 init 在 verity 关闭时不挂载分区，只能线刷恢复。",
+        "這不是簽名問題，解鎖與否都一樣：系統的 init 在 verity 關閉時不掛載分割區，只能線刷還原。",
+        "The signature is not the reason, and unlocking does not help: with verity off the system's init mounts no partition, and only a fastboot package brings it back.",
+    ]);
+    let y = widgets::list(c, t, f, y + t.m.card_gap, &[standing(title, RED, Icon::Systems, detail)]).bottom;
+    let points = [
+        l.pick([
+            "改用第三方系统时关闭校验才有意义，官方系统请保持开启。",
+            "改用第三方系統時關閉驗證才有意義，官方系統請保持開啟。",
+            "Turning a check off only helps with a system other than the phone's own; leave it on for the official one.",
+        ]),
+        l.pick([
+            "卡在 fastboot 时，先试 fastboot set_active 切到另一个槽位，再 fastboot continue；另一个槽位装过系统才有用。",
+            "卡在 fastboot 時，先試 fastboot set_active 切換到另一個槽位，再 fastboot continue；另一個槽位裝過系統才有用。",
+            "Stuck at fastboot: try fastboot set_active for the other slot, then fastboot continue. It helps only where that slot holds a system.",
+        ]),
+        l.pick([
+            "仍进不去就刷完整的线刷包，它会一并刷回 vbmeta 并清掉 misc 里的启动指令，这样才恢复得了。",
+            "仍進不去就刷完整的線刷包，它會一併刷回 vbmeta 並清掉 misc 裡的啟動指令，這樣才還原得了。",
+            "If it still does not start, flash the full fastboot package: it writes vbmeta back and clears the start request in misc, which is what makes the phone start again.",
+        ]),
+        l.pick([
+            "只重刷 vbmeta 往往不够，而且要先确认当前槽位：fastboot getvar current-slot，刷的必须是这个槽位的 vbmeta。",
+            "只重刷 vbmeta 往往不夠，而且要先確認目前槽位：fastboot getvar current-slot，刷的必須是這個槽位的 vbmeta。",
+            "Flashing vbmeta alone often is not enough, and the slot has to match: fastboot getvar current-slot, then flash that slot's vbmeta.",
+        ]),
+        l.pick([
+            "改动前请先备份 vbmeta，备份读不回来时不要改动。",
+            "改動前請先備份 vbmeta，備份讀不回來時不要改動。",
+            "Back vbmeta up before changing it, and do not change it when the backup cannot be read back.",
+        ]),
+    ];
+    let heading = l.pick(["关闭之前", "關閉之前", "Before turning it off"]);
+    widgets::notes(c, t, f, y + t.m.card_gap, heading, &points)
 }
 
 /// Giving the data partition's files the SELinux labels the installed
