@@ -1,5 +1,5 @@
 use crate::app::{
-    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, CHARGE_GAP_TENTHS, CHARGE_SLOW_LEAST, CHARGE_STOP_MOST, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST, Charge, ChargeMode, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
+    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, CHARGE_GAP_TENTHS, CHARGE_SLOW_LEAST, CHARGE_STOP_MOST, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST, Charge, ChargeMode, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock, Guard,
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,

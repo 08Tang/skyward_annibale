@@ -474,17 +474,17 @@ impl App {
             Action::ChargeAs(mode) => {
                 self.state.charge.mode = mode;
                 self.refresh();
-                fx.push(Effect::ChargeSet);
+                return vec![Effect::ChargeSet];
             }
             Action::ChargeWatts(watts) => {
                 self.state.charge.watts = watts.clamp(CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST);
                 self.refresh();
-                fx.push(Effect::ChargeSet);
+                return vec![Effect::ChargeSet];
             }
             Action::ChargeGuard(on) => {
                 self.state.charge.guarded = on;
                 self.refresh();
-                fx.push(Effect::ChargeSet);
+                return vec![Effect::ChargeSet];
             }
             Action::ChargeAt { stop, tenths } => {
                 // The two lines keep their order: the trickle is always below
@@ -502,7 +502,7 @@ impl App {
                     self.state.charge.slow_at = tenths;
                 }
                 self.refresh();
-                fx.push(Effect::ChargeSet);
+                return vec![Effect::ChargeSet];
             }
             Action::ChooseFs(choice) => {
                 let row = self.fs_row().expect("the page of a partition shows one that was read");
