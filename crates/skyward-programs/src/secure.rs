@@ -180,7 +180,15 @@ enum Ready {
 /// phone with a weaver, start what the weaver reaches its secure element
 /// through, serving Android's secure element service where that is what it
 /// goes through, and the weaver; and start the boot control.
-pub fn steps(phone: &Phone) -> Result<Vec<Step>> {
+///
+/// `charging` and `verifying` are how fast the phone is let to charge, as
+/// the two programs that settle that with the kernel: Xiaomi's charging
+/// service, which passes on the battery's own check, and Xiaomi's secret
+/// keeper, which has the charger verified so the protocol may go on to the
+/// adjustable kind. Each is started only where it is asked for, so a phone
+/// that is let charge at the plain rate is left as a recovery without them
+/// leaves it.
+pub fn steps(phone: &Phone, charging: bool, verifying: bool) -> Result<Vec<Step>> {
     let mut out = Vec::new();
     let start = |out: &mut Vec<Step>, started: Started| out.push(Step::Start(Box::new(started)));
     if let Some(listeners) = named(phone, LISTENERS)? {
@@ -228,7 +236,8 @@ pub fn steps(phone: &Phone) -> Result<Vec<Step>> {
     // it before it lets a charge draw more than 2 A, so a recovery without it
     // charges at 2 A however much the charger offers. It is started last,
     // since nothing else waits on it, and a phone without it is left alone.
-    if described(phone, Kind::Aidl, CHARGING).is_some()
+    if charging
+        && described(phone, Kind::Aidl, CHARGING).is_some()
         && let Ok(program) = behind(phone, "the charging service", CHARGING, |file| file.contains("micharge"))
     {
         let registers = besides(phone, program, CHARGING, alone);
@@ -240,7 +249,9 @@ pub fn steps(phone: &Phone) -> Result<Vec<Step>> {
     // a fixed voltage however much the charger offers. It is started after
     // the charging service, which it is no service of and nothing waits
     // on: it registers nothing, so it is waited on by nothing.
-    if let Some(started) = secret(phone) {
+    if verifying
+        && let Some(started) = secret(phone)
+    {
         start(&mut out, started);
     }
     Ok(out)
@@ -503,5 +514,15 @@ mod tests {
         let libraries = libraries_of(&path, None);
         assert!(libraries.contains(&"/vendor/lib64".to_string()), "it finds the libraries of the vendor partition");
         assert!(libraries.contains(&"/system/lib64".to_string()), "and those the vendor partition shares with the system");
+    }
+
+    #[test]
+    fn a_phone_let_charge_at_the_plain_rate_starts_neither_program() {
+        let phone = Phone::read(Vec::new(), HashMap::new(), None).unwrap();
+        let plain = steps(&phone, false, false).expect("a phone describes its keys whatever it is let charge at");
+        let fast = steps(&phone, true, true).expect("the same phone, let charge faster");
+        assert!(fast.len() > plain.len(), "the two programs are among the steps only where they are asked for");
+        let starts_charging = |steps: &[Step]| steps.iter().any(|s| matches!(s, Step::Start(p) if p.service.path.contains("micharge")));
+        assert!(!starts_charging(&plain), "no charging service at the plain rate");
     }
 }

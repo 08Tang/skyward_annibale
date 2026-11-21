@@ -172,6 +172,18 @@ impl App {
                     self.refresh();
                     return vec![Effect::Remember(false)];
                 }
+                // A charge step is chosen, not switched: tapping the one that
+                // is already chosen does nothing, and the programs it names are
+                // started as the recovery starts, so the step reaches the phone
+                // at the next start. The page says so beside the steps.
+                if let Switch::ChargeStep(mode) = switch {
+                    if self.state.charge_mode == mode {
+                        return Vec::new();
+                    }
+                    self.state.charge_mode = mode;
+                    self.refresh();
+                    return Vec::new();
+                }
                 // The fast-charge switch is one way on purpose. Once the kernel
                 // has been told the battery passed, turning the switch off
                 // would not take the word back, so the page would be saying one
@@ -199,6 +211,7 @@ impl App {
                     Switch::WlanKeep => &mut self.state.wlan_keep,
                     Switch::Wlan => unreachable!("the WLAN switch is turned above"),
                     Switch::FastCharge => unreachable!("the fast-charge switch is turned above"),
+                    Switch::ChargeStep(_) => unreachable!("a charge step is chosen above"),
                 };
                 *on = !*on;
                 let now_on = *on;

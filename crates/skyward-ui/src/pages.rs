@@ -1,5 +1,5 @@
 use crate::app::{
-    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
+    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ChargeMode, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
@@ -1215,6 +1215,69 @@ pub fn charge(cx: &Ctx) -> Frame {
     let rows = [Row::new(&now).icon(BLUE, Icon::Battery).trail(Trail::Value(&most))];
     let list = widgets::list(&mut c, t, f, y, &rows);
     let mut y = list.bottom;
+
+    // How fast the phone is let to charge, chosen before the charger and the
+    // battery are told of: it is the one thing on this page that changes what
+    // the phone does rather than what it says. The programs that settle it are
+    // started as the recovery starts, so a step chosen here reaches the phone
+    // at the next start, and the page says so rather than letting the steps
+    // look as if they had taken at once.
+    {
+        let steps: [(ChargeMode, Text, Text); 3] = [
+            (
+                ChargeMode::Plain,
+                ["默认", "預設", "Default"],
+                [
+                    "不启动充电服务，内核把电流限在它给未认证电池的上限，约 5 W。",
+                    "不啟動充電服務，核心把電流限在它給未認證電池的上限，約 5 W。",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: about 5 W.",
+                ],
+            ),
+            (
+                ChargeMode::Fast,
+                ["快充", "快充", "Fast"],
+                [
+                    "启动小米充电服务，内核被告知电池已通过认证，约 12 W。",
+                    "啟動小米充電服務，核心被告知電池已通過認證，約 12 W。",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: about 12 W.",
+                ],
+            ),
+            (
+                ChargeMode::Fastest,
+                ["超快充", "超快充", "Fastest"],
+                [
+                    "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，约 40 W。",
+                    "再啟動小米的認證行程，充電器通過校驗後可升壓到 PPS 檔，約 40 W。",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: about 40 W.",
+                ],
+            ),
+        ];
+        y = widgets::section(&mut c, t, f, y, l.pick(["充电速度", "充電速度", "Charge speed"]));
+        let rows: Vec<Row> = steps
+            .iter()
+            .map(|(mode, name, detail)| Row::new(l.pick(*name)).subtitle(l.pick(*detail)).trail(Trail::Check(s.charge_mode == *mode)))
+            .collect();
+        let list = widgets::list(&mut c, t, f, y, &rows);
+        y = list.bottom;
+        // The step already chosen is not a hit: tapping it would do nothing,
+        // and offering it as something to tap would say otherwise.
+        for (i, (mode, _, _)) in steps.iter().enumerate() {
+            if s.charge_mode != *mode {
+                out.extend(hits(&list.rows[i..=i], &[Action::Toggle(Switch::ChargeStep(*mode))]));
+            }
+        }
+        y = widgets::footnote(
+            &mut c,
+            t,
+            f,
+            y + t.m.dp(8.0),
+            l.pick([
+                "选择后需重启 recovery 才生效：这两项服务在开机时启动，之后不再改变。",
+                "選擇後需重新啟動 recovery 才生效：這兩項服務在開機時啟動，之後不再改變。",
+                "A step takes effect when the recovery starts again: the two services are started at boot and are not changed after that.",
+            ]),
+        );
+    }
 
     // What the charger negotiated, and what it says it can give. These are
     // the kernel's own words, left as it writes them: a protocol name is a

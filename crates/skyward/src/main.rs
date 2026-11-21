@@ -4,6 +4,7 @@ use skyward_config::{DeviceConfig, ramdisk};
 #[cfg(target_os = "android")]
 use skyward_programs::secure::Started;
 use skyward_sys::{Power, bcb};
+use skyward_ui::app::ChargeMode;
 use skyward_vab::SnapshotState;
 use std::path::{Path, PathBuf};
 
@@ -321,14 +322,14 @@ fn main() -> Result<()> {
             let services: Vec<Started> = DeviceConfig::load(&config)?.services.into_iter().filter(|s| s.runs_on(&props)).map(Started::from).collect();
             let libraries = secure::libraries()?;
             services::start(&services, libraries.as_deref())?;
-            keys::start(&keys::found(slot, libraries.as_deref())?.steps?)?;
+            keys::start(&keys::found(slot, libraries.as_deref(), charging_mode())?.steps?)?;
             loop {
                 std::thread::park();
             }
         }
         #[cfg(target_os = "android")]
         Cmd::Keys => {
-            for line in keys::describe(&keys::found(booted_slot()?, secure::libraries()?.as_deref())?.steps?) {
+            for line in keys::describe(&keys::found(booted_slot()?, secure::libraries()?.as_deref(), charging_mode())?.steps?) {
                 println!("{line}");
             }
             Ok(())
@@ -472,7 +473,7 @@ fn main() -> Result<()> {
             // keys are read from the partitions again, as it read them;
             // where they do not show, it started none.
             let mut programs = cfg.services.clone();
-            match booted_slot().and_then(|slot| keys::found(slot, secure::libraries()?.as_deref())?.steps) {
+            match booted_slot().and_then(|slot| keys::found(slot, secure::libraries()?.as_deref(), charging_mode())?.steps) {
                 Ok(steps) => programs.extend(keys::programs(&steps)),
                 Err(e) => eprintln!("the programs of the phone's keys are not known: {e:#}"),
             }
@@ -641,6 +642,22 @@ pub(crate) fn wait_prepared() {
 #[cfg(target_os = "android")]
 pub(crate) fn prepared() -> bool {
     *gate().done.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// How fast the phone is let to charge, as the settings file kept it from the
+/// starts before: the plain rate where it names no step, or one this version
+/// has not. Read here, on the thread the screen does not wait for, since the
+/// programs that settle it are started on this thread and a step chosen after
+/// they start would not reach the phone until the recovery starts again.
+#[cfg(target_os = "android")]
+fn charging_mode() -> ChargeMode {
+    match settings::read() {
+        Ok(kept) => kept.settings().and_then(|s| ChargeMode::named(&s.charge_mode)).unwrap_or_default(),
+        Err(e) => {
+            let _ = skyward_sys::kmsg(&format!("the charge speed is the plain one, since the settings were not read: {e:#}"));
+            ChargeMode::default()
+        }
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -1046,7 +1063,8 @@ fn prepare(cfg: &DeviceConfig, slot: skyward_vab::Slot) -> Result<Vec<skyward_co
                 None
             });
             let reading = std::time::Instant::now();
-            let found = keys::found(slot, libraries.as_deref());
+            let mode = charging_mode();
+            let found = keys::found(slot, libraries.as_deref(), mode);
             skyward_sys::kmsg(&format!("the partitions were read for the keys in {:.2} s", reading.elapsed().as_secs_f64()))?;
             let mut programs: Vec<skyward_config::Service> = cfg.services.clone();
             match found.as_ref().map(|f| &f.steps) {

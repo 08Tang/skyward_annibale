@@ -41,6 +41,11 @@ pub enum Switch {
     /// carries the nodes for it, and one way: turning it off would not take
     /// the word back, so the page does not pretend that it would.
     FastCharge,
+    /// How fast the phone is let to charge, as one of the three steps the
+    /// charge page offers. The programs that settle it are started as the
+    /// recovery starts, so the step chosen reaches the phone at the next
+    /// start rather than at once.
+    ChargeStep(ChargeMode),
 }
 
 /// How long the screen stays on with nothing touched, in milliseconds, in

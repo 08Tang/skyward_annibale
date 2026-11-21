@@ -45,6 +45,61 @@ pub enum SearchScope {
     Modules,
 }
 
+/// How fast the phone is let to charge, as the charge page offers it: three
+/// steps, each the programs the recovery starts for it, since it is the
+/// phone's own programs that tell the kernel what a charge may draw and
+/// whether the charger may be verified.
+///
+/// The steps are taken before those programs start, so a change made here
+/// reaches the phone only once the recovery starts again — which the page
+/// says, since a step that looked as if it had taken would have the page
+/// saying one thing and the phone doing another.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ChargeMode {
+    /// Neither program: the kernel holds the charge at the ceiling it sets
+    /// for a battery it has not been told passed its check.
+    #[default]
+    Plain,
+    /// Xiaomi's charging service, which passes on the battery's check: the
+    /// ceiling lifts, and the charge draws what a plain power delivery
+    /// connection gives.
+    Fast,
+    /// That service and Xiaomi's secret keeper, which has the charger
+    /// verified: the protocol goes on to the adjustable kind, and the charge
+    /// draws what the charger can give.
+    Fastest,
+}
+
+impl ChargeMode {
+    /// The steps, in the order the page offers them.
+    pub const ALL: [ChargeMode; 3] = [ChargeMode::Plain, ChargeMode::Fast, ChargeMode::Fastest];
+
+    /// The name it is kept by in the settings file, so a later version that
+    /// lists the steps otherwise reads it the same.
+    pub fn name(self) -> &'static str {
+        match self {
+            ChargeMode::Plain => "plain",
+            ChargeMode::Fast => "fast",
+            ChargeMode::Fastest => "fastest",
+        }
+    }
+
+    /// The step a settings file names, where it names one this version has.
+    pub fn named(name: &str) -> Option<ChargeMode> {
+        ChargeMode::ALL.into_iter().find(|mode| mode.name() == name)
+    }
+
+    /// Whether Xiaomi's charging service is started for it.
+    pub fn charging_service(self) -> bool {
+        matches!(self, ChargeMode::Fast | ChargeMode::Fastest)
+    }
+
+    /// Whether Xiaomi's secret keeper is started for it.
+    pub fn secret_keeper(self) -> bool {
+        matches!(self, ChargeMode::Fastest)
+    }
+}
+
 /// One module the phone's own system would load: KernelSU's and Magisk's keep
 /// them the same way, a folder each with a `module.prop` beside it, and a
 /// `disable` file inside a folder that is switched off.
@@ -313,6 +368,10 @@ pub struct State {
     /// is what the page shows beside the switch rather than assuming the write
     /// took.
     pub fast_charge_kernel: bool,
+    /// How fast the phone is let to charge, as the page offers it. The step
+    /// is taken when the recovery starts, so changing it here reaches the
+    /// phone only at the next start.
+    pub charge_mode: ChargeMode,
     /// Where an update the system installed stands, as the runtime last
     /// read it.
     pub update: Standing,
@@ -471,6 +530,7 @@ impl Default for State {
             fast_charge_dropped: false,
             battery_temp: None,
             fast_charge_kernel: false,
+            charge_mode: ChargeMode::default(),
             update: Standing::None,
             wlan: None,
             remember: false,

@@ -5,7 +5,7 @@
 //! a time zone, a part or a place by its name, so a later version that lists
 //! them otherwise reads them the same.
 
-use crate::app::{Place, State, SCREEN_OFF, TIME_ZONES};
+use crate::app::{ChargeMode, Place, State, SCREEN_OFF, TIME_ZONES};
 use crate::Lang;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -49,6 +49,8 @@ pub struct Settings {
     pub vibration: f32,
     /// A computer connected over USB is offered internal storage.
     pub file_transfer: bool,
+    /// How fast the phone is let to charge, by name: plain, fast or fastest.
+    pub charge_mode: String,
     pub install: Install,
     pub backup: Backup,
     pub logs: Logs,
@@ -126,6 +128,7 @@ impl Settings {
             vibrate: state.vibrate,
             vibration: state.vibration,
             file_transfer: state.file_transfer,
+            charge_mode: state.charge_mode.name().to_string(),
             install: Install { check_signature: state.check_signature, keep_recovery: state.keep_recovery },
             backup: Backup {
                 parts: names(&state.backup, &PARTS),
@@ -184,6 +187,9 @@ impl Settings {
             state.vibration = self.vibration;
         }
         state.file_transfer = self.file_transfer;
+        if let Some(mode) = ChargeMode::named(&self.charge_mode) {
+            state.charge_mode = mode;
+        }
         state.check_signature = self.install.check_signature;
         state.keep_recovery = self.install.keep_recovery;
         state.backup = picked(&self.backup.parts, &PARTS);
@@ -295,6 +301,33 @@ impl Keeper {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_charge_step_is_kept_by_its_name_and_comes_back_as_itself() {
+        for mode in ChargeMode::ALL {
+            let state = State { charge_mode: mode, ..State::default() };
+            let text = Settings::of(&state).text();
+            let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+            assert_eq!(json["charge_mode"], mode.name());
+            let kept = Settings::read(&text).unwrap();
+            let mut back = State::default();
+            kept.apply(&mut back);
+            assert_eq!(back.charge_mode, mode, "{:?} goes round through its file", mode);
+        }
+    }
+
+    #[test]
+    fn a_phone_that_has_chosen_no_step_charges_at_the_plain_rate() {
+        let kept = Settings::read(r#"{ "dark": true }"#).unwrap();
+        assert_eq!(kept.charge_mode, "plain");
+        let mut state = State { charge_mode: ChargeMode::Fastest, ..State::default() };
+        kept.apply(&mut state);
+        assert_eq!(state.charge_mode, ChargeMode::Plain, "no step kept is the plain one");
+        let unknown = Settings { charge_mode: "ludicrous".into(), ..Settings::default() };
+        let mut state = State { charge_mode: ChargeMode::Fast, ..State::default() };
+        unknown.apply(&mut state);
+        assert_eq!(state.charge_mode, ChargeMode::Fast, "a step this version has not leaves it as it is");
+    }
 
     #[test]
     fn the_settings_go_round_through_their_file() {

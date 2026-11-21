@@ -9,6 +9,7 @@ use skyward_config::Service;
 use skyward_programs::naming::{self, Does};
 use skyward_programs::phone::{self, Partition, Phone, PARTITIONS};
 use skyward_programs::secure::{self, Step};
+use skyward_ui::app::ChargeMode;
 use std::path::Path;
 
 /// What the partitions of an installed system say that the recovery acts
@@ -33,14 +34,14 @@ pub struct Found {
 /// `libraries` is where the libraries the phone's partitions were built
 /// against are opened, on a phone that carries them as a bundle of their
 /// own: each of its programs is given the folder among its own.
-pub fn found(slot: skyward_vab::Slot, libraries: Option<&Path>) -> Result<Found> {
+pub fn found(slot: skyward_vab::Slot, libraries: Option<&Path>, mode: ChargeMode) -> Result<Found> {
     let mut phone = read(slot, libraries)?;
     let unnamed = naming::steps(&phone)?;
     if !unnamed.is_empty() {
         name(&unnamed)?;
         phone = read(slot, libraries)?;
     }
-    Ok(Found { described: phone.told_of(), steps: secure::steps(&phone) })
+    Ok(Found { described: phone.told_of(), steps: secure::steps(&phone, mode.charging_service(), mode.secret_keeper()) })
 }
 
 /// The phone as the partitions of the slot's installed system describe it,
