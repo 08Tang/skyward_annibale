@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn a_guard_that_stops_suspends_the_input_rather_than_asking_for_nothing() {
-        let charge = Charge { mode: ChargeMode::Custom, watts: 50.0, slow_at: 400, stop_at: 440, ..Charge::default() };
+        let charge = ChargeSetting { mode: ChargeMode::Custom, watts: 50.0, slow_at: 400, stop_at: 440, ..ChargeSetting::default() };
         assert_eq!(charge.guard_at(Some(450)), Guard::Stopped, "over the stop line");
         assert_eq!(charge.wanted(Some(450)), Some(0.0), "and nothing asked for");
     }
