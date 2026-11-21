@@ -4,8 +4,9 @@ use skyward_config::{DeviceConfig, ramdisk};
 #[cfg(target_os = "android")]
 use skyward_programs::secure::Started;
 use skyward_sys::{Power, bcb};
-use skyward_ui::app::ChargeMode;
 use skyward_vab::SnapshotState;
+#[cfg(target_os = "android")]
+use skyward_ui::app::ChargeMode;
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "android")]
