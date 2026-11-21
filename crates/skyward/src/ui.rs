@@ -3793,6 +3793,11 @@ impl Pages<'_> {
         // switch's effect off, and it is why the switch has a limit at all.
         let temp = charge::temperature();
         self.app.state.battery_temp = temp;
+        // What the kernel says about the battery's check, which is the thing
+        // that decides the current. The page shows it beside the switch, so a
+        // phone whose gauge answered differently from what was written says so
+        // rather than leaving the switch to speak for it.
+        self.app.state.fast_charge_kernel = charge::fast();
         if self.app.state.fast_charge {
             if self.app.state.fast_charge_dropped {
                 if charge::cool_enough(temp) {

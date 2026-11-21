@@ -1327,6 +1327,17 @@ pub fn charge(cx: &Ctx) -> Frame {
         if !watching.is_empty() {
             y = widgets::footnote(&mut c, t, f, y + t.m.dp(8.0), &watching);
         }
+        // What the kernel's own node says, said apart from the switch. The
+        // switch is what was asked for and this is what came back, and on a
+        // phone where the gauge refuses the write the two differ.
+        if s.fast_charge && !s.fast_charge_kernel {
+            let said = l.pick([
+                "内核未确认：认证标志没有置上，快充可能没有生效。",
+                "核心未確認：認證標誌沒有置上，快充可能沒有生效。",
+                "The kernel has not confirmed it: the check is still clear, so the charge may not be any faster.",
+            ]);
+            y = widgets::footnote(&mut c, t, f, y + t.m.dp(8.0), said);
+        }
     }
 
     // What the page cannot do, said plainly, since a page about charging that

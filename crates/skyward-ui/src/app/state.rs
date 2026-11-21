@@ -309,6 +309,10 @@ pub struct State {
     /// The battery's temperature in tenths of a degree, as the watch last read
     /// it, so the page can say what it is watching.
     pub battery_temp: Option<i32>,
+    /// Whether the kernel's own node says the battery passed its check, which
+    /// is what the page shows beside the switch rather than assuming the write
+    /// took.
+    pub fast_charge_kernel: bool,
     /// Where an update the system installed stands, as the runtime last
     /// read it.
     pub update: Standing,
@@ -466,6 +470,7 @@ impl Default for State {
             fast_charge_offered: false,
             fast_charge_dropped: false,
             battery_temp: None,
+            fast_charge_kernel: false,
             update: Standing::None,
             wlan: None,
             remember: false,
