@@ -1246,6 +1246,9 @@ struct Pages<'a> {
     /// Writing a partition out as an image, or an image back over one, or
     /// deleting one.
     imager: Option<images::Worker>,
+    /// Whether what the charge nodes answer has been said, so it is said
+    /// once rather than with every reading.
+    charge_said: bool,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1508,6 +1511,7 @@ impl<'a> Pages<'a> {
             app_reader: None,
             backuper: None,
             imager: None,
+            charge_said: false,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -3770,6 +3774,12 @@ impl Pages<'_> {
     /// Runs with the battery's own reading, once a second, and with the page
     /// opening.
     fn charge_watch(&mut self, _now: u64) -> Result<()> {
+        // What every node answers is said once, so a page that comes up empty
+        // says which node went quiet rather than leaving it to be guessed at.
+        if !self.charge_said {
+            self.charge_said = true;
+            charge::describe();
+        }
         self.app.set_charge_state(charge::reading());
         Ok(())
     }

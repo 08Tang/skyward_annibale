@@ -429,7 +429,7 @@ fn battery(root: &Path) -> Result<Option<Battery>> {
         }
     }
     let Some(dir) = first else { return Ok(None) };
-    let charge = match read(dir.join("status"))?.as_str() {
+    let mut charge = match read(dir.join("status"))?.as_str() {
         "Charging" => Charge::Charging,
         "Discharging" => Charge::Discharging,
         "Not charging" => Charge::NotCharging,
@@ -437,6 +437,13 @@ fn battery(root: &Path) -> Result<Option<Battery>> {
         "Unknown" => Charge::Unknown,
         other => bail!("{}: status {other:?}", dir.display()),
     };
+    // The same broken reference that hides the charger from `online` leaves
+    // `status` saying `Discharging` while the battery fills: the driver works
+    // it out from the charger it could not find. A charger is attached and
+    // the battery is not full, so it is charging, whatever the status says.
+    if plugged && charge == Charge::Discharging {
+        charge = Charge::Charging;
+    }
     Ok(Some(Battery {
         level: parse(&read(dir.join("capacity"))?, "capacity")?,
         charge,
@@ -456,10 +463,31 @@ fn battery(root: &Path) -> Result<Option<Battery>> {
 
 /// Whether the power supply in `dir` says a charger or a computer is
 /// attached to it.
+///
+/// A supply's `online` file is its own word and is taken where it has one.
+/// On this phone's charger it is the one file that cannot be read: the
+/// battery driver probes before the charger registers its supply, so it
+/// never takes the reference it needs, and `usb_online` answers `-1` for the
+/// whole boot — the kernel log says `get usb psy fail` at 0.99 s against
+/// `usb psy success` at 1.45 s. There the supply's own voltage stands in,
+/// above the level a dead cable would show.
 fn online(dir: &Path) -> Result<bool> {
     let path = dir.join("online");
-    said_online(fs::read_to_string(&path)).with_context(|| format!("read {}", path.display()))
+    let said = said_online(fs::read_to_string(&path)).with_context(|| format!("read {}", path.display()))?;
+    if said {
+        return Ok(true);
+    }
+    // A supply that answered "not online" and has a voltage is still worth
+    // asking: a charger with a cable in it shows volts whether or not the
+    // kernel can say so in words.
+    let volts = parse_opt::<u64>(dir.join("voltage_now"), "voltage_now")?;
+    Ok(volts.is_some_and(|uv| uv >= LEAST_UV))
 }
+
+/// The least voltage a charger is believed at, in microvolts: a cable in a
+/// port with nothing on the other end sits far below it, and a charger that
+/// has negotiated anything sits far above.
+const LEAST_UV: u64 = 3_000_000;
 
 /// What a power supply's `online` file says, as reading it went. A supply
 /// without one has no say, and one whose driver cannot tell yet, as
@@ -576,5 +604,44 @@ mod tests {
         assert!(!said_online(Err(Error::from(ErrorKind::WouldBlock))).unwrap(), "Qualcomm's USB-C connector early in a boot");
         assert!(!said_online(Err(Error::from(ErrorKind::NotFound))).unwrap(), "a supply without the file");
         assert!(said_online(Err(Error::from(ErrorKind::PermissionDenied))).is_err(), "anything else is an error");
+    }
+
+    #[test]
+    fn a_charger_whose_online_file_cannot_be_read_is_found_by_its_voltage() {
+        // The 17's charger in the recovery: the battery driver probes before
+        // the charger registers, so `usb_online` answers -1 for the whole
+        // boot while the port carries 16.9 V.
+        let class = tempfile::tempdir().unwrap();
+        let supplies = class.path().join("power_supply");
+        let supply = |name: &str, files: &[(&str, &str)]| {
+            let dir = supplies.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            for (file, value) in files {
+                fs::write(dir.join(file), format!("{value}\n")).unwrap();
+            }
+        };
+        supply("battery", &[("type", "Battery"), ("status", "Discharging"), ("capacity", "46")]);
+        supply("usb", &[("type", "USB_PD"), ("voltage_now", "16905000")]);
+        let b = battery(&supplies).unwrap().expect("a battery");
+        assert!(b.plugged, "the charger's own voltage says a cable is in it");
+        assert!(b.charging(), "and a battery that is not full is being filled");
+    }
+
+    #[test]
+    fn a_cable_in_the_port_with_nothing_on_the_other_end_is_not_a_charger() {
+        let class = tempfile::tempdir().unwrap();
+        let supplies = class.path().join("power_supply");
+        let supply = |name: &str, files: &[(&str, &str)]| {
+            let dir = supplies.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            for (file, value) in files {
+                fs::write(dir.join(file), format!("{value}\n")).unwrap();
+            }
+        };
+        supply("battery", &[("type", "Battery"), ("status", "Discharging"), ("capacity", "46")]);
+        supply("usb", &[("type", "USB_PD"), ("voltage_now", "0")]);
+        let b = battery(&supplies).unwrap().expect("a battery");
+        assert!(!b.plugged, "a port with no volts on it is no charger");
+        assert!(!b.charging(), "so the phone runs on its battery");
     }
 }
