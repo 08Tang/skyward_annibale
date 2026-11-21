@@ -268,7 +268,9 @@ impl App {
         }
         let install = &mut self.state.install;
         // The second system's place takes one kind of package and no other,
-        // and says which the package is rather than starting it.
+        // and says which the package is rather than starting it. The ask
+        // stands until one is taken, so that choosing another package after
+        // this one is turned down is held to it too.
         let asked = self.state.second_system_asked;
         let kind = match &ev {
             Event::Ready { .. } => Some(PackageKind::Update),
@@ -278,7 +280,6 @@ impl App {
             _ => None,
         };
         if let (true, Some(kind)) = (asked, kind) {
-            self.state.second_system_asked = false;
             if kind != PackageKind::System {
                 *install = Install::NotSecondSystem(kind);
                 if self.screen() == Screen::Installing {
@@ -286,6 +287,7 @@ impl App {
                 }
                 return;
             }
+            self.state.second_system_asked = false;
         }
         match ev {
             Event::Waiting => *install = Install::Waiting,
@@ -388,8 +390,27 @@ mod tests {
             app.state.install = Install::Checking { size: 4096, stage: None };
             app.install(ev, 0);
             assert_eq!(app.state.install, Install::NotSecondSystem(kind), "the package is named rather than started");
-            assert!(!app.state.second_system_asked, "the ask is answered once");
+            assert!(app.state.second_system_asked, "the ask stands while another package may be chosen");
         }
+    }
+
+    #[test]
+    fn another_package_chosen_after_one_was_turned_down_is_held_to_the_same_ask() {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Install, &f, &i);
+        app.open(Screen::Installing);
+        app.state.second_system_asked = true;
+        app.state.install = Install::Checking { size: 4096, stage: None };
+        app.install(Event::Ready { version: Some("OS3.0".into()), wipe: false }, 1000);
+        app.frame(&f, &i);
+        assert_eq!(app.state.install, Install::NotSecondSystem(PackageKind::Update));
+        // Back to the install page, and another package chosen there.
+        app.key(Key::Back, 2000);
+        assert_eq!(app.screen(), Screen::Install, "back to choose another");
+        assert!(app.state.second_system_asked, "the second system is still what is asked for");
+        app.state.install = Install::Checking { size: 4096, stage: None };
+        app.install(Event::Script, 1000);
+        assert_eq!(app.state.install, Install::NotSecondSystem(PackageKind::Script), "the script is named too");
     }
 
     #[test]
@@ -430,13 +451,20 @@ mod tests {
     }
 
     #[test]
-    fn leaving_the_install_page_forgets_what_was_asked_for() {
+    fn leaving_the_install_pages_forgets_what_was_asked_for() {
         let (f, i) = (fonts(), info());
-        let mut app = opened(Screen::Installing, &f, &i);
+        let mut app = opened(Screen::Install, &f, &i);
+        app.open(Screen::Installing);
         app.state.second_system_asked = true;
         app.state.install = Install::NotSecondSystem(PackageKind::Update);
-        app.key(Key::Back, 0);
-        assert!(!app.state.second_system_asked, "the next package is taken on its own terms");
+        app.frame(&f, &i);
+        app.key(Key::Back, 1000);
+        assert_eq!(app.screen(), Screen::Install);
+        assert!(app.state.second_system_asked, "another package is chosen where this one was");
+        // Leaving the install page itself gives the ask up.
+        app.key(Key::Back, 2000);
+        assert_ne!(app.screen(), Screen::Install);
+        assert!(!app.state.second_system_asked, "the place is left, so the ask is too");
     }
 
     #[test]

@@ -245,16 +245,17 @@ impl App {
                 Install::Idle | Install::Ending => {}
             }
         }
-        // The install page is left, so the next package is taken on its own
-        // terms rather than as one the second system's place asked for.
-        if self.screen() == Screen::Installing {
-            self.state.second_system_asked = false;
-        }
+        // The installing page is left: a package is taken again on the
+        // install page it goes back to, so what the second system's place
+        // asked for stands while the install pages are the ones showing.
         if !morph {
             self.leave(true);
         }
         self.stack.pop();
         self.state.confirm = 0.0;
+        if !matches!(self.screen(), Screen::Install | Screen::Choose(_)) {
+            self.state.second_system_asked = false;
+        }
         self.settle_page();
         self.refresh();
         // Coming back to the list of backups looks for them again: one may
