@@ -1,4 +1,4 @@
-﻿//! What a recovery does to use each phone's keys, found in what the
+//! What a recovery does to use each phone's keys, found in what the
 //! phone's own partitions say, read from the files `skyward-pack described`
 //! took out of the phone's stock build into tests/described. For the two
 //! phones the recovery has used the keys of, what is found is what was
@@ -405,6 +405,27 @@ fn the_hardware_s_script_is_named_by_what_the_bootloader_calls_the_hardware() {
     let unnamed = phone("nezha", &[("ro.hardware", "qcom")]);
     assert_eq!(unnamed.properties.get("ro.hardware").map(String::as_str), Some("unknown"), "init sets it from the bootloader's alone");
     assert!(unnamed.actions.len() < named.actions.len(), "the hardware's script and those it has init read are left unread");
+}
+
+/// The three steps the charge page offers are three sets of programs: the
+/// plain rate starts neither of the two that settle how fast a charge may
+/// run, the fast one starts Xiaomi's charging service alone, and the fastest
+/// starts its secret keeper as well. Each step is otherwise the same phone,
+/// and the order of what it starts is kept, so a step that added one program
+/// adds it where the phone's own init has it.
+#[test]
+fn each_charge_step_starts_the_programs_it_names_and_no_others() {
+    let properties = [("ro.boot.hardware", "qcom"), ("ro.special_edition", "true")];
+    let plain = secure::steps(&phone("nezha", &properties), false, false).unwrap();
+    let fast = secure::steps(&phone("nezha", &properties), true, false).unwrap();
+    let fastest = secure::steps(&phone("nezha", &properties), true, true).unwrap();
+    let paths = |steps: &[Step]| -> Vec<String> { secure::programs(steps).into_iter().map(|s| s.service.path.clone()).collect() };
+    let (a, b, c) = (paths(&plain), paths(&fast), paths(&fastest));
+    assert_eq!(b.len(), a.len() + 1, "the fast step adds the charging service alone: {b:?}");
+    assert_eq!(c.len(), b.len() + 1, "the fastest step adds the secret keeper alone: {c:?}");
+    assert!(b.iter().any(|p| p.contains("micharge")) && !a.iter().any(|p| p.contains("micharge")), "the charging service is the fast step's");
+    assert!(c.iter().any(|p| p.ends_with("/batterysecret")) && !b.iter().any(|p| p.ends_with("/batterysecret")), "the secret keeper is the fastest step's");
+    assert_eq!(a[..], b[..a.len() - 1], "the plain step is the fast one without its last program");
 }
 
 /// No bootloader says which build of the hardware a phone's vendor

@@ -519,10 +519,11 @@ mod tests {
     #[test]
     fn a_phone_let_charge_at_the_plain_rate_starts_neither_program() {
         let phone = Phone::read(Vec::new(), HashMap::new(), None).unwrap();
-        let plain = steps(&phone, false, false).expect("a phone describes its keys whatever it is let charge at");
-        let fast = steps(&phone, true, true).expect("the same phone, let charge faster");
-        assert!(fast.len() > plain.len(), "the two programs are among the steps only where they are asked for");
-        let starts_charging = |steps: &[Step]| steps.iter().any(|s| matches!(s, Step::Start(p) if p.service.path.contains("micharge")));
-        assert!(!starts_charging(&plain), "no charging service at the plain rate");
+        // A phone that describes none of its keys cannot be brought up at all,
+        // whatever it is let charge at, so the two steps are asked for on their
+        // own: what the booleans settle is whether each program is looked for.
+        assert!(secret(&phone).is_none(), "a phone with no vendor partition carries no secret keeper to start");
+        assert!(steps(&phone, false, false).is_err(), "a phone that describes no keys is refused before either step");
+        assert!(steps(&phone, true, true).is_err(), "and refused the same way, whatever it is let charge at");
     }
 }
