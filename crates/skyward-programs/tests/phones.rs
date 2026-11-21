@@ -215,6 +215,7 @@ fn nezha_s_programs_are_found_as_they_were_started_on_the_phone() {
             ready_service: Some("vendor.xiaomi.hardware.micharge.IMiCharge/default".into()),
             ..program("/vendor/bin/hw/vendor.xiaomi.hardware.micharge-service", &ON_VENDOR, "system", &["system"])
         }),
+        Started::from(Service { ..program("/vendor/bin/batterysecret", &ON_VENDOR, "root", &["system", "system", "wakelock"]) }),
     ];
     let found: Vec<Started> = secure::programs(&steps).into_iter().cloned().collect();
     assert_eq!(found, expected);
@@ -237,10 +238,11 @@ fn nezha_s_other_builds_reach_their_weaver_s_secure_element_through_the_secure_e
                 "android.hardware.weaver-service.thales",
                 "android.hardware.boot-service.qti",
                 "vendor.xiaomi.hardware.micharge-service",
+                "batterysecret",
             ]
         );
         let found = secure::programs(&steps);
-        let [.., element, weaver, _, _] = &found[..] else { panic!("eight programs") };
+        let [.., element, weaver, _, _, _] = &found[..] else { panic!("nine programs") };
         // The phone tells of the secure element built into it in the
         // description of its NFC chip's service, which its init starts
         // only when the NFC service itself is asked for: the secure
@@ -286,6 +288,7 @@ fn ishtar_s_programs_are_found_as_they_were_started_on_the_phone_and_its_opener_
             ..program("/vendor/bin/hw/android.hardware.gatekeeper@1.0-service-qti", &ON_VENDOR, "system", &["system"])
         }),
         Started::from(Service { ready_hardware_service: Some("android.hardware.boot@1.2::IBootControl/default".into()), ..program("/vendor/bin/hw/android.hardware.boot@1.2-service", &ON_VENDOR, "root", &["root"]) }),
+        Started::from(Service { ..program("/vendor/bin/batterysecret", &ON_VENDOR, "root", &["system", "system", "wakelock"]) }),
     ];
     let found: Vec<Started> = secure::programs(&steps).into_iter().cloned().collect();
     assert_eq!(found, expected);
@@ -331,6 +334,7 @@ fn dada_s_weaver_goes_through_the_secure_element_service_to_the_element_s_own_se
             "android.hardware.weaver-service.thales",
             "android.hardware.boot-service.qti",
             "vendor.xiaomi.hardware.micharge-service",
+            "batterysecret",
         ]
     );
     let found = secure::programs(&steps);
