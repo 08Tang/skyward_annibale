@@ -175,7 +175,9 @@ pub fn fast() -> bool {
 
 /// The battery's temperature, in tenths of a degree.
 pub fn temperature() -> Option<i32> {
-    read_i64(BATTERY, "temp").or_else(|| read_i64(GAUGE, "temp"))
+    read_i64(BATTERY, "temp")
+        .or_else(|| read_i64(GAUGE, "temp"))
+        .map(|t| t as i32)
 }
 
 /// Tell the kernel the battery passed its check, so that the charge may draw
