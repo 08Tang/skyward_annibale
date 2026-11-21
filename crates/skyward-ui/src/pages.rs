@@ -1195,7 +1195,7 @@ pub fn power_off(cx: &Ctx) -> Frame {
 pub fn charge(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let mut c = long_page(cx);
-    let out = Vec::new();
+    let mut out = Vec::new();
     let top = t.m.content_top;
     let ch = &s.charge;
     let b = cx.info.battery.as_ref();
