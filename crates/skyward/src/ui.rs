@@ -38,7 +38,7 @@ use skyward_sys::sleep::{Sleeper, Slept};
 use skyward_sys::uevent;
 use skyward_systems::Who;
 use skyward_ui::app::{
-    App, Asked, AvbCheck, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ClashChoice, DATA_OPENING, DATA_PARTITION, DOWNLOADS, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp, FileRow,
+    App, Asked, AvbCheck, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ChargeMode, ClashChoice, DATA_OPENING, DATA_PARTITION, DOWNLOADS, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp, FileRow,
     FileTask, FsAction, FsRow, Have, Held, INSTALL_UNFINISHED, ImageEnd, ImageFlow, ImagePart, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place, RenameRefused, Screen, Shot, SkywardEnd, SkywardStage,
     Target, USB_DRIVE, UsbDrive, UsbLink, Wipe,
 };
@@ -1245,6 +1245,9 @@ struct Pages<'a> {
     /// Writing a partition out as an image, or an image back over one, or
     /// deleting one.
     imager: Option<images::Worker>,
+    /// What the charge nodes held before the charge page wrote them, so they
+    /// can be given back when the page is left or the setting is cleared.
+    charge_undo: Option<charge::Undo>,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1507,6 +1510,7 @@ impl<'a> Pages<'a> {
             app_reader: None,
             backuper: None,
             imager: None,
+            charge_undo: None,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -1869,6 +1873,11 @@ impl<'a> Pages<'a> {
                         plug(&mut self.app, &self.info.battery, &battery, now)?;
                         self.info.battery = battery;
                         self.app.refresh();
+                    }
+                    // The guard is held to the battery's warmth as it rises,
+                    // which the reading just taken is the first to say.
+                    if self.app.state.charge.mode != ChargeMode::Default {
+                        self.charge_watch(now)?;
                     }
                 }
                 Reading::All(all, at) => {
@@ -3241,6 +3250,8 @@ impl Pages<'_> {
             Effect::ImportImage { partition, path, sha256 } => self.import_image(partition, path, sha256, now)?,
             Effect::DeleteImage(path) => self.delete_image(PathBuf::from(path), now)?,
             Effect::StopImage => self.imager.as_ref().context("there is no work on an image to stop")?.stop(),
+            Effect::ChargeSet => self.charge_set(now)?,
+            Effect::ChargeWatch => self.charge_watch(now)?,
             Effect::Filesystem { name, action } => self.filesystem(&name, action, now)?,
             Effect::Backup { parts, place, compress, verify } => self.back_up(parts, place, compress, verify, now)?,
             Effect::Restore { place, name, parts } => self.restore(place, &name, parts, now)?,
@@ -3758,6 +3769,60 @@ impl Pages<'_> {
         // again now that one is gone.
         self.app.set_images(self.app.state.image_parts.clone(), images::kept(&in_place(Place::Storage, images::FOLDER)).map_err(|e| format!("{e:#}")));
         let _ = now;
+        Ok(())
+    }
+
+    /// Put the charge setting in place on the phone, giving the nodes back
+    /// what they held when the setting is the default again.
+    fn charge_set(&mut self, _now: u64) -> Result<()> {
+        let charge = self.app.state.charge.clone();
+        let tenths = self.info.battery.as_ref().and_then(|b| b.temp);
+        // Leaving the default puts back whatever the page wrote, rather than
+        // writing the default's own idea of what the nodes should hold: the
+        // recovery found them as the bootloader left them, and that is what
+        // it should hand on.
+        if charge.mode == ChargeMode::Default {
+            if let Some(undo) = self.charge_undo.take() {
+                charge::restore(&undo);
+            }
+            self.app.set_charge_state(charge::ChargeState::default());
+            return Ok(());
+        }
+        let (undo, mut state) = charge::set(&charge, tenths)?;
+        state.trouble = charge::trouble(&charge, tenths);
+        self.charge_undo = Some(undo);
+        self.app.set_charge_state(state);
+        Ok(())
+    }
+
+    /// Read the charger again, and hold charging to the setting if the
+    /// battery has warmed past what it allows. Runs with the battery's own
+    /// reading, once a second.
+    fn charge_watch(&mut self, _now: u64) -> Result<()> {
+        let charge = self.app.state.charge.clone();
+        let tenths = self.info.battery.as_ref().and_then(|b| b.temp);
+        let reading = charge::reading();
+        let mut state = self.app.state.charge.state.clone();
+        // The charger's own reading is taken whether or not a ceiling is set:
+        // the page says what the phone is taking, and that is the number a
+        // ceiling is judged against.
+        if reading.watts.is_some() {
+            state.now = reading.watts;
+            state.most = match (state.most, reading.watts) {
+                (Some(most), Some(now)) => Some(most.max(now)),
+                (most, now) => most.or(now),
+            };
+        }
+        state.guard = charge.guard_at(tenths);
+        state.trouble = charge::trouble(&charge, tenths);
+        // The guard acts only where a setting asks for something: the default
+        // writes nothing at all.
+        if charge.mode != ChargeMode::Default {
+            let (undo, set) = charge::set(&charge, tenths)?;
+            self.charge_undo = Some(undo);
+            state.guard = set.guard;
+        }
+        self.app.set_charge_state(state);
         Ok(())
     }
 

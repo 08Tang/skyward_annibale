@@ -9,6 +9,12 @@ pub enum Slider {
     Brightness,
     /// How strongly the motor taps.
     Vibration,
+    /// The ceiling custom charging keeps under.
+    ChargeWatts,
+    /// The warmth above which the guard drops to a trickle.
+    ChargeSlow,
+    /// The warmth above which the guard stops charging.
+    ChargeStop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,21 +70,51 @@ impl App {
 
     /// Where a slider stands, as a share of its span.
     pub(super) fn level(&self, which: Slider) -> f32 {
+        let c = &self.state.charge;
         match which {
             Slider::Brightness => self.state.brightness,
             Slider::Vibration => self.state.vibration,
+            // The charge sliders span their own range rather than a share:
+            // the power from the least to the most asked for, and each warmth
+            // line across the range the guard may be set in.
+            Slider::ChargeWatts => span(c.watts, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST),
+            Slider::ChargeSlow => span(c.slow_at as f32, CHARGE_SLOW_LEAST as f32, (c.stop_at - CHARGE_GAP_TENTHS) as f32),
+            Slider::ChargeStop => span(c.stop_at as f32, (c.slow_at + CHARGE_GAP_TENTHS) as f32, CHARGE_STOP_MOST as f32),
         }
     }
 
     /// Set a slider to `level` of its span, the brightness no lower than
     /// its floor, and draw the slider at `track` on the page again.
     pub(super) fn set_level(&mut self, t: &Theme, which: Slider, track: Rect, level: f32) {
-        let value = match which {
-            Slider::Brightness => &mut self.state.brightness,
-            Slider::Vibration => &mut self.state.vibration,
-        };
-        *value = level.clamp(if which == Slider::Brightness { MIN_BRIGHTNESS } else { 0.0 }, 1.0);
-        let value = *value;
+        let level = level.clamp(0.0, 1.0);
+        // The charge sliders act through the actions the page's own controls
+        // do, so a slider dragged and a row tapped keep the same rules: the
+        // two warmth lines stay in order, and every change is put in place.
+        match which {
+            Slider::ChargeWatts | Slider::ChargeSlow | Slider::ChargeStop => {
+                let c = &self.state.charge;
+                let action = match which {
+                    Slider::ChargeWatts => Action::ChargeWatts(CHARGE_WATTS_LEAST + level * (CHARGE_WATTS_MOST - CHARGE_WATTS_LEAST)),
+                    Slider::ChargeSlow => {
+                        let (least, most) = (CHARGE_SLOW_LEAST, c.stop_at - CHARGE_GAP_TENTHS);
+                        Action::ChargeAt { stop: false, tenths: least + (level * (most - least) as f32) as i32 }
+                    }
+                    _ => {
+                        let (least, most) = (c.slow_at + CHARGE_GAP_TENTHS, CHARGE_STOP_MOST);
+                        Action::ChargeAt { stop: true, tenths: least + (level * (most - least) as f32) as i32 }
+                    }
+                };
+                self.act(action, 0);
+            }
+            Slider::Brightness | Slider::Vibration => {
+                let value = match which {
+                    Slider::Brightness => &mut self.state.brightness,
+                    _ => &mut self.state.vibration,
+                };
+                *value = level.clamp(if which == Slider::Brightness { MIN_BRIGHTNESS } else { 0.0 }, 1.0);
+            }
+        }
+        let value = self.level(which);
         if let Some(fr) = self.frame.as_mut() {
             fr.canvas.fill_rect(track.x, track.y, track.w, track.h, t.pal.card);
             widgets::slider(&mut fr.canvas, t, track.x, track.y, track.w, value);
@@ -86,6 +122,14 @@ impl App {
         self.layer = None;
         self.dirty = true;
     }
+}
+
+/// Where `value` stands between `least` and `most`, as a share of the span.
+fn span(value: f32, least: f32, most: f32) -> f32 {
+    if most <= least {
+        return 0.0;
+    }
+    ((value - least) / (most - least)).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]

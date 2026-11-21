@@ -291,6 +291,9 @@ pub struct State {
     pub image_to_drive: bool,
     /// Work on an image under way, or how it last ended.
     pub image_job: Option<ImageJob>,
+    /// How the phone should take power from its charger, and what the
+    /// runtime last read back about it.
+    pub charge: Charge,
     /// Where an update the system installed stands, as the runtime last
     /// read it.
     pub update: Standing,
@@ -443,6 +446,7 @@ impl Default for State {
             image_showing_parts: true,
             image_to_drive: false,
             image_job: None,
+            charge: Charge::default(),
             update: Standing::None,
             wlan: None,
             remember: false,

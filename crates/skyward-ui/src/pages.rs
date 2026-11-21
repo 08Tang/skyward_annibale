@@ -1,5 +1,5 @@
 use crate::app::{
-    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
+    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, CHARGE_GAP_TENTHS, CHARGE_SLOW_LEAST, CHARGE_STOP_MOST, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST, Charge, ChargeMode, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
@@ -96,6 +96,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::ImageBackup => image_backup(cx),
         Screen::PowerOff => power_off(cx),
         Screen::Tasks => tasks(cx),
+    Screen::Charge => charge(cx),
         Screen::Filesystem => filesystem(cx),
         Screen::PartWork => part_work(cx),
         Screen::Language => language(cx),
@@ -367,11 +368,24 @@ pub fn home(cx: &Ctx) -> Frame {
         });
         system_opens.push(Action::Open(Screen::Systems));
     }
+    // 充电就排在高级工具上面：它比高级工具里的东西常用，也不该藏在里面。
+    // 充电时右侧显示当前功率，一眼能看出快不快。
+    let charging = match &cx.info.battery {
+        Some(b) if b.plugged => {
+            let value = b.watts().map_or_else(|| l.pick(["充电中", "充電中", "Charging"]).to_owned(), |w| fmt::watts((w * 10.0).round() as u32));
+            Some(value)
+        }
+        _ => None,
+    };
+    match &charging {
+        Some(value) => system_rows.push(Row::new(l.pick(CHARGE)).icon(GREEN, Icon::Battery).trail(Trail::Value(value))),
+        None => system_rows.push(Row::new(l.pick(CHARGE)).icon(SLATE, Icon::Battery)),
+    }
+    system_opens.push(Action::Open(Screen::Charge));
     system_rows.push(Row::new(l.pick(ADVANCED)).icon(SLATE, Icon::More));
     system_opens.push(Action::Open(Screen::Advanced));
     system_rows.push(Row::new(l.pick(SETTINGS)).icon(SLATE, Icon::Gear));
-    system_opens.push(Action::Open(Screen::Settings));
-    let system = widgets::list(&mut c, t, f, y, &system_rows);
+    system_opens.push(Action::Open(Screen::Settings));    let system = widgets::list(&mut c, t, f, y, &system_rows);
     out.extend(hits(&system.rows, &system_opens));
     // At the foot: rebooting, wiping and this recovery's own update.
     let mut footer_rows = Vec::new();
@@ -1167,6 +1181,140 @@ pub fn power_off(cx: &Ctx) -> Frame {
     let track = widgets::confirm(&mut c, t, f, y + t.m.dp(28.0), label, danger, s.confirm);
     out.push(Hit { rect: track, action: Action::Confirm(Confirm::PowerOff) });
     Frame::new(t, c, out, l.pick(POWER_OFF), top)
+}
+
+/// How fast the phone takes power from its charger.
+///
+/// The page opens with what the charger is giving now, since that is the
+/// number the rest of it is judged against: a ceiling above what the charger
+/// delivers changes nothing, and a phone whose charger gives six watts
+/// charges no faster for being asked for a hundred. Under it are the three
+/// ways to charge, and under those whatever the way chosen needs.
+pub fn charge(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+    let ch = &s.charge;
+
+    // What the charger gives, and what the guard is doing about it. The
+    // number comes from the runtime's own reading of the charge nodes, so it
+    // is what the phone is taking rather than what it was asked to take.
+    let now = match ch.state.now {
+        Some(tenths) => fmt::watts(tenths),
+        None => l.pick(["未接充电器", "未接充電器", "No charger"]).to_owned(),
+    };
+    let most = match ch.state.most {
+        Some(tenths) => fmt::watts(tenths),
+        None => "\u{2014}".to_owned(),
+    };
+    let y = widgets::section_first(&mut c, t, f, top, l.pick(["现在", "現在", "Now"]));
+    let rows = [Row::new(&now).icon(BLUE, Icon::Battery).trail(Trail::Value(&most))];
+    let list = widgets::list(&mut c, t, f, y, &rows);
+    let mut y = list.bottom;
+
+    // The three ways to charge, the one in force marked as chosen.
+    y = widgets::section(&mut c, t, f, y, l.pick(["充电方式", "充電方式", "How to charge"]));
+    let modes = [
+        (ChargeMode::Default, l.pick(["默认", "預設", "Default"]), l.pick(["充电器给多少就取多少", "充電器給多少就取多少", "Take what the charger gives"])),
+        (ChargeMode::Smart, l.pick(["智能", "智慧", "Smart"]), l.pick(["随温度升高逐步降低功率", "隨溫度升高逐步降低功率", "Less power as the battery warms"])),
+        (ChargeMode::Custom, l.pick(["自定义", "自訂", "Custom"]), l.pick(["自己决定功率与温度限制", "自己決定功率與溫度限制", "Your own power and limits"])),
+    ];
+    let mode_rows: Vec<Row> = modes
+        .iter()
+        .map(|(mode, name, note)| Row::new(name).subtitle(note).trail(Trail::Check(*mode == ch.mode)))
+        .collect();
+    let mode_list = widgets::list(&mut c, t, f, y, &mode_rows);
+    out.extend(hits(&mode_list.rows, &[Action::ChargeAs(ChargeMode::Default), Action::ChargeAs(ChargeMode::Smart), Action::ChargeAs(ChargeMode::Custom)]));
+    y = mode_list.bottom;
+
+    // What the way chosen needs: a ceiling for custom, and the guard for
+    // both of the others. The default asks for nothing more, since it leaves
+    // the charger to do as it will.
+    if ch.mode != ChargeMode::Default {
+        if ch.mode == ChargeMode::Custom {
+            let watts = fmt::watts((ch.watts * 10.0).round() as u32);
+            let below = Row::new(l.pick(["充电功率", "充電功率", "Charge power"])).trail(Trail::Value(&watts));
+            y = widgets::section(&mut c, t, f, y, l.pick(["功率", "功率", "Power"]));
+            let block = widgets::slider_card(&mut c, t, f, y, Caption::Sun, l.pick(["充电功率", "充電功率", "Charge power"]), self_level(ch, Slider::ChargeWatts), Some(below));
+            out.push(Hit { rect: block.track, action: Action::Slider(Slider::ChargeWatts) });
+            y = block.bottom;
+        } else {
+            // Smart says what it is doing, since its ceiling is not the
+            // owner's to set.
+            let tenths = cx.info.battery.as_ref().and_then(|b| b.temp);
+            let ceiling = ChargeMode::smart_watts(tenths.unwrap_or(0));
+            let now = fmt::watts((ceiling * 10.0).round() as u32);
+            let note = l.pick([
+                format!("电池温度升高时逐步降到 {}，不会停充", now),
+                format!("電池溫度升高時逐步降到 {}，不會停充", now),
+                format!("Falls to {} as the battery warms, and never stops", now),
+            ]);
+            y = widgets::section(&mut c, t, f, y, l.pick(["智能充电", "智慧充電", "Smart charging"]));
+            y = widgets::footnote(&mut c, t, f, y, &note);
+        }
+
+        // The guard: a switch, and the two warmth lines it holds to.
+        y = widgets::section(&mut c, t, f, y, l.pick(["温度保护", "溫度保護", "Temperature guard"]));
+        let guard_row = Row::new(l.pick(["温度保护", "溫度保護", "Temperature guard"]))
+            .subtitle(l.pick(["电池过热时自动降速或停充", "電池過熱時自動降速或停充", "Slow or stop charging when the battery is hot"]))
+            .trail(Trail::Switch(ch.guarded));
+        let guard_list = widgets::list(&mut c, t, f, y, &[guard_row]);
+        out.extend(hits(&guard_list.rows, &[Action::ChargeGuard(!ch.guarded)]));
+        y = guard_list.bottom;
+
+        // The two lines are shown whatever the switch says, so the owner can
+        // see what turning it on would do, but they are only the owner's to
+        // change while it is on.
+        let slow = fmt::celsius(ch.slow_at);
+        let stop = fmt::celsius(ch.stop_at);
+        let slow_note = l.pick(["超过此温度降到 5W", "超過此溫度降到 5W", "Below this it charges at 5 W"]);
+        let stop_note = l.pick(["超过此温度停止充电", "超過此溫度停止充電", "Above this it stops charging"]);
+        let slow_row = Row::new(l.pick(["降速温度", "降速溫度", "Slow down at"])).subtitle(slow_note).trail(Trail::Value(&slow));
+        let stop_row = Row::new(l.pick(["停止温度", "停止溫度", "Stop at"])).subtitle(stop_note).trail(Trail::Value(&stop));
+        let lines = widgets::list(&mut c, t, f, y, &[slow_row, stop_row]);
+        if ch.guarded {
+            out.push(Hit { rect: lines.rows[0], action: Action::Slider(Slider::ChargeSlow) });
+            out.push(Hit { rect: lines.rows[1], action: Action::Slider(Slider::ChargeStop) });
+        }
+        y = lines.bottom;
+
+        // What the guard is doing right now, where it is doing anything.
+        let said = match ch.state.guard {
+            Guard::Clear => None,
+            Guard::Slowed => Some(l.pick(["电池偏热，正在降速充电", "電池偏熱，正在降速充電", "The battery is warm: charging slowly"])),
+            Guard::Stopped => Some(l.pick(["电池过热，已停止充电", "電池過熱，已停止充電", "The battery is hot: charging stopped"])),
+        };
+        if let Some(said) = said {
+            let rows = [Row::new(said).icon(ORANGE, Icon::Battery).tint(t.pal.danger)];
+            y = widgets::list(&mut c, t, f, y + t.m.dp(10.0), &rows).bottom;
+        }
+    }
+
+    // What the setting cannot do, said plainly: the ceiling is a ceiling,
+    // and the charger has the last word.
+    let warn = l.pick([
+        "功率上限只是上限：实际充电速度由充电器和数据线决定，超过它们能给的值不会有任何作用。提高功率会让手机更热，请留意电池温度。",
+        "功率上限只是上限：實際充電速度由充電器和資料線決定，超過它們能給的值不會有任何作用。提高功率會讓手機更熱，請留意電池溫度。",
+        "A ceiling is only a ceiling: the charger and the cable still decide the speed, and asking for more than they give does nothing. More power means more heat, so watch the battery's temperature.",
+    ]);
+    let y = widgets::section(&mut c, t, f, y, l.pick(["注意", "注意", "Note"]));
+    let y = widgets::footnote(&mut c, t, f, y, warn);
+    if let Some(trouble) = &ch.state.trouble {
+        widgets::footnote(&mut c, t, f, y, trouble);
+    }
+
+    Frame::new(t, c, out, l.pick(CHARGE), top)
+}
+
+/// Where a charge slider stands on the page, as the slider is drawn.
+fn self_level(ch: &Charge, which: Slider) -> f32 {
+    let (value, least, most) = match which {
+        Slider::ChargeWatts => (ch.watts, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST),
+        Slider::ChargeSlow => (ch.slow_at as f32, CHARGE_SLOW_LEAST as f32, (ch.stop_at - CHARGE_GAP_TENTHS) as f32),
+        _ => (ch.stop_at as f32, (ch.slow_at + CHARGE_GAP_TENTHS) as f32, CHARGE_STOP_MOST as f32),
+    };
+    if most <= least { 0.0 } else { ((value - least) / (most - least)).clamp(0.0, 1.0) }
 }
 
 /// Installing, opened from the home page: the system on the phone now, and
@@ -2938,6 +3086,7 @@ const PARTITIONS: Text = ["分区管理", "分割區管理", "Partitions"];
 const IMAGE_BACKUP: Text = ["镜像备份", "映像檔備份", "Image backup"];
 const POWER_OFF: Text = ["关机", "關機", "Power off"];
 const TASKS: Text = ["任务", "任務", "Tasks"];
+const CHARGE: Text = ["充电", "充電", "Charging"];
 const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
 const STOPPED: Text = ["已停止", "已停止", "Stopped"];
 const STOPPING: Text = ["正在停止", "正在停止", "Stopping"];

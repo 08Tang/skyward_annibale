@@ -136,6 +136,15 @@ pub fn volts(uv: u64) -> String {
     format!("{:.2}V", uv as f64 / 1e6)
 }
 
+/// A power given in tenths of a watt, to the tenth where it is not whole:
+/// `18`, `6.2`, `100`.
+pub fn watts(tenths: u32) -> String {
+    match tenths % 10 {
+        0 => format!("{}W", tenths / 10),
+        _ => format!("{:.1}W", tenths as f64 / 10.0),
+    }
+}
+
 /// The kernel's battery health in the language; a state it does not list
 /// shows as reported.
 pub fn health(l: Lang, h: &str) -> String {
