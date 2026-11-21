@@ -1234,8 +1234,9 @@ pub fn charge(cx: &Ctx) -> Frame {
     if ch.mode != ChargeMode::Default {
         if ch.mode == ChargeMode::Custom {
             let watts = fmt::watts((ch.watts * 10.0).round() as u32);
-            let below = Row::new(l.pick(["充电功率", "充電功率", "Charge power"])).trail(Trail::Value(&watts));
-            y = widgets::section(&mut c, t, f, y, l.pick(["功率", "功率", "Power"]));
+            // The card's caption names the slider, so the line under it says
+            // what it is set to and nothing else.
+            let below = Row::new(l.pick(["设定功率", "設定功率", "Set to"])).trail(Trail::Value(&watts));
             let block = widgets::slider_card(&mut c, t, f, y, Caption::Sun, l.pick(["充电功率", "充電功率", "Charge power"]), self_level(ch, Slider::ChargeWatts), Some(below));
             out.push(Hit { rect: block.track, action: Action::Slider(Slider::ChargeWatts) });
             y = block.bottom;
@@ -1263,15 +1264,13 @@ pub fn charge(cx: &Ctx) -> Frame {
         out.extend(hits(&guard_list.rows, &[Action::ChargeGuard(!ch.guarded)]));
         y = guard_list.bottom;
 
-        // The two lines are shown whatever the switch says, so the owner can
-        // see what turning it on would do, but they are only the owner's to
-        // change while it is on: a slider that cannot be moved is drawn as a
-        // track with nothing to drag, and its card says why.
+        // The two cards stand one under the other with no section heading of
+        // their own: each card's caption names it, and a heading saying the
+        // same words over it would only take room.
         let slow = fmt::celsius(ch.slow_at);
         let stop = fmt::celsius(ch.stop_at);
-        let slow_below = Row::new(l.pick(["超过此温度降到 5W", "超過此溫度降到 5W", "Below this it charges at 5 W"])).trail(Trail::Value(&slow));
-        let stop_below = Row::new(l.pick(["超过此温度停止充电", "超過此溫度停止充電", "Above this it stops charging"])).trail(Trail::Value(&stop));
-        y = widgets::section(&mut c, t, f, y, l.pick(["降速温度", "降速溫度", "Slow down at"]));
+        let slow_below = Row::new(l.pick(["降到 5W", "降到 5W", "Down to 5 W"])).trail(Trail::Value(&slow));
+        let stop_below = Row::new(l.pick(["停止充电", "停止充電", "Charging stops"])).trail(Trail::Value(&stop));
         let slow_card = widgets::slider_card(
             &mut c,
             t,
@@ -1286,7 +1285,6 @@ pub fn charge(cx: &Ctx) -> Frame {
             out.push(Hit { rect: slow_card.track, action: Action::Slider(Slider::ChargeSlow) });
         }
         y = slow_card.bottom;
-        y = widgets::section(&mut c, t, f, y, l.pick(["停止温度", "停止溫度", "Stop at"]));
         let stop_card = widgets::slider_card(
             &mut c,
             t,
