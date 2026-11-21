@@ -1,4 +1,4 @@
-﻿//! The AVB page's state and the answers the runtime gives it.
+//! The AVB page's state and the answers the runtime gives it.
 
 use super::*;
 
@@ -77,10 +77,14 @@ mod tests {
     #[test]
     fn the_page_says_what_turning_a_check_off_costs_and_how_to_come_back() {
         let (mut app, f, i) = page(unlocked(true, true));
-        let h = app.frame(&f, &i).canvas.h;
-        // The warning stands below the switches and their room, so the page
-        // runs past the three screens a list of rows would take.
-        assert!(h as f32 > 3.0 * H as f32, "the page carries the warning and the way back");
+        let (h, last) = {
+            let frame = app.frame(&f, &i);
+            let last = frame.hits.iter().filter(|h| matches!(h.action, Action::ToggleAvb(_) | Action::BackupVbmeta | Action::RestoreVbmeta)).map(|h| h.rect.y + h.rect.h).fold(0.0f32, f32::max);
+            (frame.canvas.h, last)
+        };
+        // The warning and the way back stand below the switches, so the page
+        // runs on past the last control it offers.
+        assert!(h as f32 > last + 400.0, "the page carries the warning and the way back under the controls");
         assert_eq!(app.screen(), Screen::Avb);
     }
 
@@ -105,8 +109,10 @@ mod tests {
             let frame = app.frame(&f, &i);
             (frame.canvas.h, frame.hits.iter().filter(|h| matches!(h.action, Action::ToggleAvb(_))).count())
         };
-        assert!(h as f32 > 3.0 * H as f32, "the warning is shown whether or not the switches work");
-        assert_eq!(toggles, 0, "but nothing can be changed");
+        // A locked bootloader offers nothing to press, but the warning and
+        // the way back are still there to read.
+        assert_eq!(toggles, 0, "nothing can be changed");
+        assert!(h as f32 > H as f32, "the warning is shown whether or not the switches work");
     }
 }
 
