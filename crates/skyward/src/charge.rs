@@ -18,7 +18,7 @@
 //! the recovery is not left charging under a limit this page set.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 
@@ -168,7 +168,7 @@ pub fn supported() -> bool {
 }
 
 /// The trouble to show where the nodes could not be written, if any.
-pub fn trouble(charge: &Charge, tenths: Option<i32>) -> Option<String> {
+pub fn trouble(charge: &Charge) -> Option<String> {
     if charge.mode == ChargeMode::Default {
         return None;
     }
@@ -180,7 +180,7 @@ pub fn trouble(charge: &Charge, tenths: Option<i32>) -> Option<String> {
 
 /// Where a node lives, for the tests to read back what was written.
 #[cfg(test)]
-fn node(dir: &str, name: &str) -> PathBuf {
+fn node(dir: &str, name: &str) -> std::path::PathBuf {
     Path::new(dir).join(name)
 }
 

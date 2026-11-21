@@ -1,5 +1,6 @@
 use crate::appread;
 use crate::backup;
+use crate::charge;
 use crate::decrypt::{self, Decryptor};
 use crate::fetch;
 use crate::filework;
@@ -3789,7 +3790,7 @@ impl Pages<'_> {
             return Ok(());
         }
         let (undo, mut state) = charge::set(&charge, tenths)?;
-        state.trouble = charge::trouble(&charge, tenths);
+        state.trouble = charge::trouble(&charge);
         self.charge_undo = Some(undo);
         self.app.set_charge_state(state);
         Ok(())
@@ -3814,7 +3815,7 @@ impl Pages<'_> {
             };
         }
         state.guard = charge.guard_at(tenths);
-        state.trouble = charge::trouble(&charge, tenths);
+        state.trouble = charge::trouble(&charge);
         // The guard acts only where a setting asks for something: the default
         // writes nothing at all.
         if charge.mode != ChargeMode::Default {
