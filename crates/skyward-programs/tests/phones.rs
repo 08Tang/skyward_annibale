@@ -211,6 +211,10 @@ fn nezha_s_programs_are_found_as_they_were_started_on_the_phone() {
             ..program("/odm/bin/hw/android.hardware.weaver-service", &ON_ODM, "system", &["system", "drmrpc"])
         }),
         Started::from(Service { ready_service: Some(BOOT.into()), ..program("/vendor/bin/hw/android.hardware.boot-service.qti", &ON_VENDOR, "root", &["root"]) }),
+        Started::from(Service {
+            ready_service: Some("vendor.xiaomi.hardware.micharge.IMiCharge/default".into()),
+            ..program("/vendor/bin/hw/vendor.xiaomi.hardware.micharge-service", &ON_VENDOR, "system", &["system"])
+        }),
     ];
     let found: Vec<Started> = secure::programs(&steps).into_iter().cloned().collect();
     assert_eq!(found, expected);
@@ -232,6 +236,7 @@ fn nezha_s_other_builds_reach_their_weaver_s_secure_element_through_the_secure_e
                 "(the secure element service)",
                 "android.hardware.weaver-service.thales",
                 "android.hardware.boot-service.qti",
+                "vendor.xiaomi.hardware.micharge-service",
             ]
         );
         let found = secure::programs(&steps);
@@ -325,6 +330,7 @@ fn dada_s_weaver_goes_through_the_secure_element_service_to_the_element_s_own_se
             "(the secure element service)",
             "android.hardware.weaver-service.thales",
             "android.hardware.boot-service.qti",
+            "vendor.xiaomi.hardware.micharge-service",
         ]
     );
     let found = secure::programs(&steps);
