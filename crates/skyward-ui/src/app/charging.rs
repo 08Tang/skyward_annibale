@@ -97,8 +97,10 @@ pub struct ChargeNow {
     pub most: Option<u32>,
     /// What the guard last did, so the page can say why charging is slow.
     pub guard: Guard,
-    /// The charge nodes the runtime could not write, if any, and why.
-    pub trouble: Option<String>,
+    /// Whether the phone carries the charge nodes this page writes to. The
+    /// page says so where it does not, since a setting that cannot be put in
+    /// place should not look as if it had been.
+    pub trouble: bool,
 }
 
 /// What the guard is doing to the charge right now.

@@ -64,8 +64,8 @@ pub const TIME_ZONES: [(Text, Text, &str); 9] = [
 ];
 
 impl App {
-    pub(super) fn set_slider(&mut self, t: &Theme, which: Slider, track: Rect, x: f32) {
-        self.set_level(t, which, track, (x - track.x) / track.w);
+    pub(super) fn set_slider(&mut self, t: &Theme, which: Slider, track: Rect, x: f32) -> Vec<Effect> {
+        self.set_level(t, which, track, (x - track.x) / track.w)
     }
 
     /// Where a slider stands, as a share of its span.
@@ -84,13 +84,15 @@ impl App {
     }
 
     /// Set a slider to `level` of its span, the brightness no lower than
-    /// its floor, and draw the slider at `track` on the page again.
-    pub(super) fn set_level(&mut self, t: &Theme, which: Slider, track: Rect, level: f32) {
+    /// its floor, and draw the slider at `track` on the page again. Gives
+    /// what the setting asks the runtime to do, which for the charge sliders
+    /// is to put the new ceiling in place.
+    pub(super) fn set_level(&mut self, t: &Theme, which: Slider, track: Rect, level: f32) -> Vec<Effect> {
         let level = level.clamp(0.0, 1.0);
         // The charge sliders act through the actions the page's own controls
         // do, so a slider dragged and a row tapped keep the same rules: the
         // two warmth lines stay in order, and every change is put in place.
-        match which {
+        let fx = match which {
             Slider::ChargeWatts | Slider::ChargeSlow | Slider::ChargeStop => {
                 let c = &self.state.charge;
                 let action = match which {
@@ -104,7 +106,7 @@ impl App {
                         Action::ChargeAt { stop: true, tenths: least + (level * (most - least) as f32) as i32 }
                     }
                 };
-                self.act(action, 0);
+                self.act(action, 0)
             }
             Slider::Brightness | Slider::Vibration => {
                 let value = match which {
@@ -112,8 +114,9 @@ impl App {
                     _ => &mut self.state.vibration,
                 };
                 *value = level.clamp(if which == Slider::Brightness { MIN_BRIGHTNESS } else { 0.0 }, 1.0);
+                Vec::new()
             }
-        }
+        };
         let value = self.level(which);
         if let Some(fr) = self.frame.as_mut() {
             fr.canvas.fill_rect(track.x, track.y, track.w, track.h, t.pal.card);
@@ -121,6 +124,7 @@ impl App {
         }
         self.layer = None;
         self.dirty = true;
+        fx
     }
 }
 

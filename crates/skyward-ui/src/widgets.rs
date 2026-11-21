@@ -1782,6 +1782,8 @@ pub enum Caption {
     Sun,
     /// A phone between the lines of its shaking.
     Vibrate,
+    /// A thermometer: the bulb, its stem, and the mark it has risen to.
+    Thermometer,
 }
 
 /// Card with a monochrome icon caption, a slider, and an optional row below.
@@ -1821,6 +1823,12 @@ pub fn slider_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, caption: Capt
                     c.line(x + a, pair[0], x + b, pair[1], m.dp(1.8), t.pal.mono_icon);
                 }
             }
+        }
+        Caption::Thermometer => {
+            // The stem, with its bulb under it and the mercury risen partway.
+            c.stroke_round_rect(scx - m.dp(1.6), lcy - m.dp(9.0), m.dp(3.2), m.dp(12.0), m.dp(1.6), m.dp(1.4), t.pal.mono_icon);
+            c.fill_circle(scx, lcy + m.dp(4.4), m.dp(3.4), t.pal.mono_icon);
+            c.line(scx, lcy + m.dp(1.0), scx, lcy - m.dp(2.0), m.dp(1.4), t.pal.mono_icon);
         }
     }
     // The caption is set like the account name, in the softer text colour.

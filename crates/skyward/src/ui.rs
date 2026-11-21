@@ -1249,6 +1249,9 @@ struct Pages<'a> {
     /// What the charge nodes held before the charge page wrote them, so they
     /// can be given back when the page is left or the setting is cleared.
     charge_undo: Option<charge::Undo>,
+    /// The way of charging the nodes were last set to, so a change of way
+    /// gives them back to the bootloader before the new one writes.
+    charge_mode: ChargeMode,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1512,6 +1515,7 @@ impl<'a> Pages<'a> {
             backuper: None,
             imager: None,
             charge_undo: None,
+            charge_mode: ChargeMode::Default,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -3778,20 +3782,27 @@ impl Pages<'_> {
     fn charge_set(&mut self, _now: u64) -> Result<()> {
         let charge = self.app.state.charge.clone();
         let tenths = self.info.battery.as_ref().and_then(|b| b.temp);
-        // Leaving the default puts back whatever the page wrote, rather than
-        // writing the default's own idea of what the nodes should hold: the
-        // recovery found them as the bootloader left them, and that is what
-        // it should hand on.
-        if charge.mode == ChargeMode::Default {
+        // The nodes go back to what the bootloader left, on two occasions:
+        // when the default is chosen, and when the way of charging changes.
+        // What the last way wrote is not the charger's own value, and keeping
+        // it would hand on this page's arithmetic as if it were.
+        if charge.mode == ChargeMode::Default || charge.mode != self.charge_mode {
             if let Some(undo) = self.charge_undo.take() {
                 charge::restore(&undo);
             }
+        }
+        if charge.mode == ChargeMode::Default {
             self.app.set_charge_state(ChargeNow::default());
             return Ok(());
         }
         let (undo, mut state) = charge::set(&charge, tenths)?;
         state.trouble = charge::trouble(&charge);
-        self.charge_undo = Some(undo);
+        // What the nodes held before this page touched them is kept, and kept
+        // once: a later write would record this page's own value as if it were
+        // the charger's, and leaving the default would put that back instead of
+        // what the bootloader left.
+        self.charge_undo.get_or_insert(undo);
+        self.charge_mode = charge.mode;
         self.app.set_charge_state(state);
         Ok(())
     }
@@ -3820,7 +3831,7 @@ impl Pages<'_> {
         // writes nothing at all.
         if charge.mode != ChargeMode::Default {
             let (undo, set) = charge::set(&charge, tenths)?;
-            self.charge_undo = Some(undo);
+            self.charge_undo.get_or_insert(undo);
             state.guard = set.guard;
         }
         self.app.set_charge_state(state);

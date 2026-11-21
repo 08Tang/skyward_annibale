@@ -65,10 +65,11 @@ impl App {
         if self.adjusting {
             if let Some(Spot { stop: Stop::Hit(Action::Slider(which)), rect, .. }) = self.lit() {
                 let level = self.level(which) + if down { -SLIDER_STEP } else { SLIDER_STEP };
-                self.set_level(&self.theme(), which, rect, level);
+                let mut fx = self.set_level(&self.theme(), which, rect, level);
                 if which == Slider::Vibration && self.state.vibrate {
-                    return vec![Effect::Haptic];
+                    fx.push(Effect::Haptic);
                 }
+                return fx;
             }
             return Vec::new();
         }

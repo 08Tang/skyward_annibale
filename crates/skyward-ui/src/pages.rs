@@ -1265,19 +1265,46 @@ pub fn charge(cx: &Ctx) -> Frame {
 
         // The two lines are shown whatever the switch says, so the owner can
         // see what turning it on would do, but they are only the owner's to
-        // change while it is on.
+        // change while it is on: a slider that cannot be moved is drawn as a
+        // track with nothing to drag, and its card says why.
         let slow = fmt::celsius(ch.slow_at);
         let stop = fmt::celsius(ch.stop_at);
-        let slow_note = l.pick(["超过此温度降到 5W", "超過此溫度降到 5W", "Below this it charges at 5 W"]);
-        let stop_note = l.pick(["超过此温度停止充电", "超過此溫度停止充電", "Above this it stops charging"]);
-        let slow_row = Row::new(l.pick(["降速温度", "降速溫度", "Slow down at"])).subtitle(slow_note).trail(Trail::Value(&slow));
-        let stop_row = Row::new(l.pick(["停止温度", "停止溫度", "Stop at"])).subtitle(stop_note).trail(Trail::Value(&stop));
-        let lines = widgets::list(&mut c, t, f, y, &[slow_row, stop_row]);
+        let slow_below = Row::new(l.pick(["超过此温度降到 5W", "超過此溫度降到 5W", "Below this it charges at 5 W"])).trail(Trail::Value(&slow));
+        let stop_below = Row::new(l.pick(["超过此温度停止充电", "超過此溫度停止充電", "Above this it stops charging"])).trail(Trail::Value(&stop));
+        y = widgets::section(&mut c, t, f, y, l.pick(["降速温度", "降速溫度", "Slow down at"]));
+        let slow_card = widgets::slider_card(
+            &mut c,
+            t,
+            f,
+            y,
+            Caption::Thermometer,
+            l.pick(["降速温度", "降速溫度", "Slow down at"]),
+            self_level(ch, Slider::ChargeSlow),
+            Some(slow_below),
+        );
         if ch.guarded {
-            out.push(Hit { rect: lines.rows[0], action: Action::Slider(Slider::ChargeSlow) });
-            out.push(Hit { rect: lines.rows[1], action: Action::Slider(Slider::ChargeStop) });
+            out.push(Hit { rect: slow_card.track, action: Action::Slider(Slider::ChargeSlow) });
         }
-        y = lines.bottom;
+        y = slow_card.bottom;
+        y = widgets::section(&mut c, t, f, y, l.pick(["停止温度", "停止溫度", "Stop at"]));
+        let stop_card = widgets::slider_card(
+            &mut c,
+            t,
+            f,
+            y,
+            Caption::Thermometer,
+            l.pick(["停止温度", "停止溫度", "Stop at"]),
+            self_level(ch, Slider::ChargeStop),
+            Some(stop_below),
+        );
+        if ch.guarded {
+            out.push(Hit { rect: stop_card.track, action: Action::Slider(Slider::ChargeStop) });
+        }
+        y = stop_card.bottom;
+        if !ch.guarded {
+            let why = l.pick(["打开温度保护后才能调整", "開啟溫度保護後才能調整", "Turn the guard on to change these"]);
+            y = widgets::footnote(&mut c, t, f, y, why);
+        }
 
         // What the guard is doing right now, where it is doing anything.
         let said = match ch.state.guard {
@@ -1299,12 +1326,17 @@ pub fn charge(cx: &Ctx) -> Frame {
         "A ceiling is only a ceiling: the charger and the cable still decide the speed, and asking for more than they give does nothing. More power means more heat, so watch the battery's temperature.",
     ]);
     let y = widgets::section(&mut c, t, f, y, l.pick(["注意", "注意", "Note"]));
-    let y = widgets::footnote(&mut c, t, f, y, warn);
-    if let Some(trouble) = &ch.state.trouble {
-        widgets::footnote(&mut c, t, f, y, trouble);
+    let mut y = widgets::footnote(&mut c, t, f, y, warn);
+    if ch.state.trouble {
+        let missing = l.pick([
+            "这台手机没有可写的充电节点，功率设置不会生效。",
+            "這台手機沒有可寫的充電節點，功率設定不會生效。",
+            "This phone has no charge nodes to write: the power setting will do nothing.",
+        ]);
+        y = widgets::footnote(&mut c, t, f, y, missing);
     }
 
-    Frame::new(t, c, out, l.pick(CHARGE), top)
+    Frame::new(t, fit(c, t, y), out, l.pick(CHARGE), top)
 }
 
 /// Where a charge slider stands on the page, as the slider is drawn.
@@ -3086,7 +3118,7 @@ const PARTITIONS: Text = ["分区管理", "分割區管理", "Partitions"];
 const IMAGE_BACKUP: Text = ["镜像备份", "映像檔備份", "Image backup"];
 const POWER_OFF: Text = ["关机", "關機", "Power off"];
 const TASKS: Text = ["任务", "任務", "Tasks"];
-const CHARGE: Text = ["充电", "充電", "Charging"];
+const CHARGE: Text = ["充电设置", "充電設定", "Charging"];
 const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
 const STOPPED: Text = ["已停止", "已停止", "Stopped"];
 const STOPPING: Text = ["正在停止", "正在停止", "Stopping"];

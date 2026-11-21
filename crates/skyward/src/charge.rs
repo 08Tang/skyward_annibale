@@ -63,16 +63,24 @@ pub struct Reading {
     pub voltage: Option<u64>,
 }
 
-/// Read the charger: the power going into the battery, and the voltage it
+/// Read the charger: the power the charger is delivering, and the voltage it
 /// comes at.
+///
+/// The power is read from the charger's own side where the phone tells it
+/// there, since that is what a ceiling is judged against: the battery's own
+/// current is what reaches it after the charger's losses, and a ceiling set
+/// against that would be set too low. Where the charger says nothing, the
+/// battery's current and voltage stand in.
 pub fn reading() -> Reading {
-    let current = read_i64(BATTERY, "current_now");
-    let voltage = read_u64(BATTERY, "voltage_now");
-    let watts = match (current, voltage) {
-        (Some(ua), Some(uv)) => Some(((ua.unsigned_abs() as f64 * uv as f64) / 1e11).round() as u32),
-        _ => None,
+    let voltage = read_u64(USB, "voltage_now").or_else(|| read_u64(BATTERY, "voltage_now"));
+    let watts = match (read_i64(USB, "current_now"), voltage) {
+        (Some(ua), Some(uv)) if ua != 0 => Some(((ua.unsigned_abs() as f64 * uv as f64) / 1e11).round() as u32),
+        _ => match (read_i64(BATTERY, "current_now"), read_u64(BATTERY, "voltage_now")) {
+            (Some(ua), Some(uv)) => Some(((ua.unsigned_abs() as f64 * uv as f64) / 1e11).round() as u32),
+            _ => None,
+        },
     };
-    Reading { watts, voltage: read_u64(USB, "voltage_now").or(voltage) }
+    Reading { watts, voltage }
 }
 
 /// The input current limit to ask for `watts` of power at `uv` microvolts, in
@@ -91,9 +99,8 @@ pub fn set(charge: &ChargeSetting, tenths: Option<i32>) -> Result<(Undo, ChargeN
     let wanted = charge.wanted(tenths);
 
     let Some(watts) = wanted else {
-        // The default: nothing is asked for, and whatever was asked for
-        // before is given back.
-        restore(&Undo::default());
+        // The default asks for nothing and writes nothing: the caller gives
+        // the nodes back what they held, from the undo it kept.
         return Ok((undo, state));
     };
 
@@ -121,6 +128,15 @@ pub fn set(charge: &ChargeSetting, tenths: Option<i32>) -> Result<(Undo, ChargeN
             let celsius = charge.slow_at / 10;
             undo.wired = write_node(THERMAL, "wired_ctrl_limit", &celsius.to_string()).ok();
         }
+        // Said in the log, since a ceiling that changes nothing is the first
+        // thing to look for when the phone charges no faster: it says what
+        // was asked for, what the charger was delivering, and whether the
+        // node took the value at all.
+        let _ = skyward_sys::kmsg(&format!(
+            "charging: asked {watts} W at {uv} uV, so iin_limit {ua} uA; the charger was giving {:?}; iin_limit took it: {}",
+            reading.watts,
+            undo.iin.is_some()
+        ));
     }
     state.guard = charge.guard_at(tenths);
     Ok((undo, state))
@@ -167,15 +183,9 @@ pub fn supported() -> bool {
     Path::new(INTERFACE).is_dir() && Path::new(INTERFACE).join("iin_limit").exists()
 }
 
-/// The trouble to show where the nodes could not be written, if any.
-pub fn trouble(charge: &ChargeSetting) -> Option<String> {
-    if charge.mode == ChargeMode::Default {
-        return None;
-    }
-    match supported() {
-        true => None,
-        false => Some("这台手机没有可写的充电节点，功率设置不会生效。".to_owned()),
-    }
+/// Whether the phone carries the charge nodes this page writes to.
+pub fn trouble(charge: &ChargeSetting) -> bool {
+    charge.mode != ChargeMode::Default && !supported()
 }
 
 /// Where a node lives, for the tests to read back what was written.
