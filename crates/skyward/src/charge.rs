@@ -97,7 +97,7 @@ fn read_node(dir: &str, name: &str) -> Option<String> {
 /// guessed at.
 pub fn describe() {
     let said = |dir: &str, name: &str| read_node(dir, name).unwrap_or_else(|| "?".to_owned());
-    skyward_sys::kmsg(&format!(
+    let line = format!(
         "charging: usb {} {} {} {} {}; battery {} {} {}; common {} {}",
         said(USB, "voltage_now"),
         said(USB, "current_now"),
@@ -109,7 +109,10 @@ pub fn describe() {
         said(BATTERY, "status"),
         said(COMMON, "real_type"),
         said(COMMON, "power_max"),
-    ));
+    );
+    // What the nodes say is worth having even where the log will not take it,
+    // so a failure to write is dropped rather than stopping the page.
+    let _ = skyward_sys::kmsg(&line);
 }
 
 fn read_i64(dir: &str, name: &str) -> Option<i64> {
