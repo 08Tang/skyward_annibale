@@ -1195,7 +1195,7 @@ pub fn power_off(cx: &Ctx) -> Frame {
 pub fn charge(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let mut c = long_page(cx);
-    let mut out = Vec::new();
+    let out = Vec::new();
     let top = t.m.content_top;
     let ch = &s.charge;
     let b = cx.info.battery.as_ref();
@@ -1259,32 +1259,6 @@ pub fn charge(cx: &Ctx) -> Frame {
         }
         y = widgets::section(&mut c, t, f, y, l.pick(["电池", "電池", "Battery"]));
         y = widgets::info_card(&mut c, t, f, y, &cells);
-    }
-
-    // The switch that turns the phone's end of the cable into a host, which is
-    // what lets the charger's own chip be reached: offered only on a phone
-    // that carries the node for it, and said plainly, since it is a risk taken
-    // on rather than a setting.
-    if s.fast_charge_offered {
-        let label = l.pick(["快充", "快充", "Fast charge"]);
-        let detail = if s.fast_charge {
-            l.pick([
-                "手机已作为主设备，充电器芯片可被访问。充电器可能重新协商，功率会短暂中断。关闭可恢复为从设备。",
-                "手機已作為主裝置，充電器晶片可被存取。充電器可能重新協商，功率會短暫中斷。關閉可恢復為從裝置。",
-                "The phone is the host end now, so the charger's chip can be reached. The charger may renegotiate, and the power drops for a moment. Turn it off to go back.",
-            ])
-        } else {
-            l.pick([
-                "开启后手机将作为主设备，以便访问充电器内的认证芯片。可能触发快充，但也可能断开电脑连接，且充电会短暂中断。",
-                "開啟後手機將作為主裝置，以便存取充電器內的認證晶片。可能觸發快充，但也可能斷開電腦連線，且充電會短暫中斷。",
-                "Turned on, the phone becomes the host end so the charger's own chip can be reached. This may allow a faster charge, but it drops any connection to a computer and interrupts the charge for a moment.",
-            ])
-        };
-        y = widgets::section(&mut c, t, f, y, l.pick(["充电速度", "充電速度", "Charge speed"]));
-        let rows = [Row::new(label).icon(if s.fast_charge { ORANGE } else { SLATE }, Icon::Power).subtitle(detail).trail(Trail::Switch(s.fast_charge))];
-        let list = widgets::list(&mut c, t, f, y, &rows);
-        y = list.bottom;
-        out.extend(hits(&list.rows, &[Action::Toggle(Switch::FastCharge)]));
     }
 
     // What the page cannot do, said plainly, since a page about charging that

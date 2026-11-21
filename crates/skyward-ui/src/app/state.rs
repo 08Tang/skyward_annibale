@@ -294,14 +294,6 @@ pub struct State {
     /// What the runtime last read from the charger: the power it delivers,
     /// the protocol it negotiated, and the most it has given this charge.
     pub charge: ChargeNow,
-    /// Whether the phone's end of the cable has been turned into a host, so
-    /// that the charger's own chip can be reached. Only a phone that carries
-    /// the node for it offers this, which `fast_charge_offered` says.
-    pub fast_charge: bool,
-    /// Whether this phone has the node that turns its end of the cable into a
-    /// host: the one thing that decides whether the switch is shown at all,
-    /// since a switch that could do nothing would be worse than none.
-    pub fast_charge_offered: bool,
     /// Where an update the system installed stands, as the runtime last
     /// read it.
     pub update: Standing,
@@ -455,8 +447,6 @@ impl Default for State {
             image_to_drive: false,
             image_job: None,
             charge: ChargeNow::default(),
-            fast_charge: false,
-            fast_charge_offered: false,
             update: Standing::None,
             wlan: None,
             remember: false,

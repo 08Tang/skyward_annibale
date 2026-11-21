@@ -36,10 +36,6 @@ pub enum Switch {
     WlanKeep,
     /// Show the password typed rather than a dot for each character.
     ShowPassword,
-    /// Turn the phone's end of the cable into a host, so that the charger's
-    /// own chip can be talked to and the battery's check answered. Only
-    /// offered on a phone that has the node for it.
-    FastCharge,
 }
 
 /// How long the screen stays on with nothing touched, in milliseconds, in
