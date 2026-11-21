@@ -3250,6 +3250,7 @@ impl Pages<'_> {
             Effect::DeleteImage(path) => self.delete_image(PathBuf::from(path), now)?,
             Effect::StopImage => self.imager.as_ref().context("there is no work on an image to stop")?.stop(),
             Effect::ChargeWatch => self.charge_watch(now)?,
+            Effect::FastCharge => self.fast_charge(now)?,
             Effect::Filesystem { name, action } => self.filesystem(&name, action, now)?,
             Effect::Backup { parts, place, compress, verify } => self.back_up(parts, place, compress, verify, now)?,
             Effect::Restore { place, name, parts } => self.restore(place, &name, parts, now)?,
@@ -3773,14 +3774,57 @@ impl Pages<'_> {
     /// Read the charger again, so the page shows what it is delivering now.
     /// Runs with the battery's own reading, once a second, and with the page
     /// opening.
-    fn charge_watch(&mut self, _now: u64) -> Result<()> {
+    fn charge_watch(&mut self, now: u64) -> Result<()> {
         // What every node answers is said once, so a page that comes up empty
         // says which node went quiet rather than leaving it to be guessed at.
         if !self.charge_said {
             self.charge_said = true;
             charge::describe();
+            // A phone without the nodes for it is not offered the switch: there
+            // would be nothing for it to do, and a switch that cannot do what
+            // its page says is worse than none.
+            self.app.state.fast_charge_offered = charge::offered();
         }
         self.app.set_charge_state(charge::reading());
+        // The recovery's own thermal chain does not work on this phone, so the
+        // charge that the switch allows is watched here instead: a battery at
+        // the limit has the word taken back, and it is only given again once
+        // the battery is well under it. That is the one thing that can turn the
+        // switch's effect off, and it is why the switch has a limit at all.
+        let temp = charge::temperature();
+        self.app.state.battery_temp = temp;
+        if self.app.state.fast_charge {
+            if self.app.state.fast_charge_dropped {
+                if charge::cool_enough(temp) {
+                    if let Err(e) = charge::allow_fast() {
+                        self.app.report(&e, now);
+                    } else {
+                        self.app.state.fast_charge_dropped = false;
+                    }
+                }
+            } else if charge::too_hot(temp) {
+                if let Err(e) = charge::stop_fast() {
+                    self.app.report(&e, now);
+                } else {
+                    self.app.state.fast_charge_dropped = true;
+                    let _ = skyward_sys::kmsg(&format!(
+                        "charging: battery at {} is too hot, so the charge was dropped back",
+                        temp.map(|t| t.to_string()).unwrap_or_else(|| "?".into()),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+    /// Tell the kernel the battery passed its check, which is what lets the
+    /// charge draw more than it allows an unchecked one. A failure is said on
+    /// the page rather than kept to the log, and the switch goes back, since
+    /// the phone is not where the page would otherwise say it is.
+    fn fast_charge(&mut self, now: u64) -> Result<()> {
+        if let Err(e) = charge::allow_fast() {
+            self.app.state.fast_charge = false;
+            self.app.report(&e, now);
+        }
         Ok(())
     }
     /// Back the parts chosen up into `place`. An install still stopping may

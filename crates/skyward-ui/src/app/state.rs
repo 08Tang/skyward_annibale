@@ -294,6 +294,21 @@ pub struct State {
     /// What the runtime last read from the charger: the power it delivers,
     /// the protocol it negotiated, and the most it has given this charge.
     pub charge: ChargeNow,
+    /// Whether the battery has been told it passed its check, so that the
+    /// charge may draw more than the kernel allows an unchecked one. Once it
+    /// is on it stays on: the kernel takes the word and does not give it back
+    /// in a way the page could undo, and a switch that turned itself off would
+    /// leave the page saying one thing and the phone doing another.
+    pub fast_charge: bool,
+    /// Whether this phone carries the nodes that can tell the kernel the
+    /// battery passed, and so whether the page offers the switch at all.
+    pub fast_charge_offered: bool,
+    /// Whether the temperature watch has dropped the charge back, which it
+    /// does on its own when the battery gets too hot.
+    pub fast_charge_dropped: bool,
+    /// The battery's temperature in tenths of a degree, as the watch last read
+    /// it, so the page can say what it is watching.
+    pub battery_temp: Option<i32>,
     /// Where an update the system installed stands, as the runtime last
     /// read it.
     pub update: Standing,
@@ -447,6 +462,10 @@ impl Default for State {
             image_to_drive: false,
             image_job: None,
             charge: ChargeNow::default(),
+            fast_charge: false,
+            fast_charge_offered: false,
+            fast_charge_dropped: false,
+            battery_temp: None,
             update: Standing::None,
             wlan: None,
             remember: false,

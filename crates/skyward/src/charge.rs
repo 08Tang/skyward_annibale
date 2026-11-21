@@ -1,12 +1,32 @@
-//! Reading the charger: what it delivers, the protocol it negotiated, and
-//! the most it has given this charge.
+//! Reading the charger, and the one thing that can be told to it: that the
+//! battery passed its check.
 //!
-//! Nothing here writes. The nodes that would hold a charge limit are policy
+//! Nothing here sets a charge limit. The nodes that would hold one are policy
 //! votes on this phone rather than figures — `iin_limit` reads
 //! `buck eff_client:input_suspend 0`, and a number written to it is refused
-//! with `EINVAL` — so the recovery cannot make the phone charge faster or
-//! slower. What it can do is say what the charger is doing, which is what
-//! the page is for.
+//! with `EINVAL` — so the recovery cannot make the phone charge slower, and
+//! the page says what the charger is doing rather than pretending to steer it.
+//!
+//! What can be written is the battery's own word about itself. The kernel asks
+//! the fuel gauge whether the battery passed its check before it lets a charge
+//! draw more than 2 A, and on this phone that answer never comes in recovery:
+//! the charging service needs the charger's own chip over `/dev/hidraw`, and no
+//! such device is ever enumerated here. So the kernel caps the current at
+//! `ichg:[batt_auth][2000]`, the protocol never reaches PD PPS, and the charge
+//! sits at about 8 W where the stock system takes it to 40 W and beyond.
+//!
+//! The two nodes below are that answer. Writing both makes the fuel-gauge
+//! driver itself raise the event the kernel is waiting for — the store
+//! function for `slave_authentic` checks `authentic`, checks `slave_authentic`,
+//! checks that the charger's power matches what the fuel gauge expects, and
+//! then posts event 40, which is the `batt_auth pass` the log shows on a stock
+//! boot. Nothing else is forged: the driver does the posting.
+//!
+//! It is a risk taken on, and the page says so. The recovery's own thermal
+//! chain is broken — `mca_thermal: init wire voter failed`, so
+//! `mca_charger_thermal_handle_limit` answers `charger is not online` and never
+//! backs the charge off — which is why the page watches the battery's own
+//! temperature and drops the charge back itself when it gets too hot.
 
 use std::fs;
 use std::path::Path;
@@ -20,6 +40,24 @@ const BATTERY: &str = "/sys/class/power_supply/battery";
 /// The charger's own side: the protocol it negotiated, and what it says it
 /// can give.
 const COMMON: &str = "/sys/class/xm_power/charger/charger_common";
+/// The fuel gauge's own side: whether the battery passed its check, and the
+/// temperature the page watches while it is told that it did.
+const GAUGE: &str = "/sys/class/xm_power/fuelgauge/strategy_fg";
+
+/// The temperature the charge is dropped back at, in tenths of a degree: 45 °C.
+///
+/// The stock system backs a wired charge off well before this — its own
+/// thermal chain steps the current down through `wired_ctrl_limit` — but that
+/// chain does not work here, so this is the only backstop there is. It is set
+/// where a phone is warm in the hand but not hot, since the point is to stay
+/// clear of the temperatures that age a battery rather than to see how close
+/// the limit can be walked.
+pub const TOO_HOT: i32 = 450;
+
+/// The temperature the charge is allowed to start again at, in tenths of a
+/// degree: 40 °C. Below `TOO_HOT` by enough that a battery sitting at the
+/// threshold cannot switch the charge on and off every second.
+pub const COOL_ENOUGH: i32 = 400;
 
 /// The least voltage a reading is believed at, in microvolts. The nodes are
 /// read while the charger is settling, and a reading of a few millivolts is
@@ -123,6 +161,72 @@ fn read_u64(dir: &str, name: &str) -> Option<u64> {
     read_node(dir, name)?.parse().ok()
 }
 
+/// Whether the phone carries the nodes that can tell the kernel the battery
+/// passed its check. A phone without them is not offered the switch, since
+/// there would be nothing for it to do.
+pub fn offered() -> bool {
+    Path::new(GAUGE).join("authentic").exists() && Path::new(GAUGE).join("slave_authentic").exists()
+}
+
+/// Whether the battery is being told it passed its check.
+pub fn fast() -> bool {
+    read_u64(GAUGE, "authentic").is_some_and(|v| v != 0)
+}
+
+/// The battery's temperature, in tenths of a degree.
+pub fn temperature() -> Option<i32> {
+    read_i64(BATTERY, "temp").or_else(|| read_i64(GAUGE, "temp"))
+}
+
+/// Tell the kernel the battery passed its check, so that the charge may draw
+/// more than 2 A.
+///
+/// `authentic` is written first and `slave_authentic` second, and the order
+/// matters: the fuel-gauge driver does its checking in the store function for
+/// `slave_authentic`, and it will not post the event unless `authentic` is
+/// already set. Writing them the other way round does nothing at all.
+pub fn allow_fast() -> Result<(), String> {
+    write_node(GAUGE, "authentic", "1")?;
+    write_node(GAUGE, "slave_authentic", "1")?;
+    let _ = skyward_sys::kmsg(&format!(
+        "charging: told the gauge the battery passed, and it now reads authentic {}, slave {}",
+        read_node(GAUGE, "authentic").unwrap_or_else(|| "?".into()),
+        read_node(GAUGE, "slave_authentic").unwrap_or_else(|| "?".into()),
+    ));
+    Ok(())
+}
+
+/// Take the word back, so that the charge is held at what the kernel allows a
+/// battery it has not checked.
+///
+/// The switch on the page cannot be turned off once it is on, and this is not
+/// reachable from the page at all: it is here for the temperature watch, which
+/// is the one thing that should be able to drop the charge back.
+pub fn stop_fast() -> Result<(), String> {
+    write_node(GAUGE, "slave_authentic", "0")?;
+    write_node(GAUGE, "authentic", "0")?;
+    Ok(())
+}
+
+fn write_node(dir: &str, name: &str, value: &str) -> Result<(), String> {
+    let path = Path::new(dir).join(name);
+    fs::write(&path, value).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Whether a battery at this temperature is hot enough that the charge should
+/// be dropped back. A battery that says nothing is not called hot: the reading
+/// is missing rather than the battery being cold, and dropping a charge on a
+/// missing reading would make the switch turn itself off for no reason.
+pub fn too_hot(temp: Option<i32>) -> bool {
+    temp.is_some_and(|t| t >= TOO_HOT)
+}
+
+/// Whether a battery that was dropped back for heat is cool enough to be
+/// allowed to charge quickly again.
+pub fn cool_enough(temp: Option<i32>) -> bool {
+    temp.is_some_and(|t| t <= COOL_ENOUGH)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +266,20 @@ mod tests {
     #[test]
     fn a_phone_with_nothing_attached_reads_as_no_charger() {
         assert!(!present(None, None), "no voltage and no protocol: nothing is there");
+    }
+
+    #[test]
+    fn a_battery_at_the_limit_is_too_hot_but_one_just_under_it_is_not() {
+        assert!(too_hot(Some(TOO_HOT)), "at the limit is hot");
+        assert!(too_hot(Some(TOO_HOT + 1)), "over the limit is hot");
+        assert!(!too_hot(Some(TOO_HOT - 1)), "under the limit is not");
+        assert!(!too_hot(None), "a battery that says nothing is not called hot");
+    }
+
+    #[test]
+    fn a_charge_that_was_dropped_stays_dropped_until_the_battery_is_well_under_the_limit() {
+        assert!(cool_enough(Some(COOL_ENOUGH)), "at the lower mark it may start again");
+        assert!(!cool_enough(Some(COOL_ENOUGH + 1)), "one step over the lower mark is still too warm");
+        assert!(cool_enough(Some(TOO_HOT - 1)), "between the marks the charge stays off");
     }
 }

@@ -1195,7 +1195,7 @@ pub fn power_off(cx: &Ctx) -> Frame {
 pub fn charge(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let mut c = long_page(cx);
-    let out = Vec::new();
+    let mut out = Vec::new();
     let top = t.m.content_top;
     let ch = &s.charge;
     let b = cx.info.battery.as_ref();
@@ -1261,13 +1261,91 @@ pub fn charge(cx: &Ctx) -> Frame {
         y = widgets::info_card(&mut c, t, f, y, &cells);
     }
 
+    // Telling the kernel the battery passed its check, which is what lets the
+    // charge draw more than it allows an unchecked one. Said at length, since
+    // it is a risk taken on and the switch cannot be turned back off: once the
+    // kernel has the word it keeps it, and a switch that said otherwise would
+    // have the page lying about the phone.
+    if s.fast_charge_offered {
+        let title = l.pick(["快充", "快充", "Fast charge"]);
+        let (detail, tint) = if s.fast_charge_dropped {
+            (
+                l.pick([
+                    "电池温度过高，已自动回到普通充电。降到 40 °C 以下会重新开启。",
+                    "電池溫度過高，已自動回到普通充電。降到 40 °C 以下會重新開啟。",
+                    "The battery got too hot, so this was dropped back to a normal charge on its own. It comes back once the battery is under 40 °C.",
+                ]),
+                SLATE,
+            )
+        } else if s.fast_charge {
+            (
+                l.pick([
+                    "已开启。内核已被告知电池通过认证，充电电流可以超过未认证时的限制。达到 45 °C 会自动降回。",
+                    "已開啟。核心已被告知電池通過認證，充電電流可以超過未認證時的限制。達到 45 °C 會自動降回。",
+                    "On. The kernel has been told the battery passed its check, so the charge may draw more than it allows an unchecked one. It drops back on its own at 45 °C.",
+                ]),
+                ORANGE,
+            )
+        } else {
+            (
+                l.pick([
+                    "开启后内核将认为电池通过认证，充电电流可超过 8 W 的限制，有望接近充电器的实际能力。开启后无法关闭，需重启恢复。",
+                    "開啟後核心將認為電池通過認證，充電電流可超過 8 W 的限制，有望接近充電器的實際能力。開啟後無法關閉，需重新開機恢復。",
+                    "Turned on, the kernel treats the battery as checked, so the charge may draw more than the 8 W it is held at and can come close to what the charger can give. It cannot be turned off again; a restart puts it back.",
+                ]),
+                SLATE,
+            )
+        };
+        y = widgets::section(&mut c, t, f, y, l.pick(["充电速度", "充電速度", "Charge speed"]));
+        let rows = [Row::new(title).icon(tint, Icon::Power).subtitle(detail).trail(Trail::Switch(s.fast_charge))];
+        let list = widgets::list(&mut c, t, f, y, &rows);
+        y = list.bottom;
+        // A switch that is already on is not a hit: tapping it would do nothing,
+        // and offering it as something to tap would say otherwise.
+        if !s.fast_charge {
+            out.extend(hits(&list.rows, &[Action::Toggle(Switch::FastCharge)]));
+        }
+        // What the watch is watching, said with the switch rather than in the
+        // battery card, since it is the switch that made the watching matter.
+        let watching = match (s.battery_temp, s.fast_charge) {
+            (Some(tenths), true) => format!(
+                "{} {} · {} {}",
+                l.pick(["温度保护", "溫度保護", "Heat guard"]),
+                l.pick(["监控中", "監控中", "watching"]),
+                fmt::celsius(tenths),
+                l.pick(["超过 45.0°C 自动降回", "超過 45.0°C 自動降回", "drops back over 45.0°C"]),
+            ),
+            (None, true) => l
+                .pick([
+                    "温度保护：读不到电池温度，降回要靠你自己留意。",
+                    "溫度保護：讀不到電池溫度，降回要靠你自己留意。",
+                    "Heat guard: the battery is not reporting a temperature, so watching it is up to you.",
+                ])
+                .to_owned(),
+            _ => String::new(),
+        };
+        if !watching.is_empty() {
+            y = widgets::footnote(&mut c, t, f, y + t.m.dp(8.0), &watching);
+        }
+    }
+
     // What the page cannot do, said plainly, since a page about charging that
     // stayed silent would look as if it could make the phone charge faster.
-    let note = l.pick([
-        "recovery 无法改变充电速度。快充由内核与充电器协商决定，这里只显示协商的结果。",
-        "recovery 無法改變充電速度。快充由核心與充電器協商決定，這裡只顯示協商的結果。",
-        "The recovery cannot change how fast the phone charges: the kernel and the charger settle that between them, and this page only shows what they settled on.",
-    ]);
+    // Where the switch is offered the note says what is left over rather than
+    // repeating the warning the switch already carries.
+    let note = if s.fast_charge_offered {
+        l.pick([
+            "快充仍需充电器与内核协商，开启本开关只是解除内核因未认证而设的电流上限，并不保证达到某个功率。",
+            "快充仍需充電器與核心協商，開啟本開關只是解除核心因未認證而設的電流上限，並不保證達到某個功率。",
+            "The charger and the kernel still settle the protocol between them: the switch only lifts the current ceiling the kernel sets for an unchecked battery, and promises no particular power.",
+        ])
+    } else {
+        l.pick([
+            "recovery 无法改变充电速度。快充由内核与充电器协商决定，这里只显示协商的结果。",
+            "recovery 無法改變充電速度。快充由核心與充電器協商決定，這裡只顯示協商的結果。",
+            "The recovery cannot change how fast the phone charges: the kernel and the charger settle that between them, and this page only shows what they settled on.",
+        ])
+    };
     y = widgets::footnote(&mut c, t, f, y + t.m.dp(10.0), note);
 
     Frame::new(t, fit(c, t, y), out, l.pick(CHARGE), top)

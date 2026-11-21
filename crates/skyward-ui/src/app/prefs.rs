@@ -36,6 +36,11 @@ pub enum Switch {
     WlanKeep,
     /// Show the password typed rather than a dot for each character.
     ShowPassword,
+    /// Tell the kernel the battery passed its check, so that the charge may
+    /// draw more than it allows an unchecked one. Offered only on a phone that
+    /// carries the nodes for it, and one way: turning it off would not take
+    /// the word back, so the page does not pretend that it would.
+    FastCharge,
 }
 
 /// How long the screen stays on with nothing touched, in milliseconds, in
