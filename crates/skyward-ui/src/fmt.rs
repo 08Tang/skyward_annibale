@@ -136,9 +136,13 @@ pub fn volts(uv: u64) -> String {
     format!("{:.2}V", uv as f64 / 1e6)
 }
 
-/// A current given in microamps, to the hundredth where it is not whole:
-/// `2A`, `0.31A`, `5.94A`.
+/// A current given in microamps, in the unit that reads best: whole amps
+/// where it is whole, hundredths of an amp down to a tenth, and milliamps
+/// below that, so a small draw never shows as a round zero.
 pub fn amps(ua: u64) -> String {
+    if ua < 1_000_000 {
+        return format!("{}mA", (ua as f64 / 1e3).round() as u64);
+    }
     match ua % 1_000_000 {
         0 => format!("{}A", ua / 1_000_000),
         _ => format!("{:.2}A", ua as f64 / 1e6),

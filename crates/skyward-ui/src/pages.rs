@@ -1212,16 +1212,14 @@ pub fn charge(cx: &Ctx) -> Frame {
         None => "\u{2014}".to_owned(),
     };
     let y = widgets::section_first(&mut c, t, f, top, l.pick(["现在", "現在", "Now"]));
-    let rows = [
-        Row::new(&now).icon(BLUE, Icon::Battery).trail(Trail::Value(&most)),
-    ];
+    let rows = [Row::new(&now).icon(BLUE, Icon::Battery).trail(Trail::Value(&most))];
     let list = widgets::list(&mut c, t, f, y, &rows);
     let mut y = list.bottom;
 
     // What the charger negotiated, and what it says it can give. These are
     // the kernel's own words, left as it writes them: a protocol name is a
     // name, and translating it would only make it harder to look up.
-    let mut charger = Vec::new();
+    let mut charger: Vec<(&str, String)> = Vec::new();
     if let Some(protocol) = &ch.protocol {
         charger.push((l.pick(["协议", "協定", "Protocol"]), protocol.clone()));
     }

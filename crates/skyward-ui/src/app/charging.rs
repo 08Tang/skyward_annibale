@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn the_most_the_charger_gave_is_kept_as_the_charge_rises_and_falls() {
-        let mut app = app();
+        let mut app = App::new(Screen::Home, W, H, PPD);
         app.set_charge_state(ChargeNow { now: Some(200), ..ChargeNow::default() });
         assert_eq!(app.state.charge.most, Some(200), "the first reading is the most so far");
         app.set_charge_state(ChargeNow { now: Some(500), ..ChargeNow::default() });
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn a_charger_that_says_nothing_leaves_the_most_where_it_was() {
-        let mut app = app();
+        let mut app = App::new(Screen::Home, W, H, PPD);
         app.set_charge_state(ChargeNow { now: Some(400), ..ChargeNow::default() });
         app.set_charge_state(ChargeNow { now: None, ..ChargeNow::default() });
         assert_eq!(app.state.charge.most, Some(400), "no reading is not a reading of nothing");
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn the_charger_going_forgets_what_it_gave() {
-        let mut app = app();
+        let mut app = App::new(Screen::Home, W, H, PPD);
         app.set_charge_state(ChargeNow { now: Some(400), ..ChargeNow::default() });
         app.set_charge_state(ChargeNow::default());
         assert_eq!(app.state.charge, ChargeNow::default(), "nothing plugged in: nothing to say");
