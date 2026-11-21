@@ -67,14 +67,14 @@ impl ChargeMode {
 /// What the charge page holds, and what the runtime has read back from the
 /// phone about it.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Charging {
+pub struct ChargeSetting {
     pub mode: ChargeMode,
     /// The ceiling custom charging keeps under, in watts.
     pub watts: f32,
     /// Whether the guard watches the battery's warmth.
     pub guarded: bool,
     /// The warmth, in tenths of a degree, above which the guard drops to
-    /// [`Charging::slow_watts`].
+    /// [`ChargeSetting::slow_watts`].
     pub slow_at: i32,
     /// The warmth, in tenths of a degree, above which the guard stops
     /// charging altogether.
@@ -113,7 +113,7 @@ pub enum Guard {
     Stopped,
 }
 
-impl Default for Charging {
+impl Default for ChargeSetting {
     fn default() -> Self {
         // A hundred watts, which is what the phone is rated for, and a guard
         // that leaves a margin below the temperatures a battery is hurt at.
@@ -121,7 +121,7 @@ impl Default for Charging {
     }
 }
 
-impl Charging {
+impl ChargeSetting {
     /// The ceiling this setting keeps under, in watts, or None where the
     /// charger is left to do as it will.
     pub fn ceiling(&self, tenths: Option<i32>) -> Option<f32> {
@@ -172,7 +172,7 @@ impl App {
 
     /// Set how the phone should charge, and ask the runtime to put it in
     /// place.
-    pub fn set_charge(&mut self, charge: Charging) {
+    pub fn set_charge(&mut self, charge: ChargeSetting) {
         if self.state.charge != charge {
             self.state.charge = charge;
             self.refresh();
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn the_default_leaves_the_charger_alone() {
-        let charge = Charging::default();
+        let charge = ChargeSetting::default();
         assert_eq!(charge.ceiling(Some(500)), None, "no ceiling");
         assert_eq!(charge.wanted(Some(500)), None, "and nothing asked for");
         assert_eq!(charge.guard_at(Some(600)), Guard::Clear, "and nothing held back, however warm");
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn smart_falls_as_the_battery_warms() {
-        let charge = Charging { mode: ChargeMode::Smart, ..Charging::default() };
+        let charge = ChargeSetting { mode: ChargeMode::Smart, ..ChargeSetting::default() };
         assert_eq!(charge.ceiling(Some(300)), Some(100.0), "cool: the whole of it");
         assert_eq!(charge.ceiling(Some(360)), Some(50.0), "warming: half");
         assert_eq!(charge.ceiling(Some(390)), Some(30.0), "warmer: less");
@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn custom_asks_for_what_it_is_set_to_until_the_guard_speaks() {
-        let charge = Charging { mode: ChargeMode::Custom, watts: 60.0, slow_at: 400, stop_at: 450, ..Charging::default() };
+        let charge = ChargeSetting { mode: ChargeMode::Custom, watts: 60.0, slow_at: 400, stop_at: 450, ..ChargeSetting::default() };
         assert_eq!(charge.wanted(Some(300)), Some(60.0), "cool: what it asked for");
         assert_eq!(charge.guard_at(Some(399)), Guard::Clear);
         assert_eq!(charge.wanted(Some(400)), Some(5.0), "over the slow line: a trickle");
@@ -212,14 +212,14 @@ mod tests {
 
     #[test]
     fn a_guard_turned_off_holds_nothing_back() {
-        let charge = Charging { mode: ChargeMode::Custom, watts: 60.0, guarded: false, slow_at: 300, stop_at: 310, ..Charging::default() };
+        let charge = ChargeSetting { mode: ChargeMode::Custom, watts: 60.0, guarded: false, slow_at: 300, stop_at: 310, ..ChargeSetting::default() };
         assert_eq!(charge.guard_at(Some(900)), Guard::Clear, "however warm it gets");
         assert_eq!(charge.wanted(Some(900)), Some(60.0));
     }
 
     #[test]
     fn a_phone_that_cannot_say_how_warm_it_is_is_charged_as_asked() {
-        let charge = Charging { mode: ChargeMode::Custom, watts: 60.0, ..Charging::default() };
+        let charge = ChargeSetting { mode: ChargeMode::Custom, watts: 60.0, ..ChargeSetting::default() };
         assert_eq!(charge.guard_at(None), Guard::Clear, "no warmth read: nothing held back");
         assert_eq!(charge.wanted(None), Some(60.0));
     }

@@ -1,5 +1,5 @@
 use crate::app::{
-    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, CHARGE_GAP_TENTHS, CHARGE_SLOW_LEAST, CHARGE_STOP_MOST, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST, ChargeMode, Charging, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock, Guard,
+    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, CHARGE_GAP_TENTHS, CHARGE_SLOW_LEAST, CHARGE_STOP_MOST, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST, ChargeMode, ChargeSetting, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock, Guard,
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
@@ -1308,7 +1308,7 @@ pub fn charge(cx: &Ctx) -> Frame {
 }
 
 /// Where a charge slider stands on the page, as the slider is drawn.
-fn self_level(ch: &Charging, which: Slider) -> f32 {
+fn self_level(ch: &ChargeSetting, which: Slider) -> f32 {
     let (value, least, most) = match which {
         Slider::ChargeWatts => (ch.watts, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST),
         Slider::ChargeSlow => (ch.slow_at as f32, CHARGE_SLOW_LEAST as f32, (ch.stop_at - CHARGE_GAP_TENTHS) as f32),
