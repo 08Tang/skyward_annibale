@@ -425,7 +425,8 @@ fn each_charge_step_starts_the_programs_it_names_and_no_others() {
     assert_eq!(c.len(), b.len() + 1, "the fastest step adds the secret keeper alone: {c:?}");
     assert!(b.iter().any(|p| p.contains("micharge")) && !a.iter().any(|p| p.contains("micharge")), "the charging service is the fast step's");
     assert!(c.iter().any(|p| p.ends_with("/batterysecret")) && !b.iter().any(|p| p.ends_with("/batterysecret")), "the secret keeper is the fastest step's");
-    assert_eq!(a[..], b[..a.len() - 1], "the plain step is the fast one without its last program");
+    assert_eq!(a[..], b[..a.len()], "the plain step is the fast one without the charging service, which is started last");
+    assert_eq!(b[..], c[..b.len()], "the fast step is the fastest one without the secret keeper, which is started last");
 }
 
 /// No bootloader says which build of the hardware a phone's vendor
