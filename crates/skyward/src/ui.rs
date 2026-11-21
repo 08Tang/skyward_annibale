@@ -3786,10 +3786,10 @@ impl Pages<'_> {
         // when the default is chosen, and when the way of charging changes.
         // What the last way wrote is not the charger's own value, and keeping
         // it would hand on this page's arithmetic as if it were.
-        if charge.mode == ChargeMode::Default || charge.mode != self.charge_mode {
-            if let Some(undo) = self.charge_undo.take() {
-                charge::restore(&undo);
-            }
+        if (charge.mode == ChargeMode::Default || charge.mode != self.charge_mode)
+            && let Some(undo) = self.charge_undo.take()
+        {
+            charge::restore(&undo);
         }
         if charge.mode == ChargeMode::Default {
             self.app.set_charge_state(ChargeNow::default());
