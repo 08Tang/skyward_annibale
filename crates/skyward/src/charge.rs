@@ -132,11 +132,22 @@ pub fn set(charge: &ChargeSetting, tenths: Option<i32>) -> Result<(Undo, ChargeN
         // thing to look for when the phone charges no faster: it says what
         // was asked for, what the charger was delivering, and whether the
         // node took the value at all.
-        let _ = skyward_sys::kmsg(&format!(
+        let said = format!(
             "charging: asked {watts} W at {uv} uV, so iin_limit {ua} uA; the charger was giving {:?}; iin_limit took it: {}",
             reading.watts,
             undo.iin.is_some()
-        ));
+        );
+        let _ = skyward_sys::kmsg(&said);
+        // Where the write was refused, the reason is worth as much as the
+        // fact: a node that is there and will not take a value is a different
+        // phone from one that has no node at all.
+        if undo.iin.is_none() {
+            let why = match write_node(INTERFACE, "iin_limit", &ua.to_string()) {
+                Ok(_) => "the second write went through".to_owned(),
+                Err(e) => format!("{e:#}"),
+            };
+            let _ = skyward_sys::kmsg(&format!("charging: iin_limit would not take it: {why}"));
+        }
     }
     state.guard = charge.guard_at(tenths);
     Ok((undo, state))
