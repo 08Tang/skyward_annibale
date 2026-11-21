@@ -323,14 +323,18 @@ fn main() -> Result<()> {
             let services: Vec<Started> = DeviceConfig::load(&config)?.services.into_iter().filter(|s| s.runs_on(&props)).map(Started::from).collect();
             let libraries = secure::libraries()?;
             services::start(&services, libraries.as_deref())?;
-            keys::start(&keys::found(slot, libraries.as_deref(), charging_mode())?.steps?)?;
+            // The step kept in the settings is what this start settles on, and
+            // there is no page here to choose another: the say over the
+            // programs is dropped with them, and they run until this process
+            // ends.
+            keys::start(&keys::found(slot, libraries.as_deref())?.steps?)?;
             loop {
                 std::thread::park();
             }
         }
         #[cfg(target_os = "android")]
         Cmd::Keys => {
-            for line in keys::describe(&keys::found(booted_slot()?, secure::libraries()?.as_deref(), charging_mode())?.steps?) {
+            for line in keys::describe(&keys::found(booted_slot()?, secure::libraries()?.as_deref())?.steps?) {
                 println!("{line}");
             }
             Ok(())
@@ -474,7 +478,7 @@ fn main() -> Result<()> {
             // keys are read from the partitions again, as it read them;
             // where they do not show, it started none.
             let mut programs = cfg.services.clone();
-            match booted_slot().and_then(|slot| keys::found(slot, secure::libraries()?.as_deref(), charging_mode())?.steps) {
+            match booted_slot().and_then(|slot| keys::found(slot, secure::libraries()?.as_deref())?.steps) {
                 Ok(steps) => programs.extend(keys::programs(&steps)),
                 Err(e) => eprintln!("the programs of the phone's keys are not known: {e:#}"),
             }
@@ -598,6 +602,19 @@ fn gate() -> &'static Gate {
 /// joins while the decrypt page is still being answered, as it did before the
 /// screen was brought up beside the phone's parts (2026-11-15).
 static WLAN: std::sync::OnceLock<std::sync::Mutex<Option<crate::wlan::Worker>>> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "android")]
+/// The say over the programs that settle how fast a charge may run, kept
+/// from the bringing-up for the charge page: it ends the ones a chosen step
+/// does not name, and a step may be chosen long after those programs start.
+static CHARGING: std::sync::OnceLock<std::sync::Mutex<Vec<crate::services::Running>>> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "android")]
+/// Take the say over the charging programs the bringing-up kept, if any.
+pub(crate) fn take_charging() -> Vec<crate::services::Running> {
+    let kept = CHARGING.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+    std::mem::take(&mut *kept.lock().unwrap_or_else(|e| e.into_inner()))
+}
 
 #[cfg(target_os = "android")]
 /// The DNS servers the joined network gave, for looking names up: the WLAN
@@ -793,7 +810,25 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
     for line in keys::describe(&steps) {
         skyward_sys::kmsg(&format!("for the phone's keys: {}", line.replace("\n  ", ", ")))?;
     }
-    keys::start(&steps)?;
+    let kept = keys::start(&steps)?;
+    // The charge page takes the say over these once its pages are up: a step
+    // chosen there ends the ones it does not name, or starts one it does. Both
+    // programs are started here whatever step is kept, since a step chosen
+    // later has to be able to reach the phone without a start of the recovery;
+    // the ones the kept step does not name are ended at once, before the page
+    // is drawn, so the phone comes up charging as the step says.
+    let mode = charging_mode();
+    for (i, running) in kept.iter().enumerate() {
+        let wanted = match i {
+            0 => mode.charging_service(),
+            _ => mode.secret_keeper(),
+        };
+        if !wanted {
+            running.stop();
+        }
+    }
+    skyward_sys::kmsg(&format!("the charge step kept is {}: {} of the programs that settle it are kept", mode.name(), kept.iter().filter(|r| r.kept()).count()))?;
+    *CHARGING.get_or_init(|| std::sync::Mutex::new(Vec::new())).lock().unwrap_or_else(|e| e.into_inner()) = kept;
     agree_on_the_notes_key(&registering)
 }
 
@@ -1064,8 +1099,7 @@ fn prepare(cfg: &DeviceConfig, slot: skyward_vab::Slot) -> Result<Vec<skyward_co
                 None
             });
             let reading = std::time::Instant::now();
-            let mode = charging_mode();
-            let found = keys::found(slot, libraries.as_deref(), mode);
+            let found = keys::found(slot, libraries.as_deref());
             skyward_sys::kmsg(&format!("the partitions were read for the keys in {:.2} s", reading.elapsed().as_secs_f64()))?;
             let mut programs: Vec<skyward_config::Service> = cfg.services.clone();
             match found.as_ref().map(|f| &f.steps) {

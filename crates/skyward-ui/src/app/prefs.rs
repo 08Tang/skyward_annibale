@@ -36,15 +36,10 @@ pub enum Switch {
     WlanKeep,
     /// Show the password typed rather than a dot for each character.
     ShowPassword,
-    /// Tell the kernel the battery passed its check, so that the charge may
-    /// draw more than it allows an unchecked one. Offered only on a phone that
-    /// carries the nodes for it, and one way: turning it off would not take
-    /// the word back, so the page does not pretend that it would.
-    FastCharge,
     /// How fast the phone is let to charge, as one of the three steps the
-    /// charge page offers. The programs that settle it are started as the
-    /// recovery starts, so the step chosen reaches the phone at the next
-    /// start rather than at once.
+    /// charge page offers. The programs that settle it are started and ended
+    /// as the step is chosen, and the kernel keeps what they told it until
+    /// the cable comes out, so the step reaches the phone at the next plug.
     ChargeStep(ChargeMode),
 }
 

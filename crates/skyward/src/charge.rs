@@ -22,11 +22,12 @@
 //! then posts event 40, which is the `batt_auth pass` the log shows on a stock
 //! boot. Nothing else is forged: the driver does the posting.
 //!
-//! It is a risk taken on, and the page says so. The recovery's own thermal
-//! chain is broken — `mca_thermal: init wire voter failed`, so
-//! `mca_charger_thermal_handle_limit` answers `charger is not online` and never
-//! backs the charge off — which is why the page watches the battery's own
-//! temperature and drops the charge back itself when it gets too hot.
+//! This is what the charge page's fastest step used to reach through, and it
+//! is still reachable from the command line. The page's steps now start and
+//! end Xiaomi's own programs instead, which is what tells the kernel the same
+//! thing without forging anything; the recovery's own heat guard, which used
+//! to drop the charge back here, is gone: the phone's own chain and the
+//! battery's cutoff table are what hold the charge now.
 
 use std::fs;
 use std::path::Path;
@@ -43,21 +44,6 @@ const COMMON: &str = "/sys/class/xm_power/charger/charger_common";
 /// The fuel gauge's own side: whether the battery passed its check, and the
 /// temperature the page watches while it is told that it did.
 const GAUGE: &str = "/sys/class/xm_power/fuelgauge/strategy_fg";
-
-/// The temperature the charge is dropped back at, in tenths of a degree: 45 °C.
-///
-/// The stock system backs a wired charge off well before this — its own
-/// thermal chain steps the current down through `wired_ctrl_limit` — but that
-/// chain does not work here, so this is the only backstop there is. It is set
-/// where a phone is warm in the hand but not hot, since the point is to stay
-/// clear of the temperatures that age a battery rather than to see how close
-/// the limit can be walked.
-pub const TOO_HOT: i32 = 450;
-
-/// The temperature the charge is allowed to start again at, in tenths of a
-/// degree: 40 °C. Below `TOO_HOT` by enough that a battery sitting at the
-/// threshold cannot switch the charge on and off every second.
-pub const COOL_ENOUGH: i32 = 400;
 
 /// The least voltage a reading is believed at, in microvolts. The nodes are
 /// read while the charger is settling, and a reading of a few millivolts is
@@ -161,13 +147,6 @@ fn read_u64(dir: &str, name: &str) -> Option<u64> {
     read_node(dir, name)?.parse().ok()
 }
 
-/// Whether the phone carries the nodes that can tell the kernel the battery
-/// passed its check. A phone without them is not offered the switch, since
-/// there would be nothing for it to do.
-pub fn offered() -> bool {
-    Path::new(GAUGE).join("authentic").exists() && Path::new(GAUGE).join("slave_authentic").exists()
-}
-
 /// Whether the battery is being told it passed its check.
 pub fn fast() -> bool {
     read_u64(GAUGE, "authentic").is_some_and(|v| v != 0)
@@ -178,55 +157,6 @@ pub fn temperature() -> Option<i32> {
     read_i64(BATTERY, "temp")
         .or_else(|| read_i64(GAUGE, "temp"))
         .map(|t| t as i32)
-}
-
-/// Tell the kernel the battery passed its check, so that the charge may draw
-/// more than 2 A.
-///
-/// `authentic` is written first and `slave_authentic` second, and the order
-/// matters: the fuel-gauge driver does its checking in the store function for
-/// `slave_authentic`, and it will not post the event unless `authentic` is
-/// already set. Writing them the other way round does nothing at all.
-pub fn allow_fast() -> Result<(), String> {
-    write_node(GAUGE, "authentic", "1")?;
-    write_node(GAUGE, "slave_authentic", "1")?;
-    let _ = skyward_sys::kmsg(&format!(
-        "charging: told the gauge the battery passed, and it now reads authentic {}, slave {}",
-        read_node(GAUGE, "authentic").unwrap_or_else(|| "?".into()),
-        read_node(GAUGE, "slave_authentic").unwrap_or_else(|| "?".into()),
-    ));
-    Ok(())
-}
-
-/// Take the word back, so that the charge is held at what the kernel allows a
-/// battery it has not checked.
-///
-/// The switch on the page cannot be turned off once it is on, and this is not
-/// reachable from the page at all: it is here for the temperature watch, which
-/// is the one thing that should be able to drop the charge back.
-pub fn stop_fast() -> Result<(), String> {
-    write_node(GAUGE, "slave_authentic", "0")?;
-    write_node(GAUGE, "authentic", "0")?;
-    Ok(())
-}
-
-fn write_node(dir: &str, name: &str, value: &str) -> Result<(), String> {
-    let path = Path::new(dir).join(name);
-    fs::write(&path, value).map_err(|e| format!("{}: {e}", path.display()))
-}
-
-/// Whether a battery at this temperature is hot enough that the charge should
-/// be dropped back. A battery that says nothing is not called hot: the reading
-/// is missing rather than the battery being cold, and dropping a charge on a
-/// missing reading would make the switch turn itself off for no reason.
-pub fn too_hot(temp: Option<i32>) -> bool {
-    temp.is_some_and(|t| t >= TOO_HOT)
-}
-
-/// Whether a battery that was dropped back for heat is cool enough to be
-/// allowed to charge quickly again.
-pub fn cool_enough(temp: Option<i32>) -> bool {
-    temp.is_some_and(|t| t <= COOL_ENOUGH)
 }
 
 #[cfg(test)]
@@ -268,20 +198,5 @@ mod tests {
     #[test]
     fn a_phone_with_nothing_attached_reads_as_no_charger() {
         assert!(!present(None, None), "no voltage and no protocol: nothing is there");
-    }
-
-    #[test]
-    fn a_battery_at_the_limit_is_too_hot_but_one_just_under_it_is_not() {
-        assert!(too_hot(Some(TOO_HOT)), "at the limit is hot");
-        assert!(too_hot(Some(TOO_HOT + 1)), "over the limit is hot");
-        assert!(!too_hot(Some(TOO_HOT - 1)), "under the limit is not");
-        assert!(!too_hot(None), "a battery that says nothing is not called hot");
-    }
-
-    #[test]
-    fn a_charge_that_was_dropped_stays_dropped_until_the_battery_is_well_under_the_limit() {
-        assert!(cool_enough(Some(COOL_ENOUGH)), "at the lower mark it may start again");
-        assert!(!cool_enough(Some(COOL_ENOUGH + 1)), "one step over the lower mark is still too warm");
-        assert!(cool_enough(Some(TOO_HOT - 1)), "between the marks the charge stays off");
     }
 }

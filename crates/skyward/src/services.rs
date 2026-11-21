@@ -14,6 +14,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -45,6 +47,55 @@ const WAITING_CALLERS: libc::c_int = 1 << 30;
 /// from.
 const LIBRARY_PATH: &str = "LD_LIBRARY_PATH";
 
+/// A program the recovery keeps running, and the say over whether it stays
+/// running: the recovery starts the programs that settle how fast a charge
+/// may run, and takes that back when a step that does not name them is
+/// chosen, giving it again when a step that does.
+///
+/// Ending the program alone would not do, since the thread that supervises
+/// it starts it again a second later; so the say is a flag the thread reads
+/// before each start, and the thread waits on it rather than on nothing
+/// while the program is not to run.
+///
+/// The kernel keeps what a program told it of a charge until the cable is
+/// taken out, so a step taken back or given again here reaches the phone at
+/// the next plug, not at once. The page says so.
+#[derive(Clone)]
+pub struct Running {
+    /// Whether the supervising thread is to keep the program running.
+    keeping: Arc<AtomicBool>,
+    /// The process the program is in, so it can be ended once the thread is
+    /// told not to start it again; zero while it is not running.
+    pid: Arc<AtomicU32>,
+    /// Wakes the supervising thread when the say changes, since a thread
+    /// waiting for a program it is not to run has nothing else to wake it.
+    wake: Arc<thread::Thread>,
+}
+
+impl Running {
+    /// Have the program ended, and kept from starting again.
+    pub fn stop(&self) {
+        self.keeping.store(false, Ordering::SeqCst);
+        let pid = self.pid.load(Ordering::SeqCst);
+        if pid != 0 {
+            // The thread waits on the process itself, so it wakes as it ends.
+            unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+        }
+        self.wake.unpark();
+    }
+
+    /// Have the program kept running again, starting it now if it is not.
+    pub fn resume(&self) {
+        self.keeping.store(true, Ordering::SeqCst);
+        self.wake.unpark();
+    }
+
+    /// Whether the program is to be kept running.
+    pub fn kept(&self) -> bool {
+        self.keeping.load(Ordering::SeqCst)
+    }
+}
+
 /// Keep each program running, one thread per program: start it, and start
 /// it again whenever it exits. They are started in the order they are
 /// given, and one that says what it will be ready with holds up those
@@ -58,7 +109,15 @@ const LIBRARY_PATH: &str = "LD_LIBRARY_PATH";
 /// `libraries` is a directory of shared libraries every one of them may
 /// need, searched after whatever it names itself.
 pub fn start(programs: &[Started], libraries: Option<&Path>) -> Result<()> {
+    start_each(programs, libraries).map(|_| ())
+}
+
+/// [`start`], giving the say over each program it keeps running, in the
+/// order they were given. A program that runs once has no say: it is run to
+/// its end before this returns.
+pub fn start_each(programs: &[Started], libraries: Option<&Path>) -> Result<Vec<Running>> {
     let known = accounts();
+    let mut kept = Vec::new();
     for program in programs {
         let (s, who, given) = readied(program, libraries, &known)?;
         if s.oneshot {
@@ -82,14 +141,21 @@ pub fn start(programs: &[Started], libraries: Option<&Path>) -> Result<()> {
         }
         let waiting = s.clone();
         let name = Path::new(&s.path).file_name().map_or_else(|| s.path.clone(), |n| n.to_string_lossy().into_owned());
-        thread::Builder::new().name(name).spawn(move || supervise(&s, &who, &given)).context("start a supervising thread")?;
+        let keep = Arc::new(AtomicBool::new(true));
+        let pid = Arc::new(AtomicU32::new(0));
+        let (thread_keep, thread_pid) = (Arc::clone(&keep), Arc::clone(&pid));
+        let handle = thread::Builder::new()
+            .name(name)
+            .spawn(move || supervise(&s, &who, &given, &thread_keep, &thread_pid))
+            .context("start a supervising thread")?;
+        kept.push(Running { keeping: keep, pid, wake: Arc::new(handle.thread().clone()) });
         let waited = Instant::now();
         ready(&waiting)?;
         // How long this program took to say it was up, which is what the
         // bring-up waits on, one program after another.
         skyward_sys::kmsg(&format!("{} was ready in {:.2} s", waiting.path, waited.elapsed().as_secs_f64()))?;
     }
-    Ok(())
+    Ok(kept)
 }
 
 /// Run `program` once to its end and give how it ended, as init runs a
@@ -356,13 +422,29 @@ fn ready(s: &Service) -> Result<()> {
     }
 }
 
-fn supervise(s: &Service, who: &Credentials, given: &Given) -> ! {
+/// Keep `s` running while `keep` says to, and let it stay ended once it
+/// does not. The process it is in is written to `pid` while it runs, so
+/// [`Running::stop`] can end it; zero says none is running.
+///
+/// A program that is not to run has its thread parked rather than spinning:
+/// it is woken by [`Running::resume`], which is the only thing that can tell
+/// it to start again.
+fn supervise(s: &Service, who: &Credentials, given: &Given, keep: &AtomicBool, pid: &AtomicU32) -> ! {
     loop {
+        if !keep.load(Ordering::SeqCst) {
+            pid.store(0, Ordering::SeqCst);
+            thread::park();
+            continue;
+        }
         let started = Instant::now();
         let ended = match running(&s.path) {
-            Some(pid) => wait_for(pid).map(|()| format!("pid {pid}, left by an earlier recovery service, exited")),
-            None => run(s, who, given),
+            Some(other) => {
+                pid.store(other, Ordering::SeqCst);
+                wait_for(other).map(|()| format!("pid {other}, left by an earlier recovery service, exited"))
+            }
+            None => run(s, who, given, pid),
         };
+        pid.store(0, Ordering::SeqCst);
         let line = match ended {
             Ok(how) => format!("{}: {how}", s.path),
             Err(e) => format!("{}: {e:#}", s.path),
@@ -374,13 +456,15 @@ fn supervise(s: &Service, who: &Credentials, given: &Given) -> ! {
     }
 }
 
-/// Start the program and wait for it to end.
-fn run(s: &Service, who: &Credentials, given: &Given) -> Result<String> {
+/// Start the program and wait for it to end, writing the process it is in
+/// to `pid` while it runs.
+fn run(s: &Service, who: &Credentials, given: &Given, pid: &AtomicU32) -> Result<String> {
     let handed = given.make()?;
     let mut child = command(s, who, given, &handed).spawn().with_context(|| format!("start {}", s.path))?;
     // The program has its sockets now, and as init does, the recovery
     // keeps none of them open itself.
     drop(handed);
+    pid.store(child.id(), Ordering::SeqCst);
     let status = child.wait().context("wait for it")?;
     Ok(format!("pid {} ended: {status}", child.id()))
 }

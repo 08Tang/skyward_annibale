@@ -9,7 +9,6 @@ use skyward_config::Service;
 use skyward_programs::naming::{self, Does};
 use skyward_programs::phone::{self, Partition, Phone, PARTITIONS};
 use skyward_programs::secure::{self, Step};
-use skyward_ui::app::ChargeMode;
 use std::path::Path;
 
 /// What the partitions of an installed system say that the recovery acts
@@ -34,14 +33,20 @@ pub struct Found {
 /// `libraries` is where the libraries the phone's partitions were built
 /// against are opened, on a phone that carries them as a bundle of their
 /// own: each of its programs is given the folder among its own.
-pub fn found(slot: skyward_vab::Slot, libraries: Option<&Path>, mode: ChargeMode) -> Result<Found> {
+///
+/// The two programs that settle how fast a charge may run are always among
+/// the steps, whatever step is kept: the charge page starts and ends them as
+/// a step is chosen, and a step chosen there has to be able to reach the
+/// phone without a start of the recovery. Which of them is to run is settled
+/// by [`settles_the_charge`] and the say [`start`] gives back.
+pub fn found(slot: skyward_vab::Slot, libraries: Option<&Path>) -> Result<Found> {
     let mut phone = read(slot, libraries)?;
     let unnamed = naming::steps(&phone)?;
     if !unnamed.is_empty() {
         name(&unnamed)?;
         phone = read(slot, libraries)?;
     }
-    Ok(Found { described: phone.told_of(), steps: secure::steps(&phone, mode.charging_service(), mode.secret_keeper()) })
+    Ok(Found { described: phone.told_of(), steps: secure::steps(&phone, true, true) })
 }
 
 /// The phone as the partitions of the slot's installed system describe it,
@@ -100,17 +105,37 @@ pub fn serves_elements(steps: &[Step]) -> bool {
 /// is after the secure elements' own services have registered and before
 /// the weaver that reaches its secure element through it starts. Each
 /// program names every folder its libraries are looked for in.
-pub fn start(steps: &[Step]) -> Result<()> {
+///
+/// The programs that settle how fast a charge may run are among the last,
+/// and the say over each is given back, in the order they were started, so
+/// that a step chosen on the charge page can end them without a start of
+/// the recovery.
+pub fn start(steps: &[Step]) -> Result<Vec<services::Running>> {
+    let mut kept = Vec::new();
     for step in steps {
         match step {
-            Step::Start(program) => crate::services::start(std::slice::from_ref(program.as_ref()), None)?,
+            Step::Start(program) => {
+                let mut started = services::start_each(std::slice::from_ref(program.as_ref()), None)?;
+                if settles_the_charge(&program.service.path) {
+                    kept.append(&mut started);
+                }
+            }
             Step::ServeElements => {
                 let readers = skyward_omapi::start()?;
                 skyward_sys::kmsg(&format!("{} is served, with a reader for each of {} secure elements: {}", skyward_omapi::SERVICE, readers.len(), readers.join(", ")))?;
             }
         }
     }
-    Ok(())
+    Ok(kept)
+}
+
+/// Whether the program at `path` is one of the two that settle how fast a
+/// charge may run: Xiaomi's charging service, which passes on the battery's
+/// own check, and its secret keeper, which has the charger verified. They
+/// are the only two the charge page's steps name, so they are the only two
+/// whose say the page needs.
+pub fn settles_the_charge(path: &str) -> bool {
+    path.contains("micharge") || path.ends_with("/batterysecret")
 }
 
 /// What `steps` are, a line each, as the `keys` command prints them.

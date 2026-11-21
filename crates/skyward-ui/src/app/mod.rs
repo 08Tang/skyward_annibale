@@ -757,12 +757,7 @@ pub enum Effect {
     StopImage,
     /// Read the charger again, so the page shows what it is delivering now.
     ChargeWatch,
-    /// Tell the kernel the battery passed its check, so that the charge may
-    /// draw more than it allows an unchecked one. There is no effect for
-    /// taking the word back: the switch stays on once it is on, and the only
-    /// thing that drops the charge is the temperature watch doing it for
-    /// itself.
-    FastCharge,
+    ChargeStep(ChargeMode),
     /// Do `action` to the filesystem page's partition by its name, telling
     /// how it goes with [`App::part_work_started`], [`App::part_listed`],
     /// [`App::part_at`], [`App::part_ended`] and [`App::part_work_ended`];

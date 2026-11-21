@@ -50,10 +50,11 @@ pub enum SearchScope {
 /// phone's own programs that tell the kernel what a charge may draw and
 /// whether the charger may be verified.
 ///
-/// The steps are taken before those programs start, so a change made here
-/// reaches the phone only once the recovery starts again — which the page
-/// says, since a step that looked as if it had taken would have the page
-/// saying one thing and the phone doing another.
+/// The programs that settle it are started and ended as the step is chosen,
+/// but the kernel keeps what they told it of a charge until the cable comes
+/// out, so a change made here reaches the phone at the next plug — which the
+/// page says, since a step that looked as if it had taken at once would have
+/// the page saying one thing and the phone doing another.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ChargeMode {
     /// Neither program: the kernel holds the charge at the ceiling it sets
@@ -349,28 +350,16 @@ pub struct State {
     /// What the runtime last read from the charger: the power it delivers,
     /// the protocol it negotiated, and the most it has given this charge.
     pub charge: ChargeNow,
-    /// Whether the battery has been told it passed its check, so that the
-    /// charge may draw more than the kernel allows an unchecked one. Once it
-    /// is on it stays on: the kernel takes the word and does not give it back
-    /// in a way the page could undo, and a switch that turned itself off would
-    /// leave the page saying one thing and the phone doing another.
-    pub fast_charge: bool,
-    /// Whether this phone carries the nodes that can tell the kernel the
-    /// battery passed, and so whether the page offers the switch at all.
-    pub fast_charge_offered: bool,
-    /// Whether the temperature watch has dropped the charge back, which it
-    /// does on its own when the battery gets too hot.
-    pub fast_charge_dropped: bool,
-    /// The battery's temperature in tenths of a degree, as the watch last read
-    /// it, so the page can say what it is watching.
+    /// The battery's temperature in tenths of a degree, as the charge page
+    /// last read it, which the battery card shows.
     pub battery_temp: Option<i32>,
     /// Whether the kernel's own node says the battery passed its check, which
-    /// is what the page shows beside the switch rather than assuming the write
-    /// took.
+    /// is what decides the current the charge may draw.
     pub fast_charge_kernel: bool,
-    /// How fast the phone is let to charge, as the page offers it. The step
-    /// is taken when the recovery starts, so changing it here reaches the
-    /// phone only at the next start.
+    /// How fast the phone is let to charge, as the page offers it. The
+    /// programs that settle it are started and ended as the step is chosen,
+    /// and the kernel keeps what they told it until the cable comes out, so
+    /// the step reaches the phone at the next plug.
     pub charge_mode: ChargeMode,
     /// Where an update the system installed stands, as the runtime last
     /// read it.
@@ -525,9 +514,6 @@ impl Default for State {
             image_to_drive: false,
             image_job: None,
             charge: ChargeNow::default(),
-            fast_charge: false,
-            fast_charge_offered: false,
-            fast_charge_dropped: false,
             battery_temp: None,
             fast_charge_kernel: false,
             charge_mode: ChargeMode::default(),

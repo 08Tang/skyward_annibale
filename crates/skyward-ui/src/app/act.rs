@@ -173,30 +173,17 @@ impl App {
                     return vec![Effect::Remember(false)];
                 }
                 // A charge step is chosen, not switched: tapping the one that
-                // is already chosen does nothing, and the programs it names are
-                // started as the recovery starts, so the step reaches the phone
-                // at the next start. The page says so beside the steps.
+                // is already chosen does nothing. The programs that settle how
+                // fast a charge may run are started or ended here and now, but
+                // the kernel keeps what they told it until the cable comes out,
+                // so the page says the step reaches the phone at the next plug.
                 if let Switch::ChargeStep(mode) = switch {
                     if self.state.charge_mode == mode {
                         return Vec::new();
                     }
                     self.state.charge_mode = mode;
                     self.refresh();
-                    return Vec::new();
-                }
-                // The fast-charge switch is one way on purpose. Once the kernel
-                // has been told the battery passed, turning the switch off
-                // would not take the word back, so the page would be saying one
-                // thing while the phone did another. Tapping it while it is on
-                // does nothing at all, and the page says why.
-                if switch == Switch::FastCharge {
-                    if self.state.fast_charge {
-                        return Vec::new();
-                    }
-                    self.state.fast_charge = true;
-                    self.state.fast_charge_dropped = false;
-                    self.refresh();
-                    return vec![Effect::FastCharge];
+                    return vec![Effect::ChargeStep(mode)];
                 }
                 let on = match switch {
                     Switch::Vibrate => &mut self.state.vibrate,
@@ -210,7 +197,6 @@ impl App {
                     Switch::WlanAuto => &mut self.state.wlan_auto,
                     Switch::WlanKeep => &mut self.state.wlan_keep,
                     Switch::Wlan => unreachable!("the WLAN switch is turned above"),
-                    Switch::FastCharge => unreachable!("the fast-charge switch is turned above"),
                     Switch::ChargeStep(_) => unreachable!("a charge step is chosen above"),
                 };
                 *on = !*on;

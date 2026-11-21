@@ -39,7 +39,7 @@ use skyward_sys::sleep::{Sleeper, Slept};
 use skyward_sys::uevent;
 use skyward_systems::Who;
 use skyward_ui::app::{
-    App, Asked, AvbCheck, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ClashChoice, DATA_OPENING, DATA_PARTITION, DOWNLOADS, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp, FileRow,
+    App, Asked, AvbCheck, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ChargeMode, ClashChoice, DATA_OPENING, DATA_PARTITION, DOWNLOADS, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp, FileRow,
     FileTask, FsAction, FsRow, Have, Held, INSTALL_UNFINISHED, ImageEnd, ImageFlow, ImagePart, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place, RenameRefused, Screen, Shot, SkywardEnd, SkywardStage,
     Target, USB_DRIVE, UsbDrive, UsbLink, Wipe,
 };
@@ -1163,6 +1163,12 @@ struct Pages<'a> {
     haptics: Option<Haptics>,
     backlight: Backlight,
     keeper: Keeper,
+    /// The say over the programs that settle how fast a charge may run, in
+    /// the order they were started: the charging service first, then the
+    /// secret keeper, on a phone that carries them. A step chosen on the
+    /// charge page ends the ones it does not name and keeps the ones it
+    /// does.
+    charging: Vec<crate::services::Running>,
     shown_clock: String,
     /// The page shown first, until it has been told it shows.
     arriving: Option<Incoming>,
@@ -1476,6 +1482,7 @@ impl<'a> Pages<'a> {
             haptics,
             backlight,
             keeper,
+            charging: crate::take_charging(),
             shown_clock: String::new(),
             arriving: Some(Incoming::Arrived),
             readings,
@@ -3250,7 +3257,7 @@ impl Pages<'_> {
             Effect::DeleteImage(path) => self.delete_image(PathBuf::from(path), now)?,
             Effect::StopImage => self.imager.as_ref().context("there is no work on an image to stop")?.stop(),
             Effect::ChargeWatch => self.charge_watch(now)?,
-            Effect::FastCharge => self.fast_charge(now)?,
+            Effect::ChargeStep(mode) => self.charge_step(mode, now)?,
             Effect::Filesystem { name, action } => self.filesystem(&name, action, now)?,
             Effect::Backup { parts, place, compress, verify } => self.back_up(parts, place, compress, verify, now)?,
             Effect::Restore { place, name, parts } => self.restore(place, &name, parts, now)?,
@@ -3780,56 +3787,55 @@ impl Pages<'_> {
         if !self.charge_said {
             self.charge_said = true;
             charge::describe();
-            // A phone without the nodes for it is not offered the switch: there
-            // would be nothing for it to do, and a switch that cannot do what
-            // its page says is worse than none.
-            self.app.state.fast_charge_offered = charge::offered();
         }
         self.app.set_charge_state(charge::reading());
-        // The recovery's own thermal chain does not work on this phone, so the
-        // charge that the switch allows is watched here instead: a battery at
-        // the limit has the word taken back, and it is only given again once
-        // the battery is well under it. That is the one thing that can turn the
-        // switch's effect off, and it is why the switch has a limit at all.
-        let temp = charge::temperature();
-        self.app.state.battery_temp = temp;
-        // What the kernel says about the battery's check, which is the thing
-        // that decides the current. The page shows it beside the switch, so a
-        // phone whose gauge answered differently from what was written says so
-        // rather than leaving the switch to speak for it.
+        // The battery's own temperature is still read, since the battery card
+        // shows it: what the recovery no longer does is watch it and drop the
+        // charge back itself. The phone's own chain and the battery's cutoff
+        // table are what hold the charge now.
+        self.app.state.battery_temp = charge::temperature();
+        // What the kernel says about the battery's check, which is what
+        // decides the current the charge may draw.
         self.app.state.fast_charge_kernel = charge::fast();
-        if self.app.state.fast_charge {
-            if self.app.state.fast_charge_dropped {
-                if charge::cool_enough(temp) {
-                    if let Err(e) = charge::allow_fast() {
-                        self.app.report(&e, now);
-                    } else {
-                        self.app.state.fast_charge_dropped = false;
-                    }
-                }
-            } else if charge::too_hot(temp) {
-                if let Err(e) = charge::stop_fast() {
-                    self.app.report(&e, now);
-                } else {
-                    self.app.state.fast_charge_dropped = true;
-                    let _ = skyward_sys::kmsg(&format!(
-                        "charging: battery at {} is too hot, so the charge was dropped back",
-                        temp.map(|t| t.to_string()).unwrap_or_else(|| "?".into()),
-                    ));
-                }
-            }
-        }
         Ok(())
     }
-    /// Tell the kernel the battery passed its check, which is what lets the
-    /// charge draw more than it allows an unchecked one. A failure is said on
-    /// the page rather than kept to the log, and the switch goes back, since
-    /// the phone is not where the page would otherwise say it is.
-    fn fast_charge(&mut self, now: u64) -> Result<()> {
-        if let Err(e) = charge::allow_fast() {
-            self.app.state.fast_charge = false;
-            self.app.report(&e, now);
+    /// Make the programs that settle how fast a charge may run be the ones
+    /// `mode` names: the ones it leaves out are ended, and one it names that
+    /// was ended is started again.
+    ///
+    /// A program the recovery starts is supervised, so ending it alone would
+    /// only have it started again a second later; the say over it is kept
+    /// for this, and taken back here. The kernel keeps what a program told it
+    /// of a charge until the cable comes out, so what is done here reaches
+    /// the phone at the next plug, which the page says.
+    ///
+    /// A step that names a program this phone does not carry, or that the
+    /// recovery did not start, has nothing to start: the phone charges as
+    /// the programs it does carry let it.
+    fn charge_step(&mut self, mode: ChargeMode, now: u64) -> Result<()> {
+        // The say over each is kept in the order the programs were started,
+        // the charging service before the secret keeper, so the step decides
+        // each by the place it was started in. The say is not given up here:
+        // a step chosen later has to be able to start a program an earlier
+        // step ended, and the program is started again by the thread that
+        // supervises it.
+        for (i, running) in self.charging.iter().enumerate() {
+            let wanted = match i {
+                0 => mode.charging_service(),
+                _ => mode.secret_keeper(),
+            };
+            match wanted {
+                true if !running.kept() => running.resume(),
+                false if running.kept() => running.stop(),
+                _ => {}
+            }
         }
+        skyward_sys::kmsg(&format!(
+            "the charge step is {}: {} of the programs that settle it are kept, and the step takes effect at the next plug",
+            mode.name(),
+            self.charging.iter().filter(|r| r.kept()).count()
+        ))?;
+        let _ = now;
         Ok(())
     }
     /// Back the parts chosen up into `place`. An install still stopping may
