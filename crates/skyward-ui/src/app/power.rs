@@ -95,8 +95,13 @@ impl App {
     /// it held, and the page stops where it is.
     pub(super) fn sleep(&mut self, now: u64) {
         // The panel goes dark under a lock, as a phone's does: the page behind
-        // it is there once the knob is slid along.
-        self.lock = Some(Lock { drag: 0.0, held: false });
+        // it is there once the knob is slid along. The fastboot page takes no
+        // lock: it is worked with the keys, since the touchscreen runs from the
+        // partitions fastbootd leaves out, and a knob that no panel could slide
+        // would hold the page shut for good.
+        if self.screen() != Screen::Fastboot {
+            self.lock = Some(Lock { drag: 0.0, held: false });
+        }
         // A sheet half pulled is let go of: it does not wait over a dark panel
         // for a finger that is no longer there.
         self.shade = 0.0;
@@ -573,5 +578,34 @@ mod tests {
         app.install(Event::Finished(Outcome::Cancelled), 20);
         assert!(!app.display_on());
         assert_eq!(app.state.install, Install::Idle);
+    }
+
+    #[test]
+    fn the_fastboot_page_takes_no_lock_as_its_panel_goes_off() {
+        // The page is worked with the keys, so the power key works the lit
+        // choice rather than turning the panel off: it goes dark on its own
+        // when nothing is pressed for the screen-off time.
+        let mut app = App::new(Screen::Fastboot, W, H, PPD);
+        app.tick(0);
+        let after = SCREEN_OFF[app.state.screen_off].expect("a fastboot start goes dark on its own");
+        app.tick(after + 1);
+        assert!(!app.display_on(), "it went dark on its own");
+        assert!(!app.locked(), "a knob that no panel could slide would hold the page shut");
+        press(&mut app, Key::Power, after + 2);
+        assert!(app.display_on());
+        assert!(!app.locked(), "and it comes back to the page itself");
+        assert_eq!(app.screen(), Screen::Fastboot);
+    }
+
+    #[test]
+    fn every_other_page_keeps_the_lock_the_panel_goes_off_under() {
+        for screen in [Screen::Home, Screen::Settings, Screen::Reboot, Screen::Wipe] {
+            let mut app = App::new(screen, W, H, PPD);
+            app.tick(0);
+            let after = SCREEN_OFF[app.state.screen_off].expect("the page goes dark on its own");
+            app.tick(after + 1);
+            assert!(!app.display_on());
+            assert!(app.locked(), "{screen:?} keeps the lock a phone's panel has");
+        }
     }
 }
