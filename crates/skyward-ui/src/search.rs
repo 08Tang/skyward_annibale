@@ -80,6 +80,12 @@ pub const ENTRIES: &[Entry] = &[
         &["renwu", "rw", "task", "tasks", "jindu", "jd", "progress"],
     ),
     entry(
+        ["充电", "充電", "Charging"],
+        HOME,
+        Screen::Charge,
+        &["chongdian", "cd", "charge", "charging", "power", "watt", "gonglv", "gl"],
+    ),
+    entry(
         ["关机", "關機", "Power off"],
         ADVANCED,
         Screen::PowerOff,

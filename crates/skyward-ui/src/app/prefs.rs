@@ -36,6 +36,11 @@ pub enum Switch {
     WlanKeep,
     /// Show the password typed rather than a dot for each character.
     ShowPassword,
+    /// Tell the kernel the battery passed its check, so that the charge may
+    /// draw more than it allows an unchecked one. Offered only on a phone that
+    /// carries the nodes for it, and one way: turning it off would not take
+    /// the word back, so the page does not pretend that it would.
+    FastCharge,
 }
 
 /// How long the screen stays on with nothing touched, in milliseconds, in
@@ -70,15 +75,16 @@ impl App {
         }
     }
 
-    /// Set a slider to `level` of its span, the brightness no lower than
-    /// its floor, and draw the slider at `track` on the page again.
+    /// Set a slider to `level` of its span, the brightness no lower than its
+    /// floor, and draw the slider at `track` on the page again.
     pub(super) fn set_level(&mut self, t: &Theme, which: Slider, track: Rect, level: f32) {
+        let level = level.clamp(0.0, 1.0);
         let value = match which {
             Slider::Brightness => &mut self.state.brightness,
             Slider::Vibration => &mut self.state.vibration,
         };
         *value = level.clamp(if which == Slider::Brightness { MIN_BRIGHTNESS } else { 0.0 }, 1.0);
-        let value = *value;
+        let value = self.level(which);
         if let Some(fr) = self.frame.as_mut() {
             fr.canvas.fill_rect(track.x, track.y, track.w, track.h, t.pal.card);
             widgets::slider(&mut fr.canvas, t, track.x, track.y, track.w, value);

@@ -96,6 +96,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::ImageBackup => image_backup(cx),
         Screen::PowerOff => power_off(cx),
         Screen::Tasks => tasks(cx),
+    Screen::Charge => charge(cx),
         Screen::Filesystem => filesystem(cx),
         Screen::PartWork => part_work(cx),
         Screen::Language => language(cx),
@@ -367,11 +368,24 @@ pub fn home(cx: &Ctx) -> Frame {
         });
         system_opens.push(Action::Open(Screen::Systems));
     }
+    // 充电就排在高级工具上面：它比高级工具里的东西常用，也不该藏在里面。
+    // 充电时右侧显示充电器当前送来的功率，和充电页上的数字是同一个。
+    let charging = match &i.battery {
+        Some(b) if b.plugged => {
+            let value = s.charge.now.map_or_else(|| l.pick(["充电中", "充電中", "Charging"]).to_owned(), fmt::watts);
+            Some(value)
+        }
+        _ => None,
+    };
+    match &charging {
+        Some(value) => system_rows.push(Row::new(l.pick(CHARGE)).icon(GREEN, Icon::Battery).trail(Trail::Value(value))),
+        None => system_rows.push(Row::new(l.pick(CHARGE)).icon(SLATE, Icon::Battery)),
+    }
+    system_opens.push(Action::Open(Screen::Charge));
     system_rows.push(Row::new(l.pick(ADVANCED)).icon(SLATE, Icon::More));
     system_opens.push(Action::Open(Screen::Advanced));
     system_rows.push(Row::new(l.pick(SETTINGS)).icon(SLATE, Icon::Gear));
-    system_opens.push(Action::Open(Screen::Settings));
-    let system = widgets::list(&mut c, t, f, y, &system_rows);
+    system_opens.push(Action::Open(Screen::Settings));    let system = widgets::list(&mut c, t, f, y, &system_rows);
     out.extend(hits(&system.rows, &system_opens));
     // At the foot: rebooting, wiping and this recovery's own update.
     let mut footer_rows = Vec::new();
@@ -1167,6 +1181,185 @@ pub fn power_off(cx: &Ctx) -> Frame {
     let track = widgets::confirm(&mut c, t, f, y + t.m.dp(28.0), label, danger, s.confirm);
     out.push(Hit { rect: track, action: Action::Confirm(Confirm::PowerOff) });
     Frame::new(t, c, out, l.pick(POWER_OFF), top)
+}
+
+/// What the charger is doing: the power it delivers, the protocol it
+/// negotiated, and the battery it fills.
+///
+/// This page reads and does not set. On this phone the nodes that would hold
+/// a charge limit are policy votes rather than figures, and a number written
+/// to them is refused, so the recovery cannot change how fast the phone
+/// charges — the kernel and the charger settle that between them before the
+/// page is ever drawn. What the page can do is say what they settled on,
+/// which is what a recovery is asked for when a charge looks slow.
+pub fn charge(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+    let ch = &s.charge;
+    let b = cx.info.battery.as_ref();
+
+    // What the charger is giving, and the most it has given this charge: the
+    // two numbers that say how fast this charge is running.
+    let now = match ch.now {
+        Some(tenths) => fmt::watts(tenths),
+        None if b.is_some_and(|b| b.plugged) => l.pick(["读取中", "讀取中", "Reading"]).to_owned(),
+        None => l.pick(["未接充电器", "未接充電器", "No charger"]).to_owned(),
+    };
+    let most = match ch.most {
+        Some(tenths) => fmt::watts(tenths),
+        None => "\u{2014}".to_owned(),
+    };
+    let y = widgets::section_first(&mut c, t, f, top, l.pick(["现在", "現在", "Now"]));
+    let rows = [Row::new(&now).icon(BLUE, Icon::Battery).trail(Trail::Value(&most))];
+    let list = widgets::list(&mut c, t, f, y, &rows);
+    let mut y = list.bottom;
+
+    // What the charger negotiated, and what it says it can give. These are
+    // the kernel's own words, left as it writes them: a protocol name is a
+    // name, and translating it would only make it harder to look up.
+    let mut charger: Vec<(&str, String)> = Vec::new();
+    if let Some(protocol) = &ch.protocol {
+        charger.push((l.pick(["协议", "協定", "Protocol"]), protocol.clone()));
+    }
+    if let Some(rated) = ch.rated {
+        charger.push((l.pick(["充电器标称", "充電器標稱", "Charger rated"]), fmt::watts(rated * 10)));
+    }
+    if let Some(uv) = ch.volts {
+        charger.push((l.pick(["输入电压", "輸入電壓", "Input voltage"]), fmt::volts(uv)));
+    }
+    if let Some(ua) = ch.amps {
+        charger.push((l.pick(["输入电流", "輸入電流", "Input current"]), fmt::amps(ua)));
+    }
+    if !charger.is_empty() {
+        y = widgets::section(&mut c, t, f, y, l.pick(["充电器", "充電器", "Charger"]));
+        y = widgets::info_card(&mut c, t, f, y, &charger);
+    }
+
+    // The battery being filled: what it is at, how warm it is, and what the
+    // charge is doing to it. The warmth matters more here than anywhere else
+    // on the pages, since a fast charge is what makes it.
+    if let Some(b) = b {
+        let mut cells = vec![(l.pick(["电量", "電量", "Level"]), fmt::level(l, b))];
+        if let Some(v) = b.temp {
+            cells.push((l.pick(["温度", "溫度", "Temperature"]), fmt::celsius(v)));
+        }
+        if let Some(w) = b.watts() {
+            cells.push((l.pick(["电池功率", "電池功率", "Battery power"]), fmt::watts((w * 10.0).round() as u32)));
+        }
+        if let Some(v) = b.voltage {
+            cells.push((l.pick(["电池电压", "電池電壓", "Battery voltage"]), fmt::volts(v)));
+        }
+        if let Some(v) = fmt::wear(l, b) {
+            cells.push((l.pick(["健康", "健康狀態", "Health"]), v));
+        }
+        if let Some(v) = b.cycles {
+            cells.push((l.pick(["充电循环", "充電循環", "Charge cycles"]), tr!(l, "{v} 次", "{v} 次", "{v}")));
+        }
+        y = widgets::section(&mut c, t, f, y, l.pick(["电池", "電池", "Battery"]));
+        y = widgets::info_card(&mut c, t, f, y, &cells);
+    }
+
+    // Telling the kernel the battery passed its check, which is what lets the
+    // charge draw more than it allows an unchecked one. Said at length, since
+    // it is a risk taken on and the switch cannot be turned back off: once the
+    // kernel has the word it keeps it, and a switch that said otherwise would
+    // have the page lying about the phone.
+    if s.fast_charge_offered {
+        let title = l.pick(["快充", "快充", "Fast charge"]);
+        let (detail, tint) = if s.fast_charge_dropped {
+            (
+                l.pick([
+                    "电池温度过高，已自动回到普通充电。降到 40 °C 以下会重新开启。",
+                    "電池溫度過高，已自動回到普通充電。降到 40 °C 以下會重新開啟。",
+                    "The battery got too hot, so this was dropped back to a normal charge on its own. It comes back once the battery is under 40 °C.",
+                ]),
+                SLATE,
+            )
+        } else if s.fast_charge {
+            (
+                l.pick([
+                    "已开启。内核已被告知电池通过认证，充电电流可以超过未认证时的限制。达到 45 °C 会自动降回。",
+                    "已開啟。核心已被告知電池通過認證，充電電流可以超過未認證時的限制。達到 45 °C 會自動降回。",
+                    "On. The kernel has been told the battery passed its check, so the charge may draw more than it allows an unchecked one. It drops back on its own at 45 °C.",
+                ]),
+                ORANGE,
+            )
+        } else {
+            (
+                l.pick([
+                    "开启后内核将认为电池通过认证，充电电流可超过 8 W 的限制，有望接近充电器的实际能力。开启后无法关闭，需重启恢复。",
+                    "開啟後核心將認為電池通過認證，充電電流可超過 8 W 的限制，有望接近充電器的實際能力。開啟後無法關閉，需重新開機恢復。",
+                    "Turned on, the kernel treats the battery as checked, so the charge may draw more than the 8 W it is held at and can come close to what the charger can give. It cannot be turned off again; a restart puts it back.",
+                ]),
+                SLATE,
+            )
+        };
+        y = widgets::section(&mut c, t, f, y, l.pick(["充电速度", "充電速度", "Charge speed"]));
+        let rows = [Row::new(title).icon(tint, Icon::Power).subtitle(detail).trail(Trail::Switch(s.fast_charge))];
+        let list = widgets::list(&mut c, t, f, y, &rows);
+        y = list.bottom;
+        // A switch that is already on is not a hit: tapping it would do nothing,
+        // and offering it as something to tap would say otherwise.
+        if !s.fast_charge {
+            out.extend(hits(&list.rows, &[Action::Toggle(Switch::FastCharge)]));
+        }
+        // What the watch is watching, said with the switch rather than in the
+        // battery card, since it is the switch that made the watching matter.
+        let watching = match (s.battery_temp, s.fast_charge) {
+            (Some(tenths), true) => format!(
+                "{} {} · {} {}",
+                l.pick(["温度保护", "溫度保護", "Heat guard"]),
+                l.pick(["监控中", "監控中", "watching"]),
+                fmt::celsius(tenths),
+                l.pick(["超过 45.0°C 自动降回", "超過 45.0°C 自動降回", "drops back over 45.0°C"]),
+            ),
+            (None, true) => l
+                .pick([
+                    "温度保护：读不到电池温度，降回要靠你自己留意。",
+                    "溫度保護：讀不到電池溫度，降回要靠你自己留意。",
+                    "Heat guard: the battery is not reporting a temperature, so watching it is up to you.",
+                ])
+                .to_owned(),
+            _ => String::new(),
+        };
+        if !watching.is_empty() {
+            y = widgets::footnote(&mut c, t, f, y + t.m.dp(8.0), &watching);
+        }
+        // What the kernel's own node says, said apart from the switch. The
+        // switch is what was asked for and this is what came back, and on a
+        // phone where the gauge refuses the write the two differ.
+        if s.fast_charge && !s.fast_charge_kernel {
+            let said = l.pick([
+                "内核未确认：认证标志没有置上，快充可能没有生效。",
+                "核心未確認：認證標誌沒有置上，快充可能沒有生效。",
+                "The kernel has not confirmed it: the check is still clear, so the charge may not be any faster.",
+            ]);
+            y = widgets::footnote(&mut c, t, f, y + t.m.dp(8.0), said);
+        }
+    }
+
+    // What the page cannot do, said plainly, since a page about charging that
+    // stayed silent would look as if it could make the phone charge faster.
+    // Where the switch is offered the note says what is left over rather than
+    // repeating the warning the switch already carries.
+    let note = if s.fast_charge_offered {
+        l.pick([
+            "快充仍需充电器与内核协商，开启本开关只是解除内核因未认证而设的电流上限，并不保证达到某个功率。",
+            "快充仍需充電器與核心協商，開啟本開關只是解除核心因未認證而設的電流上限，並不保證達到某個功率。",
+            "The charger and the kernel still settle the protocol between them: the switch only lifts the current ceiling the kernel sets for an unchecked battery, and promises no particular power.",
+        ])
+    } else {
+        l.pick([
+            "recovery 无法改变充电速度。快充由内核与充电器协商决定，这里只显示协商的结果。",
+            "recovery 無法改變充電速度。快充由核心與充電器協商決定，這裡只顯示協商的結果。",
+            "The recovery cannot change how fast the phone charges: the kernel and the charger settle that between them, and this page only shows what they settled on.",
+        ])
+    };
+    y = widgets::footnote(&mut c, t, f, y + t.m.dp(10.0), note);
+
+    Frame::new(t, fit(c, t, y), out, l.pick(CHARGE), top)
 }
 
 /// Installing, opened from the home page: the system on the phone now, and
@@ -2938,6 +3131,7 @@ const PARTITIONS: Text = ["分区管理", "分割區管理", "Partitions"];
 const IMAGE_BACKUP: Text = ["镜像备份", "映像檔備份", "Image backup"];
 const POWER_OFF: Text = ["关机", "關機", "Power off"];
 const TASKS: Text = ["任务", "任務", "Tasks"];
+const CHARGE: Text = ["充电设置", "充電設定", "Charging"];
 const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
 const STOPPED: Text = ["已停止", "已停止", "Stopped"];
 const STOPPING: Text = ["正在停止", "正在停止", "Stopping"];

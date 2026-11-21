@@ -70,6 +70,22 @@ const OPENERS: [&str; 2] = ["ssgtzd", "hlosminkdaemon"];
 const HARDWARE_DIRECTORY: &str = "hwservicemanager";
 const HARDWARE_DIRECTORY_READY: &str = "hwservicemanager.ready";
 
+/// Xiaomi's charging service: the program that tells the kernel how fast to
+/// charge, by the service it registers.
+///
+/// The kernel decides what a charge may draw, and it asks this program
+/// first: without it the charge is held at 2 A whatever the charger offers,
+/// and the protocol stays at plain power delivery rather than going on to
+/// the adjustable kind. On the phone this was written for the kernel log
+/// says so plainly — `ichg:[batt_auth][2000]` against the stock system's
+/// `ichg:[volt_thermal_limit][3000]`, which is what it says once this
+/// program has told the kernel the battery passed its check.
+///
+/// A phone that does not carry the service is left as it was: nothing here
+/// is required of a recovery, and a phone without it charges as it always
+/// has.
+const CHARGING: &str = "vendor.xiaomi.hardware.micharge.IMiCharge/default";
+
 /// The folders a program's libraries are looked for in, by the partition
 /// the program is on: the recovery's own come before the vendor
 /// partition's, which carries its own copies of the lowest of them, and a
@@ -192,6 +208,17 @@ pub fn steps(phone: &Phone) -> Result<Vec<Step>> {
     let program = behind(phone, "the boot control", &boot, |file| file.starts_with(BOOT.0))?;
     let registers = besides(phone, program, &boot, alone);
     start(&mut out, started(phone, program, ready(boot, boot_kind), registers));
+
+    // Xiaomi's charging service, on a phone that carries it: the kernel asks
+    // it before it lets a charge draw more than 2 A, so a recovery without it
+    // charges at 2 A however much the charger offers. It is started last,
+    // since nothing else waits on it, and a phone without it is left alone.
+    if described(phone, Kind::Aidl, CHARGING).is_some()
+        && let Ok(program) = behind(phone, "the charging service", CHARGING, |file| file.contains("micharge"))
+    {
+        let registers = besides(phone, program, CHARGING, alone);
+        start(&mut out, started(phone, program, Ready::Service(CHARGING.into()), registers));
+    }
     Ok(out)
 }
 

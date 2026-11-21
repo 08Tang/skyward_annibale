@@ -172,6 +172,20 @@ impl App {
                     self.refresh();
                     return vec![Effect::Remember(false)];
                 }
+                // The fast-charge switch is one way on purpose. Once the kernel
+                // has been told the battery passed, turning the switch off
+                // would not take the word back, so the page would be saying one
+                // thing while the phone did another. Tapping it while it is on
+                // does nothing at all, and the page says why.
+                if switch == Switch::FastCharge {
+                    if self.state.fast_charge {
+                        return Vec::new();
+                    }
+                    self.state.fast_charge = true;
+                    self.state.fast_charge_dropped = false;
+                    self.refresh();
+                    return vec![Effect::FastCharge];
+                }
                 let on = match switch {
                     Switch::Vibrate => &mut self.state.vibrate,
                     Switch::FileTransfer => &mut self.state.file_transfer,
@@ -184,6 +198,7 @@ impl App {
                     Switch::WlanAuto => &mut self.state.wlan_auto,
                     Switch::WlanKeep => &mut self.state.wlan_keep,
                     Switch::Wlan => unreachable!("the WLAN switch is turned above"),
+                    Switch::FastCharge => unreachable!("the fast-charge switch is turned above"),
                 };
                 *on = !*on;
                 let now_on = *on;

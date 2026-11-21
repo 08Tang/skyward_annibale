@@ -1,5 +1,6 @@
 use crate::appread;
 use crate::backup;
+use crate::charge;
 use crate::decrypt::{self, Decryptor};
 use crate::fetch;
 use crate::filework;
@@ -1245,6 +1246,9 @@ struct Pages<'a> {
     /// Writing a partition out as an image, or an image back over one, or
     /// deleting one.
     imager: Option<images::Worker>,
+    /// Whether what the charge nodes answer has been said, so it is said
+    /// once rather than with every reading.
+    charge_said: bool,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1507,6 +1511,7 @@ impl<'a> Pages<'a> {
             app_reader: None,
             backuper: None,
             imager: None,
+            charge_said: false,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -1870,6 +1875,9 @@ impl<'a> Pages<'a> {
                         self.info.battery = battery;
                         self.app.refresh();
                     }
+                    // The charger is read again with the battery, so the page
+                    // says what it delivers now rather than when last opened.
+                    self.charge_watch(now)?;
                 }
                 Reading::All(all, at) => {
                     if self.asked.is_some_and(|asked| at >= asked) {
@@ -3241,6 +3249,8 @@ impl Pages<'_> {
             Effect::ImportImage { partition, path, sha256 } => self.import_image(partition, path, sha256, now)?,
             Effect::DeleteImage(path) => self.delete_image(PathBuf::from(path), now)?,
             Effect::StopImage => self.imager.as_ref().context("there is no work on an image to stop")?.stop(),
+            Effect::ChargeWatch => self.charge_watch(now)?,
+            Effect::FastCharge => self.fast_charge(now)?,
             Effect::Filesystem { name, action } => self.filesystem(&name, action, now)?,
             Effect::Backup { parts, place, compress, verify } => self.back_up(parts, place, compress, verify, now)?,
             Effect::Restore { place, name, parts } => self.restore(place, &name, parts, now)?,
@@ -3761,6 +3771,67 @@ impl Pages<'_> {
         Ok(())
     }
 
+    /// Read the charger again, so the page shows what it is delivering now.
+    /// Runs with the battery's own reading, once a second, and with the page
+    /// opening.
+    fn charge_watch(&mut self, now: u64) -> Result<()> {
+        // What every node answers is said once, so a page that comes up empty
+        // says which node went quiet rather than leaving it to be guessed at.
+        if !self.charge_said {
+            self.charge_said = true;
+            charge::describe();
+            // A phone without the nodes for it is not offered the switch: there
+            // would be nothing for it to do, and a switch that cannot do what
+            // its page says is worse than none.
+            self.app.state.fast_charge_offered = charge::offered();
+        }
+        self.app.set_charge_state(charge::reading());
+        // The recovery's own thermal chain does not work on this phone, so the
+        // charge that the switch allows is watched here instead: a battery at
+        // the limit has the word taken back, and it is only given again once
+        // the battery is well under it. That is the one thing that can turn the
+        // switch's effect off, and it is why the switch has a limit at all.
+        let temp = charge::temperature();
+        self.app.state.battery_temp = temp;
+        // What the kernel says about the battery's check, which is the thing
+        // that decides the current. The page shows it beside the switch, so a
+        // phone whose gauge answered differently from what was written says so
+        // rather than leaving the switch to speak for it.
+        self.app.state.fast_charge_kernel = charge::fast();
+        if self.app.state.fast_charge {
+            if self.app.state.fast_charge_dropped {
+                if charge::cool_enough(temp) {
+                    if let Err(e) = charge::allow_fast() {
+                        self.app.report(&e, now);
+                    } else {
+                        self.app.state.fast_charge_dropped = false;
+                    }
+                }
+            } else if charge::too_hot(temp) {
+                if let Err(e) = charge::stop_fast() {
+                    self.app.report(&e, now);
+                } else {
+                    self.app.state.fast_charge_dropped = true;
+                    let _ = skyward_sys::kmsg(&format!(
+                        "charging: battery at {} is too hot, so the charge was dropped back",
+                        temp.map(|t| t.to_string()).unwrap_or_else(|| "?".into()),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+    /// Tell the kernel the battery passed its check, which is what lets the
+    /// charge draw more than it allows an unchecked one. A failure is said on
+    /// the page rather than kept to the log, and the switch goes back, since
+    /// the phone is not where the page would otherwise say it is.
+    fn fast_charge(&mut self, now: u64) -> Result<()> {
+        if let Err(e) = charge::allow_fast() {
+            self.app.state.fast_charge = false;
+            self.app.report(&e, now);
+        }
+        Ok(())
+    }
     /// Back the parts chosen up into `place`. An install still stopping may
     /// yet write; a backup waits for it.
     fn back_up(&mut self, parts: [bool; 4], place: Place, compress: bool, verify: bool, now: u64) -> Result<()> {        ensure!(self.backuper.is_none(), "a backup or restore is under way already");

@@ -66,6 +66,7 @@ impl App {
                 if which == Slider::Vibration && self.state.vibrate {
                     return vec![Effect::Haptic];
                 }
+                return Vec::new();
             }
             return Vec::new();
         }

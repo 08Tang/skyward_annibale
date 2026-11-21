@@ -39,6 +39,7 @@ mod backup;
 pub mod dataapp;
 mod dataapp_list;
 mod decrypt;
+mod charging;
 mod draw;
 mod entry;
 mod filesystem;
@@ -70,6 +71,7 @@ pub use avb::*;
 pub use backup::*;
 pub use decrypt::*;
 pub use entry::*;
+pub use charging::*;
 pub use filesystem::*;
 pub use frame::*;
 pub use image::*;
@@ -169,6 +171,10 @@ pub enum Screen {
     /// The work going on now, and where each stands: an install, a backup, an
     /// image being written, files being copied, an update being downloaded.
     Tasks,
+    /// How fast the phone takes power from its charger: as the charger gives
+    /// it, under a ceiling that falls as the battery warms, or at a ceiling
+    /// the owner sets with a guard of their own.
+    Charge,
     Language,
     TimeZone,
     /// Saving the logs, as a bug report asks for them.
@@ -749,6 +755,14 @@ pub enum Effect {
     DeleteImage(String),
     /// Stop work on an image.
     StopImage,
+    /// Read the charger again, so the page shows what it is delivering now.
+    ChargeWatch,
+    /// Tell the kernel the battery passed its check, so that the charge may
+    /// draw more than it allows an unchecked one. There is no effect for
+    /// taking the word back: the switch stays on once it is on, and the only
+    /// thing that drops the charge is the temperature watch doing it for
+    /// itself.
+    FastCharge,
     /// Do `action` to the filesystem page's partition by its name, telling
     /// how it goes with [`App::part_work_started`], [`App::part_listed`],
     /// [`App::part_at`], [`App::part_ended`] and [`App::part_work_ended`];
