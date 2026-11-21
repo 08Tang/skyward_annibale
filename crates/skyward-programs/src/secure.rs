@@ -86,6 +86,21 @@ const HARDWARE_DIRECTORY_READY: &str = "hwservicemanager.ready";
 /// has.
 const CHARGING: &str = "vendor.xiaomi.hardware.micharge.IMiCharge/default";
 
+/// Xiaomi's secret keeper, by the name of its file: the program that asks
+/// the phone's power delivery stack to verify the charger.
+///
+/// The kernel log of the stock system says what it does and when: the
+/// thread that makes it say `verify_process: 1` and then, half a second
+/// later, `set pd_verifed: 1` is this program's, and it is only after that
+/// that the charge goes on from a fixed voltage to the adjustable kind. The
+/// same 100 W charger is held at 9 V by a recovery that does not start it,
+/// and runs at 17.5 V in the system that does.
+const SECRET: &str = "batterysecret";
+
+/// Where the vendor partition keeps the programs a script of its own does
+/// not name.
+const VENDOR_PROGRAMS: &str = "/vendor/bin";
+
 /// The folders a program's libraries are looked for in, by the partition
 /// the program is on: the recovery's own come before the vendor
 /// partition's, which carries its own copies of the lowest of them, and a
@@ -219,7 +234,49 @@ pub fn steps(phone: &Phone) -> Result<Vec<Step>> {
         let registers = besides(phone, program, CHARGING, alone);
         start(&mut out, started(phone, program, Ready::Service(CHARGING.into()), registers));
     }
+
+    // Xiaomi's secret keeper, on a phone that carries it: the kernel asks
+    // it to have the charger verified, and until it has, a charge stays at
+    // a fixed voltage however much the charger offers. It is started after
+    // the charging service, which it is no service of and nothing waits
+    // on: it registers nothing, so it is waited on by nothing.
+    if let Some(started) = secret(phone) {
+        start(&mut out, started);
+    }
     Ok(out)
+}
+
+/// Xiaomi's secret keeper, as it is started, where the phone carries one:
+/// the program its scripts name, else the one the vendor partition has
+/// under that name and that no script of the phone's starts. None where the
+/// phone has neither, which leaves a phone without it charging as it always
+/// has.
+///
+/// It is run as root with nothing of init's but its path: it registers no
+/// service and waits on no property, so it is given no socket and no
+/// environment, and a phone whose scripts say nothing of it is left with
+/// what the vendor partition says of it alone.
+fn secret(phone: &Phone) -> Option<Started> {
+    if let Ok(Some(program)) = named(phone, SECRET) {
+        return Some(started(phone, program, Ready::Nothing, Vec::new()));
+    }
+    let path = format!("{VENDOR_PROGRAMS}/{SECRET}");
+    Path::new(&path).is_file().then(|| {
+        Started::from(Service {
+            path: path.clone(),
+            args: Vec::new(),
+            libraries: libraries_of(&path, phone.bundle.as_deref()),
+            oneshot: false,
+            ready_property: None,
+            ready_service: None,
+            registers: Vec::new(),
+            ready_hardware_service: None,
+            when: None,
+            user: None,
+            groups: Vec::new(),
+            capabilities: Vec::new(),
+        })
+    })
 }
 
 /// The description that tells of the service `name`, where it is the one
@@ -426,4 +483,25 @@ fn started(phone: &Phone, program: &Program, ready: Ready, registers: Vec<String
         capabilities: program.capabilities.clone().unwrap_or_default(),
     };
     Started { service, sockets: program.sockets.clone(), environment: program.environment.clone(), anew: false }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn a_phone_without_the_secret_keeper_is_left_as_it_was() {
+        let phone = Phone::read(Vec::new(), HashMap::new(), None).unwrap();
+        assert!(secret(&phone).is_none(), "nothing of the phone's names it and no vendor partition is mounted");
+    }
+
+    #[test]
+    fn the_secret_keeper_is_the_vendor_partitions_own_program() {
+        let path = format!("{VENDOR_PROGRAMS}/{SECRET}");
+        assert_eq!(path, "/vendor/bin/batterysecret", "the program the stock system runs the charger check through");
+        let libraries = libraries_of(&path, None);
+        assert!(libraries.contains(&"/vendor/lib64".to_string()), "it finds the libraries of the vendor partition");
+        assert!(libraries.contains(&"/system/lib64".to_string()), "and those the vendor partition shares with the system");
+    }
 }
