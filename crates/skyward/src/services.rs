@@ -513,11 +513,25 @@ pub fn reachable() -> bool {
     }
 }
 
+/// The path a process was started by, as `/proc`'s own link to it names it.
+/// The kernel writes " (deleted)" after the path once the file it opened has
+/// been written over, which an update to a partition a program runs from
+/// does to it: the program goes on running from what it has open.
+fn started_by(exe: &str) -> &str {
+    exe.strip_suffix(" (deleted)").unwrap_or(exe)
+}
+
 /// A process already running `path`.
+///
+/// A program is known as running from where it was started even after its
+/// own file has been written over (2026-11-21: an install stopped with
+/// /vendor busy because none of the phone's own programs were recognised as
+/// running from it, so none of their files were kept in memory).
 pub fn running(path: &str) -> Option<u32> {
     fs::read_dir("/proc").ok()?.flatten().find_map(|e| {
         let pid: u32 = e.file_name().to_str()?.parse().ok()?;
-        (fs::read_link(e.path().join("exe")).ok()? == Path::new(path)).then_some(pid)
+        let exe = fs::read_link(e.path().join("exe")).ok()?;
+        (started_by(&exe.to_string_lossy()) == path).then_some(pid)
     })
 }
 
@@ -542,5 +556,26 @@ fn wait_for(pid: u32) -> Result<()> {
         if e.kind() != io::ErrorKind::Interrupted {
             return Err(e).context("wait on the pidfd");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_program_is_known_by_the_path_it_was_started_by() {
+        assert_eq!(started_by("/vendor/bin/qseecomd"), "/vendor/bin/qseecomd");
+    }
+
+    #[test]
+    fn a_program_whose_file_was_written_over_is_still_known() {
+        assert_eq!(started_by("/vendor/bin/qseecomd (deleted)"), "/vendor/bin/qseecomd");
+    }
+
+    #[test]
+    fn a_name_that_only_looks_like_the_mark_is_left_alone() {
+        assert_eq!(started_by("/vendor/bin/(deleted)"), "/vendor/bin/(deleted)");
+        assert_eq!(started_by("/vendor/bin/a (deleted) b"), "/vendor/bin/a (deleted) b");
     }
 }
