@@ -1284,7 +1284,7 @@ pub fn charge(cx: &Ctx) -> Frame {
         let rows = [Row::new(label).icon(if s.fast_charge { ORANGE } else { SLATE }, Icon::Power).subtitle(detail).trail(Trail::Switch(s.fast_charge))];
         let list = widgets::list(&mut c, t, f, y, &rows);
         y = list.bottom;
-        out.extend(widgets::hits(&list.rows, &[Action::Toggle(Switch::FastCharge)]));
+        out.extend(hits(&list.rows, &[Action::Toggle(Switch::FastCharge)]));
     }
 
     // What the page cannot do, said plainly, since a page about charging that
