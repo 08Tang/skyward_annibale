@@ -1,7 +1,7 @@
 use crate::app::{
     ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
-    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, Pick, Pinned, Place, Rows,
+    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
     USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
 };
@@ -1080,6 +1080,7 @@ fn install_stage(cx: &Ctx) -> String {
         Install::Waiting => l.pick(["等待选择安装包", "等待選擇安裝檔", "Waiting for a package"]).to_string(),
         Install::Checking { .. } => l.pick(["正在检查安装包", "正在檢查安裝檔", "Checking the package"]).to_string(),
         Install::Choosing(_) | Install::Confirming { .. } | Install::ConfirmingScript => l.pick(["等待确认", "等待確認", "Waiting to be agreed to"]).to_string(),
+        Install::NotSecondSystem(_) => l.pick(["此包不是双系统包", "此包不是雙系統包", "Not a second system's package"]).to_string(),
         Install::Updating { .. } => l.pick(["正在安装系统更新", "正在安裝系統更新", "Installing the update"]).to_string(),
         Install::Flashing { .. } => l.pick(["正在刷入分区镜像", "正在刷入分割區映像檔", "Flashing an image"]).to_string(),
         Install::Scripting { .. } => l.pick(["正在运行安装脚本", "正在執行安裝指令碼", "Running the install script"]).to_string(),
@@ -1278,6 +1279,20 @@ fn place_name(l: Lang, place: Place) -> &'static str {
         Place::Storage => ["内部存储", "內部儲存空間", "Internal storage"],
         Place::UsbDrive => ["U 盘", "USB 隨身碟", "USB drive"],
     })
+}
+
+/// What the package was found to be, at `y`: the install page says which
+/// kind it is before anything is written, so that a package of one kind is
+/// not taken for one of another.
+fn kind_note(c: &mut Canvas, cx: &Ctx, y: f32, kind: PackageKind) -> f32 {
+    let (t, f, l) = (cx.t, cx.f, cx.state.lang);
+    let what = l.pick(match kind {
+        PackageKind::Update => ["识别为系统更新包", "辨識為系統更新檔", "Found to be a system update"],
+        PackageKind::Script => ["识别为带安装脚本的刷机包", "辨識為帶安裝指令碼的刷機包", "Found to be a zip with an install script"],
+        PackageKind::Image => ["识别为分区镜像", "辨識為分割區映像檔", "Found to be a partition image"],
+        PackageKind::System => ["识别为第二系统的安装包", "辨識為第二系統的安裝檔", "Found to be a second system's package"],
+    });
+    widgets::footnote(c, t, f, y, what)
 }
 
 /// A one-line card on how things stand.
@@ -1528,6 +1543,7 @@ pub fn installing(cx: &Ctx) -> Frame {
             let size = fmt::bytes(choice.size);
             let detail = tr!(l, "{size}，{holds}", "{size}，{holds}", "{size} · {holds}");
             let y = widgets::list(&mut c, t, f, top, &[standing(name, GREEN, Icon::Install, &detail)]).bottom;
+            let y = kind_note(&mut c, cx, y, PackageKind::Image);
             let y = widgets::section(&mut c, t, f, y, l.pick(["分区", "分割區", "Partition"]));
             let rows: Vec<Row> = choice.partitions.iter().enumerate().map(|(k, p)| Row::new(p).subtitle(fmt::partition_role(l, p)).trail(Trail::Check(k == choice.partition))).collect();
             let parts = widgets::list(&mut c, t, f, y, &rows);
@@ -1583,6 +1599,7 @@ pub fn installing(cx: &Ctx) -> Frame {
                 (title, GREEN, Icon::Install, detail, Confirm::Install)
             };
             let y = widgets::list(&mut c, t, f, top, &[standing(&title, color, icon, &detail)]).bottom;
+            let y = kind_note(&mut c, cx, y, PackageKind::Update);
             let (label, danger) = confirm_label(which, cx.state);
             let track = widgets::confirm(&mut c, t, f, y + t.m.dp(28.0), label, danger, s.confirm);
             out.push(Hit { rect: track, action: Action::Confirm(which) });
@@ -1641,6 +1658,7 @@ pub fn installing(cx: &Ctx) -> Frame {
             let version = &choice.version;
             let detail = tr!(l, "{version}，将安装为第二系统", "{version}，將安裝為第二系統", "{version}, to install as the second system");
             let y = widgets::list(&mut c, t, f, top, &[standing(&choice.name, PURPLE, Icon::Systems, &detail)]).bottom;
+            let y = kind_note(&mut c, cx, y, PackageKind::System);
             let y = widgets::section(&mut c, t, f, y, l.pick(["分配空间", "分配空間", "Room for it"]));
             let sizes: Vec<String> = choice.sizes.iter().map(|&b| fmt::bytes(b)).collect();
             let least = l.pick(["系统所需的最小空间", "系統所需的最小空間", "The least the system takes"]);
@@ -1681,6 +1699,7 @@ pub fn installing(cx: &Ctx) -> Frame {
                 "This zip runs the install script it holds, which can rewrite any partition of this phone.",
             ]);
             let mut y = widgets::list(&mut c, t, f, top, &[standing(name, ORANGE, Icon::Install, detail)]).bottom;
+            y = kind_note(&mut c, cx, y, PackageKind::Script);
             if let Some(note) = fmt::snapshot_script_note(l, &i.snapshot) {
                 y = widgets::footnote(&mut c, t, f, y, note);
             }
@@ -1689,6 +1708,37 @@ pub fn installing(cx: &Ctx) -> Frame {
             out.push(Hit { rect: track, action: Action::Confirm(Confirm::RunScript) });
             let note = l.pick(["返回将取消安装，不会运行安装脚本。", "返回將取消安裝，不會執行安裝指令碼。", "Going back cancels the install without running the script."]);
             widgets::footnote(&mut c, t, f, track.y + track.h, note)
+        }
+        Install::NotSecondSystem(kind) => {
+            let title = l.pick(["此包不是双系统包", "此包不是雙系統包", "This is not a second system's package"]);
+            let detail = match kind {
+                PackageKind::Update => l.pick([
+                    "这是系统更新包，会安装到另一个槽位，不会装成第二系统。返回后可重新选择。",
+                    "這是系統更新檔，會安裝到另一個槽位，不會裝成第二系統。返回後可重新選擇。",
+                    "It is a system update, which installs to the other slot rather than beside the installed system. Go back to choose another.",
+                ]),
+                PackageKind::Script => l.pick([
+                    "这是带安装脚本的刷机包，会运行其中的脚本改写分区，不会装成第二系统。返回后可重新选择。",
+                    "這是帶安裝指令碼的刷機包，會執行其中的指令碼改寫分割區，不會裝成第二系統。返回後可重新選擇。",
+                    "It is a zip with an install script, which rewrites partitions rather than installing a second system. Go back to choose another.",
+                ]),
+                PackageKind::Image => l.pick([
+                    "这是分区镜像，会刷入所选分区，不会装成第二系统。返回后可重新选择。",
+                    "這是分割區映像檔，會刷入所選分割區，不會裝成第二系統。返回後可重新選擇。",
+                    "It is a partition image, which is written to a partition rather than installing a second system. Go back to choose another.",
+                ]),
+                PackageKind::System => l.pick(["这是第二系统的安装包。", "這是第二系統的安裝檔。", "It is a second system's package."]),
+            };
+            let y = widgets::list(&mut c, t, f, top, &[standing(title, ORANGE, Icon::Systems, detail)]).bottom;
+            let back = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(["选择其他文件", "選擇其他檔案", "Choose another file"])).icon(GREEN, Icon::Folder)]);
+            out.extend(hits(&back.rows, &[Action::Back]));
+            let y = back.bottom;
+            let note = l.pick([
+                "第二系统只能从「双系统」页面的「安装系统」进入安装，且只接受带有 system.toml 和 rootfs.img 的安装包。",
+                "第二系統只能從「雙系統」頁面的「安裝系統」進入安裝，且只接受帶有 system.toml 和 rootfs.img 的安裝檔。",
+                "A second system installs only from Dual boot's Install a system, and only from a package holding system.toml and rootfs.img.",
+            ]);
+            widgets::footnote(&mut c, t, f, y, note)
         }
         Install::Scripting { stage, .. } => {
             let (detail, done) = script_stage(l, stage.as_ref(), &s.script_output);

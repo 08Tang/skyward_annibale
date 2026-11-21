@@ -99,6 +99,10 @@ pub enum Install {
     },
     /// A zip with an install script waits for the user to agree to run it.
     ConfirmingScript,
+    /// The install page was opened from the second system's place, and the
+    /// package is not one that installs a system beside the installed one:
+    /// what it is instead, and nothing is written.
+    NotSecondSystem(PackageKind),
     /// A system to install beside the installed one waits for the room its
     /// root takes to be chosen.
     SystemChoosing(SystemChoice),
@@ -125,6 +129,22 @@ pub enum Install {
     /// The page was left and the installer is stopping, handing USB back
     /// if it had it.
     Ending,
+}
+
+/// What a package turned out to be, as the install page names it before
+/// anything is written: what someone choosing a package sees it is, so that
+/// a package of one kind is not taken for one of another.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PackageKind {
+    /// An A/B update package, which writes the other slot.
+    Update,
+    /// A zip with an install script, which can write any partition.
+    Script,
+    /// A partition image, which goes into the partition chosen.
+    Image,
+    /// A system that installs beside the installed one, its root in the
+    /// data partition.
+    System,
 }
 
 /// What a failed install may have left broken.
@@ -247,6 +267,26 @@ impl App {
             self.wake(now);
         }
         let install = &mut self.state.install;
+        // The second system's place takes one kind of package and no other,
+        // and says which the package is rather than starting it.
+        let asked = self.state.second_system_asked;
+        let kind = match &ev {
+            Event::Ready { .. } => Some(PackageKind::Update),
+            Event::Script => Some(PackageKind::Script),
+            Event::Image { .. } => Some(PackageKind::Image),
+            Event::System { .. } => Some(PackageKind::System),
+            _ => None,
+        };
+        if let (true, Some(kind)) = (asked, kind) {
+            self.state.second_system_asked = false;
+            if kind != PackageKind::System {
+                *install = Install::NotSecondSystem(kind);
+                if self.screen() == Screen::Installing {
+                    self.refresh();
+                }
+                return;
+            }
+        }
         match ev {
             Event::Waiting => *install = Install::Waiting,
             Event::Checking { size } => *install = Install::Checking { size, stage: None },
@@ -334,6 +374,70 @@ mod tests {
     use super::*;
     use crate::app::testing::*;
     use skyward_install::Failure;
+
+    #[test]
+    fn a_package_of_another_kind_is_refused_where_a_second_system_was_asked_for() {
+        for (ev, kind) in [
+            (Event::Ready { version: Some("OS3.0".into()), wipe: false }, PackageKind::Update),
+            (Event::Script, PackageKind::Script),
+            (Event::Image { kind: skyward_install::ImageKind::VendorBoot, size: 4096, partitions: vec!["vendor_boot"] }, PackageKind::Image),
+        ] {
+            let (f, i) = (fonts(), info());
+            let mut app = opened(Screen::Installing, &f, &i);
+            app.state.second_system_asked = true;
+            app.state.install = Install::Checking { size: 4096, stage: None };
+            app.install(ev, 0);
+            assert_eq!(app.state.install, Install::NotSecondSystem(kind), "the package is named rather than started");
+            assert!(!app.state.second_system_asked, "the ask is answered once");
+        }
+    }
+
+    #[test]
+    fn a_second_system_is_taken_where_a_second_system_was_asked_for() {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Installing, &f, &i);
+        app.state.second_system_asked = true;
+        app.state.install = Install::Checking { size: 4096, stage: None };
+        app.install(Event::System { name: "Ubuntu Touch".into(), version: "24.04".into(), sizes: vec![3 << 30] }, 0);
+        assert!(matches!(app.state.install, Install::SystemChoosing(_)), "the room is chosen as usual");
+    }
+
+    #[test]
+    fn a_package_from_anywhere_but_dual_boot_is_taken_as_itself() {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Installing, &f, &i);
+        app.state.install = Install::Checking { size: 4096, stage: None };
+        app.install(Event::Ready { version: Some("OS3.0".into()), wipe: false }, 0);
+        assert_eq!(app.state.install, Install::Confirming { version: Some("OS3.0".into()), wipe: false });
+    }
+
+    #[test]
+    fn the_install_page_remembers_the_second_system_asked_for_it() {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Systems, &f, &i);
+        app.act(Action::Open(Screen::Install), 0);
+        assert_eq!(app.screen(), Screen::Install);
+        assert!(app.state.second_system_asked, "the place asked for a second system");
+    }
+
+    #[test]
+    fn the_install_page_asks_for_a_second_system_only_from_dual_boot() {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Home, &f, &i);
+        app.act(Action::Open(Screen::Install), 0);
+        assert_eq!(app.screen(), Screen::Install);
+        assert!(!app.state.second_system_asked, "the home page asks for nothing in particular");
+    }
+
+    #[test]
+    fn leaving_the_install_page_forgets_what_was_asked_for() {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Installing, &f, &i);
+        app.state.second_system_asked = true;
+        app.state.install = Install::NotSecondSystem(PackageKind::Update);
+        app.key(Key::Back, 0);
+        assert!(!app.state.second_system_asked, "the next package is taken on its own terms");
+    }
 
     #[test]
     fn leaving_while_waiting_cancels_and_the_end_clears_it() {

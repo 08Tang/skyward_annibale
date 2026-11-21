@@ -231,7 +231,7 @@ impl App {
                     self.say(l.pick(["正在清除，请等待清除完成", "正在清除，請等待清除完成", "Wiping. Wait for it to finish"]), now);
                     return fx;
                 }
-                Install::Starting | Install::Locked(_) | Install::Waiting | Install::Choosing(_) | Install::SystemChoosing(_) | Install::Confirming { .. } | Install::ConfirmingScript => {
+                Install::Starting | Install::Locked(_) | Install::Waiting | Install::Choosing(_) | Install::SystemChoosing(_) | Install::Confirming { .. } | Install::ConfirmingScript | Install::NotSecondSystem(_) => {
                     self.state.install = Install::Ending;
                     fx.push(Effect::Cancel);
                 }
@@ -244,6 +244,11 @@ impl App {
                 Install::Finished { .. } | Install::Wiped(_) => self.state.install = Install::Idle,
                 Install::Idle | Install::Ending => {}
             }
+        }
+        // The install page is left, so the next package is taken on its own
+        // terms rather than as one the second system's place asked for.
+        if self.screen() == Screen::Installing {
+            self.state.second_system_asked = false;
         }
         if !morph {
             self.leave(true);

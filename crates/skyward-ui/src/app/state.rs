@@ -99,6 +99,10 @@ pub struct State {
     pub install: Install,
     /// Where the package being installed comes from.
     pub source: Source,
+    /// The install page was opened from the second system's place in Dual
+    /// boot, so only a package that installs a system beside the installed
+    /// one is taken there; any other is refused before it is written.
+    pub second_system_asked: bool,
     /// The name of the file being installed, when it is one on the phone.
     pub package_name: Option<String>,
     /// What the install script last run showed, its latest lines.
@@ -361,6 +365,7 @@ impl Default for State {
             confirm: 0.0,
             install: Install::Idle,
             source: Source::Computer,
+            second_system_asked: false,
             package_name: None,
             script_output: Vec::new(),
             check_signature: false,

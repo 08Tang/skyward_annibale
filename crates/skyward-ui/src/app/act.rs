@@ -13,6 +13,13 @@ impl App {
                 if s == Screen::Serve {
                     self.state.picking = false;
                 }
+                // The second system's place in Dual boot opens the install
+                // page for a package that installs a system beside the
+                // installed one, and says so: a package of any other kind is
+                // refused there rather than started (2026-11-21).
+                if s == Screen::Install {
+                    self.state.second_system_asked = self.screen() == Screen::Systems;
+                }
                 if s == Screen::Search && self.screen() == Screen::Home {
                     // The bar on the home page looks through the whole of
                     // what the phone offers, whatever page the field was last
