@@ -3795,6 +3795,12 @@ impl Pages<'_> {
             self.app.set_charge_state(ChargeNow::default());
             return Ok(());
         }
+        // The nodes as they stand, said once, before the page writes to them:
+        // a phone whose nodes refuse what the page offers needs its own
+        // figures known, and the log is where they are found.
+        if self.charge_undo.is_none() {
+            charge::describe();
+        }
         let (undo, mut state) = charge::set(&charge, tenths)?;
         state.trouble = charge::trouble(&charge);
         // What the nodes held before this page touched them is kept, and kept

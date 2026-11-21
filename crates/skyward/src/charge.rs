@@ -37,11 +37,19 @@ const BATTERY: &str = "/sys/class/power_supply/battery";
 /// the five volts a charger gives before it is asked for more.
 const FALLBACK_UV: u64 = 5_000_000;
 
-/// The most input current to ask for, in microamps. A hundred watts at five
-/// volts is twenty amps, which no phone takes: the ceiling is held to what
-/// the charge interface will accept, and a value above it is refused by the
-/// kernel rather than passed on to the charger.
-const MOST_UA: u64 = 20_000_000;
+/// The most input current to ask for, in microamps. The interface refuses a
+/// value above what its charger can carry, and the refusal is not passed on
+/// as a smaller limit but as an error, so the ceiling is held to a figure
+/// every wired charger of this phone's generation takes: five amps, which is
+/// what a hundred watts at twenty volts comes to. A limit above that is
+/// refused outright, and the phone goes on charging exactly as it did.
+const MOST_UA: u64 = 5_000_000;
+
+/// The least voltage a reading is believed at, in microvolts. The nodes are
+/// read while the charger is settling, and a reading of a few millivolts is
+/// the node answering before it has anything to say rather than a real
+/// measurement; dividing by it would ask for an absurd current.
+const LEAST_UV: u64 = 3_000_000;
 
 /// The charge nodes as they were found, so what was written can be put back.
 #[derive(Clone, Debug, Default)]
@@ -72,7 +80,7 @@ pub struct Reading {
 /// against that would be set too low. Where the charger says nothing, the
 /// battery's current and voltage stand in.
 pub fn reading() -> Reading {
-    let voltage = read_u64(USB, "voltage_now").or_else(|| read_u64(BATTERY, "voltage_now"));
+    let voltage = read_u64(USB, "voltage_now").filter(|&uv| uv >= LEAST_UV).or_else(|| read_u64(BATTERY, "voltage_now").filter(|&uv| uv >= LEAST_UV));
     let watts = match (read_i64(USB, "current_now"), voltage) {
         (Some(ua), Some(uv)) if ua != 0 => Some(((ua.unsigned_abs() as f64 * uv as f64) / 1e11).round() as u32),
         _ => match (read_i64(BATTERY, "current_now"), read_u64(BATTERY, "voltage_now")) {
@@ -86,7 +94,7 @@ pub fn reading() -> Reading {
 /// The input current limit to ask for `watts` of power at `uv` microvolts, in
 /// microamps: what the ceiling comes to, held to what the interface takes.
 fn current_for(watts: f32, uv: u64) -> u64 {
-    let uv = if uv == 0 { FALLBACK_UV } else { uv };
+    let uv = if uv < LEAST_UV { FALLBACK_UV } else { uv };
     let ua = (watts as f64 * 1e6 / (uv as f64 / 1e6)) as u64;
     ua.min(MOST_UA)
 }
@@ -121,32 +129,30 @@ pub fn set(charge: &ChargeSetting, tenths: Option<i32>) -> Result<(Undo, ChargeN
     if watts > 0.0 {
         let uv = reading.voltage.unwrap_or(FALLBACK_UV);
         let ua = current_for(watts, uv);
-        undo.iin = write_node(INTERFACE, "iin_limit", &ua.to_string()).ok();
+        // The node is written only where the figure differs from what it
+        // already holds: the runtime reads the charger once a second, and a
+        // node written every second is a node the charger driver has to act
+        // on every second.
+        let held = read_node(INTERFACE, "iin_limit");
+        let already = held.as_deref().and_then(|s| s.parse::<u64>().ok()) == Some(ua);
+        if !already {
+            undo.iin = write_node(INTERFACE, "iin_limit", &ua.to_string()).ok();
+            if undo.iin.is_none() {
+                let why = match write_node(INTERFACE, "iin_limit", &ua.to_string()) {
+                    Ok(_) => "the second write went through".to_owned(),
+                    Err(e) => format!("{e:#}"),
+                };
+                let _ = skyward_sys::kmsg(&format!("charging: iin_limit would not take {ua} uA: {why}"));
+            }
+        }
         // The thermal limit is the slow line: above it the charger gives
         // less, which is what the guard's trickle asks for.
         if charge.guarded {
             let celsius = charge.slow_at / 10;
-            undo.wired = write_node(THERMAL, "wired_ctrl_limit", &celsius.to_string()).ok();
-        }
-        // Said in the log, since a ceiling that changes nothing is the first
-        // thing to look for when the phone charges no faster: it says what
-        // was asked for, what the charger was delivering, and whether the
-        // node took the value at all.
-        let said = format!(
-            "charging: asked {watts} W at {uv} uV, so iin_limit {ua} uA; the charger was giving {:?}; iin_limit took it: {}",
-            reading.watts,
-            undo.iin.is_some()
-        );
-        let _ = skyward_sys::kmsg(&said);
-        // Where the write was refused, the reason is worth as much as the
-        // fact: a node that is there and will not take a value is a different
-        // phone from one that has no node at all.
-        if undo.iin.is_none() {
-            let why = match write_node(INTERFACE, "iin_limit", &ua.to_string()) {
-                Ok(_) => "the second write went through".to_owned(),
-                Err(e) => format!("{e:#}"),
-            };
-            let _ = skyward_sys::kmsg(&format!("charging: iin_limit would not take it: {why}"));
+            let held = read_node(THERMAL, "wired_ctrl_limit");
+            if held.as_deref().and_then(|s| s.parse::<i32>().ok()) != Some(celsius) {
+                undo.wired = write_node(THERMAL, "wired_ctrl_limit", &celsius.to_string()).ok();
+            }
         }
     }
     state.guard = charge.guard_at(tenths);
@@ -192,6 +198,30 @@ fn read_u64(dir: &str, name: &str) -> Option<u64> {
 /// without them can still be charged, but not at a ceiling of its own.
 pub fn supported() -> bool {
     Path::new(INTERFACE).is_dir() && Path::new(INTERFACE).join("iin_limit").exists()
+}
+
+/// Say in the log what the charge nodes hold and what they will take, once,
+/// when the page first writes. A phone whose nodes refuse a figure the page
+/// offers needs its own figures known before the page can offer the right
+/// ones, and the log is where they are found.
+pub fn describe() {
+    let held = |dir: &str, name: &str| match read_node(dir, name) {
+        Some(v) => format!("{name} = {v}"),
+        None => format!("{name} = (none)"),
+    };
+    let said = format!(
+        "charging: {}; {}; {}; {}; {}; usb {:?} uV {:?} uA; battery {:?} uV {:?} uA",
+        held(INTERFACE, "iin_limit"),
+        held(INTERFACE, "input_suspend"),
+        held(INTERFACE, "charge_enable"),
+        held(THERMAL, "wired_ctrl_limit"),
+        held("/sys/class/xm_power/charger/quick_charge", "current_ration"),
+        read_u64(USB, "voltage_now"),
+        read_i64(USB, "current_now"),
+        read_u64(BATTERY, "voltage_now"),
+        read_i64(BATTERY, "current_now"),
+    );
+    let _ = skyward_sys::kmsg(&said);
 }
 
 /// Whether the phone carries the charge nodes this page writes to.
