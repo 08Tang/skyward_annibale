@@ -240,7 +240,7 @@ fn nezha_s_other_builds_reach_their_weaver_s_secure_element_through_the_secure_e
             ]
         );
         let found = secure::programs(&steps);
-        let [.., element, weaver, _] = &found[..] else { panic!("seven programs") };
+        let [.., element, weaver, _, _] = &found[..] else { panic!("eight programs") };
         // The phone tells of the secure element built into it in the
         // description of its NFC chip's service, which its init starts
         // only when the NFC service itself is asked for: the secure
