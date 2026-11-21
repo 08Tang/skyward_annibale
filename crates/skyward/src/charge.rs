@@ -1,12 +1,19 @@
 //! Reading the charger: what it delivers, the protocol it negotiated, and
 //! the most it has given this charge.
 //!
-//! Nothing here writes. The nodes that would hold a charge limit are policy
-//! votes on this phone rather than figures — `iin_limit` reads
+//! Almost nothing here writes. The nodes that would hold a charge limit are
+//! policy votes on this phone rather than figures — `iin_limit` reads
 //! `buck eff_client:input_suspend 0`, and a number written to it is refused
 //! with `EINVAL` — so the recovery cannot make the phone charge faster or
-//! slower. What it can do is say what the charger is doing, which is what
-//! the page is for.
+//! slower by naming a figure.
+//!
+//! There is one thing it can do, and only one: the phone's end of the cable
+//! is a device, and the charger's own chip — the one the kernel asks before
+//! it lets a charge draw more than 2 A — is only reachable when that end is a
+//! host. Turning it into one is a single write to the node the kernel makes
+//! for the switch, and turning it back is the same write with the other word.
+//! What the charger does once the chip answers is the phone's own business;
+//! the recovery only makes it reachable.
 
 use std::fs;
 use std::path::Path;
@@ -21,11 +28,22 @@ const BATTERY: &str = "/sys/class/power_supply/battery";
 /// can give.
 const COMMON: &str = "/sys/class/xm_power/charger/charger_common";
 
+/// Where the kernel keeps the switches that say which end of a cable the
+/// phone is: one folder for each, and in it a `role` file that reads `host`
+/// or `device` and takes either back.
+const ROLE_SWITCHES: &str = "/sys/class/usb_role";
+
 /// The least voltage a reading is believed at, in microvolts. The nodes are
 /// read while the charger is settling, and a reading of a few millivolts is
 /// the node answering before it has anything to say rather than a real
 /// measurement.
 const LEAST_UV: u64 = 3_000_000;
+
+/// The name of the switch this phone makes, among the ones it might: the one
+/// the charger's chip is on the far side of. Others are looked for where this
+/// one is not there, since the name follows the controller rather than the
+/// phone.
+const LIKELY_SWITCH: &str = "a600000.ssusb-role-switch";
 
 /// Read the charger: the power going into the battery, the voltage and
 /// current it comes at, the protocol negotiated, and what the charger says
@@ -113,10 +131,70 @@ pub fn describe() {
     // What the nodes say is worth having even where the log will not take it,
     // so a failure to write is dropped rather than stopping the page.
     let _ = skyward_sys::kmsg(&line);
+    // Whether the phone could be made the host end of the cable, said once so
+    // that a page without the switch says why rather than leaving it to be
+    // guessed at.
+    let role = match role_switch() {
+        Some(path) => {
+            let said = read_node(Path::new(&path).parent().and_then(|p| p.to_str()).unwrap_or("/"), "role");
+            format!("{path} reads {}", said.as_deref().unwrap_or("?"))
+        }
+        None => format!("no switch under {ROLE_SWITCHES}"),
+    };
+    let _ = skyward_sys::kmsg(&format!("charging: {role}"));
 }
 
 fn read_i64(dir: &str, name: &str) -> Option<i64> {
     read_node(dir, name)?.parse().ok()
+}
+
+/// The switch that decides which end of the cable the phone is, where this
+/// phone has one: the `role` file's folder, chosen by the name the kernel
+/// made it under, or else the only one there is.
+///
+/// A phone without one has no way to reach the charger's own chip, and the
+/// page does not offer the switch at all rather than offering one that would
+/// do nothing.
+pub fn role_switch() -> Option<String> {
+    let dir = Path::new(ROLE_SWITCHES);
+    let likely = dir.join(LIKELY_SWITCH).join("role");
+    if likely.is_file() {
+        return Some(likely.to_string_lossy().into_owned());
+    }
+    let mut found = fs::read_dir(dir).ok()?.flatten().map(|entry| entry.path().join("role")).filter(|path| path.is_file());
+    match (found.next(), found.next()) {
+        (Some(one), None) => Some(one.to_string_lossy().into_owned()),
+        _ => None,
+    }
+}
+
+/// Whether the phone is the host end of the cable now, as the switch says:
+/// None where the switch is not there or will not say.
+pub fn hosting() -> Option<bool> {
+    let said = read_node(Path::new(&role_switch()?).parent()?.to_str()?, "role")?;
+    Some(said == "host")
+}
+
+/// Turn the phone's end of the cable into a host, or back into a device.
+///
+/// This is the one write the recovery makes about charging, and it names no
+/// figure: it says which end of the cable the phone is, which is the kernel's
+/// own word either way. As a host the phone can reach the charger's chip, and
+/// the kernel then asks that chip whether the battery passed its check before
+/// it lets the charge draw more than 2 A; as a device — what it is to start
+/// with, and what it must be again for a computer to see its storage — it
+/// cannot.
+///
+/// The charger may drop the protocol it had negotiated while the cable is
+/// turned around, which is why the switch says so on the page before it is
+/// taken.
+pub fn set_hosting(on: bool) -> Result<(), String> {
+    let path = role_switch().ok_or_else(|| "this phone has no switch for which end of the cable it is".to_owned())?;
+    let word = if on { "host" } else { "device" };
+    fs::write(&path, word).map_err(|e| format!("{path}: {e}"))?;
+    let said = read_node(Path::new(&path).parent().unwrap_or(Path::new("/")).to_str().unwrap_or("/"), "role");
+    let _ = skyward_sys::kmsg(&format!("charging: {path} told {word}, and reads {}", said.as_deref().unwrap_or("?")));
+    Ok(())
 }
 
 fn read_u64(dir: &str, name: &str) -> Option<u64> {

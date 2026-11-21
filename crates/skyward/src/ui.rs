@@ -3250,6 +3250,7 @@ impl Pages<'_> {
             Effect::DeleteImage(path) => self.delete_image(PathBuf::from(path), now)?,
             Effect::StopImage => self.imager.as_ref().context("there is no work on an image to stop")?.stop(),
             Effect::ChargeWatch => self.charge_watch(now)?,
+            Effect::FastCharge(on) => self.fast_charge(on, now)?,
             Effect::Filesystem { name, action } => self.filesystem(&name, action, now)?,
             Effect::Backup { parts, place, compress, verify } => self.back_up(parts, place, compress, verify, now)?,
             Effect::Restore { place, name, parts } => self.restore(place, &name, parts, now)?,
@@ -3779,8 +3780,22 @@ impl Pages<'_> {
         if !self.charge_said {
             self.charge_said = true;
             charge::describe();
+            // The switch is offered only on a phone that carries the node for
+            // it: one without has no way to reach the charger's own chip, and
+            // a switch that could do nothing is worse than none.
+            self.app.state.fast_charge_offered = charge::role_switch().is_some();
         }
         self.app.set_charge_state(charge::reading());
+        Ok(())
+    }
+    /// Turn the phone's end of the cable into a host, or back into a device.
+    /// A failure is said on the page rather than kept to the log, since the
+    /// switch has moved and the phone is not where the page says it is.
+    fn fast_charge(&mut self, on: bool, now: u64) -> Result<()> {
+        if let Err(e) = charge::set_hosting(on) {
+            self.app.state.fast_charge = !on;
+            self.app.report(&e, now);
+        }
         Ok(())
     }
     /// Back the parts chosen up into `place`. An install still stopping may

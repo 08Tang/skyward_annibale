@@ -183,6 +183,7 @@ impl App {
                     Switch::Remember => &mut self.state.remember,
                     Switch::WlanAuto => &mut self.state.wlan_auto,
                     Switch::WlanKeep => &mut self.state.wlan_keep,
+                    Switch::FastCharge => &mut self.state.fast_charge,
                     Switch::Wlan => unreachable!("the WLAN switch is turned above"),
                 };
                 *on = !*on;
@@ -190,6 +191,9 @@ impl App {
                 self.refresh();
                 if switch == Switch::FileTransfer {
                     return vec![Effect::FileTransfer(now_on)];
+                }
+                if switch == Switch::FastCharge {
+                    return vec![Effect::FastCharge(now_on)];
                 }
                 if switch == Switch::Remember {
                     return vec![Effect::Remember(now_on)];

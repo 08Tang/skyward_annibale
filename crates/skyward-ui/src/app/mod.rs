@@ -757,6 +757,10 @@ pub enum Effect {
     StopImage,
     /// Read the charger again, so the page shows what it is delivering now.
     ChargeWatch,
+    /// Turn the phone's end of the cable into a host, or back into a device:
+    /// what lets the charger's own chip be reached, and the phone's charging
+    /// negotiated past the plain protocol it settles for otherwise.
+    FastCharge(bool),
     /// Do `action` to the filesystem page's partition by its name, telling
     /// how it goes with [`App::part_work_started`], [`App::part_listed`],
     /// [`App::part_at`], [`App::part_ended`] and [`App::part_work_ended`];
