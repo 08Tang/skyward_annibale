@@ -136,6 +136,15 @@ pub fn volts(uv: u64) -> String {
     format!("{:.2}V", uv as f64 / 1e6)
 }
 
+/// A current given in microamps, to the hundredth where it is not whole:
+/// `2A`, `0.31A`, `5.94A`.
+pub fn amps(ua: u64) -> String {
+    match ua % 1_000_000 {
+        0 => format!("{}A", ua / 1_000_000),
+        _ => format!("{:.2}A", ua as f64 / 1e6),
+    }
+}
+
 /// A power given in tenths of a watt, to the tenth where it is not whole:
 /// `18`, `6.2`, `100`.
 pub fn watts(tenths: u32) -> String {

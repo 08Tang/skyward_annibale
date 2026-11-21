@@ -323,8 +323,7 @@ impl App {
             }
             // Opening the page reads the charger, so it says what the phone is
             // taking rather than what it was taking when last looked at.
-            Screen::Charge => vec![Effect::ChargeWatch],
-            // The table is read from the same place the filesystem page reads
+            Screen::Charge => vec![Effect::ChargeWatch],            // The table is read from the same place the filesystem page reads
             // it, and a reading already in hand shows at once.
             Screen::Partitions => {
                 if matches!(self.state.filesystems, Some(Ok(_))) {

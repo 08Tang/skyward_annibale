@@ -478,16 +478,6 @@ pub enum Action {
     ImageShows(bool),
     /// Send an image to internal storage, or to a USB drive.
     ImageTo(bool),
-    /// Charge as the charger gives it, under a ceiling that falls as the
-    /// battery warms, or at a ceiling of the owner's own.
-    ChargeAs(ChargeMode),
-    /// Set the ceiling custom charging keeps under, in watts.
-    ChargeWatts(f32),
-    /// Watch the battery's warmth while charging, or stop watching it.
-    ChargeGuard(bool),
-    /// Set the warmth, in tenths of a degree, above which the guard drops to
-    /// a trickle, or above which it stops charging.
-    ChargeAt { stop: bool, tenths: i32 },
     /// Join the network at this place in the list of those in range, or
     /// open the page of the one joined.
     JoinNetwork(usize),
@@ -765,12 +755,7 @@ pub enum Effect {
     DeleteImage(String),
     /// Stop work on an image.
     StopImage,
-    /// Put the charge setting in place on the phone: write the ceiling it
-    /// asks for to the charge nodes, or give them back to the charger where
-    /// it asks for nothing.
-    ChargeSet,
-    /// Read the charger again, and hold charging to the setting if the
-    /// battery has warmed past what the setting allows.
+    /// Read the charger again, so the page shows what it is delivering now.
     ChargeWatch,
     /// Do `action` to the filesystem page's partition by its name, telling
     /// how it goes with [`App::part_work_started`], [`App::part_listed`],

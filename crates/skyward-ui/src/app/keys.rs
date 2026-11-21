@@ -18,9 +18,6 @@ impl App {
                     let said = match which {
                         Slider::Brightness => ["按音量键调节亮度，按电源键完成", "按音量鍵調整亮度，按電源鍵完成", "Set the brightness with the volume keys, then press the power key"],
                         Slider::Vibration => ["按音量键调节振动强度，按电源键完成", "按音量鍵調整震動強度，按電源鍵完成", "Set the vibration with the volume keys, then press the power key"],
-                        // The charge page's sliders are dragged rather than
-                        // stepped with the keys.
-                        _ => ["用滑块调节，调好后点按空白处", "用滑桿調整，調好後點按空白處", "Drag the slider, then tap away"],
                     };
                     self.say(l.pick(said), now);
                 }
@@ -65,11 +62,11 @@ impl App {
         if self.adjusting {
             if let Some(Spot { stop: Stop::Hit(Action::Slider(which)), rect, .. }) = self.lit() {
                 let level = self.level(which) + if down { -SLIDER_STEP } else { SLIDER_STEP };
-                let mut fx = self.set_level(&self.theme(), which, rect, level);
+                self.set_level(&self.theme(), which, rect, level);
                 if which == Slider::Vibration && self.state.vibrate {
-                    fx.push(Effect::Haptic);
+                    return vec![Effect::Haptic];
                 }
-                return fx;
+                return Vec::new();
             }
             return Vec::new();
         }

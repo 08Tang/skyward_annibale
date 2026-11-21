@@ -1,5 +1,5 @@
 use crate::app::{
-    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, CHARGE_GAP_TENTHS, CHARGE_SLOW_LEAST, CHARGE_STOP_MOST, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST, ChargeMode, ChargeSetting, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock, Guard,
+    ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
@@ -369,10 +369,10 @@ pub fn home(cx: &Ctx) -> Frame {
         system_opens.push(Action::Open(Screen::Systems));
     }
     // 充电就排在高级工具上面：它比高级工具里的东西常用，也不该藏在里面。
-    // 充电时右侧显示当前功率，一眼能看出快不快。
-    let charging = match &cx.info.battery {
+    // 充电时右侧显示充电器当前送来的功率，和充电页上的数字是同一个。
+    let charging = match &i.battery {
         Some(b) if b.plugged => {
-            let value = b.watts().map_or_else(|| l.pick(["充电中", "充電中", "Charging"]).to_owned(), |w| fmt::watts((w * 10.0).round() as u32));
+            let value = s.charge.now.map_or_else(|| l.pick(["充电中", "充電中", "Charging"]).to_owned(), fmt::watts);
             Some(value)
         }
         _ => None,
@@ -1183,168 +1183,96 @@ pub fn power_off(cx: &Ctx) -> Frame {
     Frame::new(t, c, out, l.pick(POWER_OFF), top)
 }
 
-/// How fast the phone takes power from its charger.
+/// What the charger is doing: the power it delivers, the protocol it
+/// negotiated, and the battery it fills.
 ///
-/// The page opens with what the charger is giving now, since that is the
-/// number the rest of it is judged against: a ceiling above what the charger
-/// delivers changes nothing, and a phone whose charger gives six watts
-/// charges no faster for being asked for a hundred. Under it are the three
-/// ways to charge, and under those whatever the way chosen needs.
+/// This page reads and does not set. On this phone the nodes that would hold
+/// a charge limit are policy votes rather than figures, and a number written
+/// to them is refused, so the recovery cannot change how fast the phone
+/// charges — the kernel and the charger settle that between them before the
+/// page is ever drawn. What the page can do is say what they settled on,
+/// which is what a recovery is asked for when a charge looks slow.
 pub fn charge(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let mut c = long_page(cx);
-    let mut out = Vec::new();
+    let out = Vec::new();
     let top = t.m.content_top;
     let ch = &s.charge;
+    let b = cx.info.battery.as_ref();
 
-    // What the charger gives, and what the guard is doing about it. The
-    // number comes from the runtime's own reading of the charge nodes, so it
-    // is what the phone is taking rather than what it was asked to take.
-    let now = match ch.state.now {
+    // What the charger is giving, and the most it has given this charge: the
+    // two numbers that say how fast this charge is running.
+    let now = match ch.now {
         Some(tenths) => fmt::watts(tenths),
+        None if b.is_some_and(|b| b.plugged) => l.pick(["读取中", "讀取中", "Reading"]).to_owned(),
         None => l.pick(["未接充电器", "未接充電器", "No charger"]).to_owned(),
     };
-    let most = match ch.state.most {
+    let most = match ch.most {
         Some(tenths) => fmt::watts(tenths),
         None => "\u{2014}".to_owned(),
     };
     let y = widgets::section_first(&mut c, t, f, top, l.pick(["现在", "現在", "Now"]));
-    let rows = [Row::new(&now).icon(BLUE, Icon::Battery).trail(Trail::Value(&most))];
+    let rows = [
+        Row::new(&now).icon(BLUE, Icon::Battery).trail(Trail::Value(&most)),
+    ];
     let list = widgets::list(&mut c, t, f, y, &rows);
     let mut y = list.bottom;
 
-    // The three ways to charge, the one in force marked as chosen.
-    y = widgets::section(&mut c, t, f, y, l.pick(["充电方式", "充電方式", "How to charge"]));
-    let modes = [
-        (ChargeMode::Default, l.pick(["默认", "預設", "Default"]), l.pick(["充电器给多少就取多少", "充電器給多少就取多少", "Take what the charger gives"])),
-        (ChargeMode::Smart, l.pick(["智能", "智慧", "Smart"]), l.pick(["随温度升高逐步降低功率", "隨溫度升高逐步降低功率", "Less power as the battery warms"])),
-        (ChargeMode::Custom, l.pick(["自定义", "自訂", "Custom"]), l.pick(["自己决定功率与温度限制", "自己決定功率與溫度限制", "Your own power and limits"])),
-    ];
-    let mode_rows: Vec<Row> = modes
-        .iter()
-        .map(|(mode, name, note)| Row::new(name).subtitle(note).trail(Trail::Check(*mode == ch.mode)))
-        .collect();
-    let mode_list = widgets::list(&mut c, t, f, y, &mode_rows);
-    out.extend(hits(&mode_list.rows, &[Action::ChargeAs(ChargeMode::Default), Action::ChargeAs(ChargeMode::Smart), Action::ChargeAs(ChargeMode::Custom)]));
-    y = mode_list.bottom;
-
-    // What the way chosen needs: a ceiling for custom, and the guard for
-    // both of the others. The default asks for nothing more, since it leaves
-    // the charger to do as it will.
-    if ch.mode != ChargeMode::Default {
-        if ch.mode == ChargeMode::Custom {
-            let watts = fmt::watts((ch.watts * 10.0).round() as u32);
-            // The card's caption names the slider, so the line under it says
-            // what it is set to and nothing else.
-            let below = Row::new(l.pick(["设定功率", "設定功率", "Set to"])).trail(Trail::Value(&watts));
-            let block = widgets::slider_card(&mut c, t, f, y, Caption::Sun, l.pick(["充电功率", "充電功率", "Charge power"]), self_level(ch, Slider::ChargeWatts), Some(below));
-            out.push(Hit { rect: block.track, action: Action::Slider(Slider::ChargeWatts) });
-            y = block.bottom;
-        } else {
-            // Smart says what it is doing, since its ceiling is not the
-            // owner's to set.
-            let tenths = cx.info.battery.as_ref().and_then(|b| b.temp);
-            let ceiling = ChargeMode::smart_watts(tenths.unwrap_or(0));
-            let now = fmt::watts((ceiling * 10.0).round() as u32);
-            let note = l.pick([
-                format!("电池温度升高时逐步降到 {}，不会停充", now),
-                format!("電池溫度升高時逐步降到 {}，不會停充", now),
-                format!("Falls to {} as the battery warms, and never stops", now),
-            ]);
-            y = widgets::section(&mut c, t, f, y, l.pick(["智能充电", "智慧充電", "Smart charging"]));
-            y = widgets::footnote(&mut c, t, f, y, &note);
-        }
-
-        // The guard: a switch, and the two warmth lines it holds to.
-        y = widgets::section(&mut c, t, f, y, l.pick(["温度保护", "溫度保護", "Temperature guard"]));
-        let guard_row = Row::new(l.pick(["温度保护", "溫度保護", "Temperature guard"]))
-            .subtitle(l.pick(["电池过热时自动降速或停充", "電池過熱時自動降速或停充", "Slow or stop charging when the battery is hot"]))
-            .trail(Trail::Switch(ch.guarded));
-        let guard_list = widgets::list(&mut c, t, f, y, &[guard_row]);
-        out.extend(hits(&guard_list.rows, &[Action::ChargeGuard(!ch.guarded)]));
-        y = guard_list.bottom;
-
-        // The two cards stand one under the other with no section heading of
-        // their own: each card's caption names it, and a heading saying the
-        // same words over it would only take room.
-        let slow = fmt::celsius(ch.slow_at);
-        let stop = fmt::celsius(ch.stop_at);
-        let slow_below = Row::new(l.pick(["降到 5W", "降到 5W", "Down to 5 W"])).trail(Trail::Value(&slow));
-        let stop_below = Row::new(l.pick(["停止充电", "停止充電", "Charging stops"])).trail(Trail::Value(&stop));
-        let slow_card = widgets::slider_card(
-            &mut c,
-            t,
-            f,
-            y,
-            Caption::Thermometer,
-            l.pick(["降速温度", "降速溫度", "Slow down at"]),
-            self_level(ch, Slider::ChargeSlow),
-            Some(slow_below),
-        );
-        if ch.guarded {
-            out.push(Hit { rect: slow_card.track, action: Action::Slider(Slider::ChargeSlow) });
-        }
-        y = slow_card.bottom;
-        let stop_card = widgets::slider_card(
-            &mut c,
-            t,
-            f,
-            y,
-            Caption::Thermometer,
-            l.pick(["停止温度", "停止溫度", "Stop at"]),
-            self_level(ch, Slider::ChargeStop),
-            Some(stop_below),
-        );
-        if ch.guarded {
-            out.push(Hit { rect: stop_card.track, action: Action::Slider(Slider::ChargeStop) });
-        }
-        y = stop_card.bottom;
-        if !ch.guarded {
-            let why = l.pick(["打开温度保护后才能调整", "開啟溫度保護後才能調整", "Turn the guard on to change these"]);
-            y = widgets::footnote(&mut c, t, f, y, why);
-        }
-
-        // What the guard is doing right now, where it is doing anything.
-        let said = match ch.state.guard {
-            Guard::Clear => None,
-            Guard::Slowed => Some(l.pick(["电池偏热，正在降速充电", "電池偏熱，正在降速充電", "The battery is warm: charging slowly"])),
-            Guard::Stopped => Some(l.pick(["电池过热，已停止充电", "電池過熱，已停止充電", "The battery is hot: charging stopped"])),
-        };
-        if let Some(said) = said {
-            let rows = [Row::new(said).icon(ORANGE, Icon::Battery).tint(t.pal.danger)];
-            y = widgets::list(&mut c, t, f, y + t.m.dp(10.0), &rows).bottom;
-        }
+    // What the charger negotiated, and what it says it can give. These are
+    // the kernel's own words, left as it writes them: a protocol name is a
+    // name, and translating it would only make it harder to look up.
+    let mut charger = Vec::new();
+    if let Some(protocol) = &ch.protocol {
+        charger.push((l.pick(["协议", "協定", "Protocol"]), protocol.clone()));
+    }
+    if let Some(rated) = ch.rated {
+        charger.push((l.pick(["充电器标称", "充電器標稱", "Charger rated"]), fmt::watts(rated * 10)));
+    }
+    if let Some(uv) = ch.volts {
+        charger.push((l.pick(["输入电压", "輸入電壓", "Input voltage"]), fmt::volts(uv)));
+    }
+    if let Some(ua) = ch.amps {
+        charger.push((l.pick(["输入电流", "輸入電流", "Input current"]), fmt::amps(ua)));
+    }
+    if !charger.is_empty() {
+        y = widgets::section(&mut c, t, f, y, l.pick(["充电器", "充電器", "Charger"]));
+        y = widgets::info_card(&mut c, t, f, y, &charger);
     }
 
-    // What the setting cannot do, said plainly: the ceiling is a ceiling,
-    // and the charger has the last word.
-    let warn = l.pick([
-        "功率上限只是上限：实际充电速度由充电器和数据线决定，超过它们能给的值不会有任何作用。提高功率会让手机更热，请留意电池温度。",
-        "功率上限只是上限：實際充電速度由充電器和資料線決定，超過它們能給的值不會有任何作用。提高功率會讓手機更熱，請留意電池溫度。",
-        "A ceiling is only a ceiling: the charger and the cable still decide the speed, and asking for more than they give does nothing. More power means more heat, so watch the battery's temperature.",
+    // The battery being filled: what it is at, how warm it is, and what the
+    // charge is doing to it. The warmth matters more here than anywhere else
+    // on the pages, since a fast charge is what makes it.
+    if let Some(b) = b {
+        let mut cells = vec![(l.pick(["电量", "電量", "Level"]), fmt::level(l, b))];
+        if let Some(v) = b.temp {
+            cells.push((l.pick(["温度", "溫度", "Temperature"]), fmt::celsius(v)));
+        }
+        if let Some(w) = b.watts() {
+            cells.push((l.pick(["电池功率", "電池功率", "Battery power"]), fmt::watts((w * 10.0).round() as u32)));
+        }
+        if let Some(v) = b.voltage {
+            cells.push((l.pick(["电池电压", "電池電壓", "Battery voltage"]), fmt::volts(v)));
+        }
+        if let Some(v) = fmt::wear(l, b) {
+            cells.push((l.pick(["健康", "健康狀態", "Health"]), v));
+        }
+        if let Some(v) = b.cycles {
+            cells.push((l.pick(["充电循环", "充電循環", "Charge cycles"]), tr!(l, "{v} 次", "{v} 次", "{v}")));
+        }
+        y = widgets::section(&mut c, t, f, y, l.pick(["电池", "電池", "Battery"]));
+        y = widgets::info_card(&mut c, t, f, y, &cells);
+    }
+
+    // What the page cannot do, said plainly, since a page about charging that
+    // stayed silent would look as if it could make the phone charge faster.
+    let note = l.pick([
+        "recovery 无法改变充电速度。快充由内核与充电器协商决定，这里只显示协商的结果。",
+        "recovery 無法改變充電速度。快充由核心與充電器協商決定，這裡只顯示協商的結果。",
+        "The recovery cannot change how fast the phone charges: the kernel and the charger settle that between them, and this page only shows what they settled on.",
     ]);
-    let y = widgets::section(&mut c, t, f, y, l.pick(["注意", "注意", "Note"]));
-    let mut y = widgets::footnote(&mut c, t, f, y, warn);
-    if ch.state.trouble {
-        let missing = l.pick([
-            "这台手机没有可写的充电节点，功率设置不会生效。",
-            "這台手機沒有可寫的充電節點，功率設定不會生效。",
-            "This phone has no charge nodes to write: the power setting will do nothing.",
-        ]);
-        y = widgets::footnote(&mut c, t, f, y, missing);
-    }
+    y = widgets::footnote(&mut c, t, f, y + t.m.dp(10.0), note);
 
     Frame::new(t, fit(c, t, y), out, l.pick(CHARGE), top)
-}
-
-/// Where a charge slider stands on the page, as the slider is drawn.
-fn self_level(ch: &ChargeSetting, which: Slider) -> f32 {
-    let (value, least, most) = match which {
-        Slider::ChargeWatts => (ch.watts, CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST),
-        Slider::ChargeSlow => (ch.slow_at as f32, CHARGE_SLOW_LEAST as f32, (ch.stop_at - CHARGE_GAP_TENTHS) as f32),
-        _ => (ch.stop_at as f32, (ch.slow_at + CHARGE_GAP_TENTHS) as f32, CHARGE_STOP_MOST as f32),
-    };
-    if most <= least { 0.0 } else { ((value - least) / (most - least)).clamp(0.0, 1.0) }
 }
 
 /// Installing, opened from the home page: the system on the phone now, and

@@ -468,42 +468,6 @@ impl App {
                 self.state.image_to_drive = drive;
                 self.refresh();
             }
-            // Every change to how the phone charges is put in place at once:
-            // the page shows what the phone is doing, not what it was asked
-            // to do, and the guard acts on the battery's warmth as it rises.
-            Action::ChargeAs(mode) => {
-                self.state.charge.mode = mode;
-                self.refresh();
-                return vec![Effect::ChargeSet];
-            }
-            Action::ChargeWatts(watts) => {
-                self.state.charge.watts = watts.clamp(CHARGE_WATTS_LEAST, CHARGE_WATTS_MOST);
-                self.refresh();
-                return vec![Effect::ChargeSet];
-            }
-            Action::ChargeGuard(on) => {
-                self.state.charge.guarded = on;
-                self.refresh();
-                return vec![Effect::ChargeSet];
-            }
-            Action::ChargeAt { stop, tenths } => {
-                // The two lines keep their order: the trickle is always below
-                // the stop, with a step between them, so the guard can never
-                // be asked to do both at once.
-                let (least, most) = if stop {
-                    (self.state.charge.slow_at + CHARGE_GAP_TENTHS, CHARGE_STOP_MOST)
-                } else {
-                    (CHARGE_SLOW_LEAST, self.state.charge.stop_at - CHARGE_GAP_TENTHS)
-                };
-                let tenths = tenths.clamp(least, most);
-                if stop {
-                    self.state.charge.stop_at = tenths;
-                } else {
-                    self.state.charge.slow_at = tenths;
-                }
-                self.refresh();
-                return vec![Effect::ChargeSet];
-            }
             Action::ChooseFs(choice) => {
                 let row = self.fs_row().expect("the page of a partition shows one that was read");
                 let action = match choice {
