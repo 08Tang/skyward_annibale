@@ -3257,7 +3257,7 @@ impl Pages<'_> {
             Effect::DeleteImage(path) => self.delete_image(PathBuf::from(path), now)?,
             Effect::StopImage => self.imager.as_ref().context("there is no work on an image to stop")?.stop(),
             Effect::ChargeWatch => self.charge_watch(now)?,
-            Effect::ChargeStep(mode) => self.charge_step(mode, now)?,
+            Effect::ChargeStep(mode) => self.charge_step(mode)?,
             Effect::Filesystem { name, action } => self.filesystem(&name, action, now)?,
             Effect::Backup { parts, place, compress, verify } => self.back_up(parts, place, compress, verify, now)?,
             Effect::Restore { place, name, parts } => self.restore(place, &name, parts, now)?,
@@ -3781,7 +3781,7 @@ impl Pages<'_> {
     /// Read the charger again, so the page shows what it is delivering now.
     /// Runs with the battery's own reading, once a second, and with the page
     /// opening.
-    fn charge_watch(&mut self, now: u64) -> Result<()> {
+    fn charge_watch(&mut self, _now: u64) -> Result<()> {
         // What every node answers is said once, so a page that comes up empty
         // says which node went quiet rather than leaving it to be guessed at.
         if !self.charge_said {
@@ -3812,7 +3812,7 @@ impl Pages<'_> {
     /// A step that names a program this phone does not carry, or that the
     /// recovery did not start, has nothing to start: the phone charges as
     /// the programs it does carry let it.
-    fn charge_step(&mut self, mode: ChargeMode, now: u64) -> Result<()> {
+    fn charge_step(&mut self, mode: ChargeMode) -> Result<()> {
         // The say over each is kept in the order the programs were started,
         // the charging service before the secret keeper, so the step decides
         // each by the place it was started in. The say is not given up here:
@@ -3835,7 +3835,6 @@ impl Pages<'_> {
             mode.name(),
             self.charging.iter().filter(|r| r.kept()).count()
         ))?;
-        let _ = now;
         Ok(())
     }
     /// Back the parts chosen up into `place`. An install still stopping may
