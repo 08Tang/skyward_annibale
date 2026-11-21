@@ -3784,6 +3784,7 @@ impl Pages<'_> {
             // it: one without has no way to reach the charger's own chip, and
             // a switch that could do nothing is worse than none.
             self.app.state.fast_charge_offered = charge::role_switch().is_some();
+            self.app.state.fast_charge = charge::hosting().unwrap_or(false);
         }
         self.app.set_charge_state(charge::reading());
         Ok(())
