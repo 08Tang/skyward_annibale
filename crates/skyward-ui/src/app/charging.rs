@@ -67,27 +67,27 @@ impl ChargeMode {
 /// What the charge page holds, and what the runtime has read back from the
 /// phone about it.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Charge {
+pub struct Charging {
     pub mode: ChargeMode,
     /// The ceiling custom charging keeps under, in watts.
     pub watts: f32,
     /// Whether the guard watches the battery's warmth.
     pub guarded: bool,
     /// The warmth, in tenths of a degree, above which the guard drops to
-    /// [`Charge::slow_watts`].
+    /// [`Charging::slow_watts`].
     pub slow_at: i32,
     /// The warmth, in tenths of a degree, above which the guard stops
     /// charging altogether.
     pub stop_at: i32,
     /// What the runtime last made of the phone's charger: what it read from
     /// the charge nodes, and what it wrote back.
-    pub state: ChargeState,
+    pub state: ChargeNow,
 }
 
 /// What the runtime reads from the phone's charger, and what it last did
 /// about it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ChargeState {
+pub struct ChargeNow {
     /// The power the charger is delivering now, in tenths of a watt, as the
     /// runtime last read it. None while nothing is plugged in, or while the
     /// phone cannot say.
@@ -113,15 +113,15 @@ pub enum Guard {
     Stopped,
 }
 
-impl Default for Charge {
+impl Default for Charging {
     fn default() -> Self {
         // A hundred watts, which is what the phone is rated for, and a guard
         // that leaves a margin below the temperatures a battery is hurt at.
-        Self { mode: ChargeMode::Default, watts: 100.0, guarded: true, slow_at: 420, stop_at: 450, state: ChargeState::default() }
+        Self { mode: ChargeMode::Default, watts: 100.0, guarded: true, slow_at: 420, stop_at: 450, state: ChargeNow::default() }
     }
 }
 
-impl Charge {
+impl Charging {
     /// The ceiling this setting keeps under, in watts, or None where the
     /// charger is left to do as it will.
     pub fn ceiling(&self, tenths: Option<i32>) -> Option<f32> {
@@ -163,7 +163,7 @@ impl Charge {
 
 impl App {
     /// Take in what the runtime read from the charger.
-    pub fn set_charge_state(&mut self, state: ChargeState) {
+    pub fn set_charge_state(&mut self, state: ChargeNow) {
         if self.state.charge.state != state {
             self.state.charge.state = state;
             self.refresh();
@@ -172,7 +172,7 @@ impl App {
 
     /// Set how the phone should charge, and ask the runtime to put it in
     /// place.
-    pub fn set_charge(&mut self, charge: Charge) {
+    pub fn set_charge(&mut self, charge: Charging) {
         if self.state.charge != charge {
             self.state.charge = charge;
             self.refresh();
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn the_default_leaves_the_charger_alone() {
-        let charge = Charge::default();
+        let charge = Charging::default();
         assert_eq!(charge.ceiling(Some(500)), None, "no ceiling");
         assert_eq!(charge.wanted(Some(500)), None, "and nothing asked for");
         assert_eq!(charge.guard_at(Some(600)), Guard::Clear, "and nothing held back, however warm");
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn smart_falls_as_the_battery_warms() {
-        let charge = Charge { mode: ChargeMode::Smart, ..Charge::default() };
+        let charge = Charging { mode: ChargeMode::Smart, ..Charging::default() };
         assert_eq!(charge.ceiling(Some(300)), Some(100.0), "cool: the whole of it");
         assert_eq!(charge.ceiling(Some(360)), Some(50.0), "warming: half");
         assert_eq!(charge.ceiling(Some(390)), Some(30.0), "warmer: less");
@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn custom_asks_for_what_it_is_set_to_until_the_guard_speaks() {
-        let charge = Charge { mode: ChargeMode::Custom, watts: 60.0, slow_at: 400, stop_at: 450, ..Charge::default() };
+        let charge = Charging { mode: ChargeMode::Custom, watts: 60.0, slow_at: 400, stop_at: 450, ..Charging::default() };
         assert_eq!(charge.wanted(Some(300)), Some(60.0), "cool: what it asked for");
         assert_eq!(charge.guard_at(Some(399)), Guard::Clear);
         assert_eq!(charge.wanted(Some(400)), Some(5.0), "over the slow line: a trickle");
@@ -212,14 +212,14 @@ mod tests {
 
     #[test]
     fn a_guard_turned_off_holds_nothing_back() {
-        let charge = Charge { mode: ChargeMode::Custom, watts: 60.0, guarded: false, slow_at: 300, stop_at: 310, ..Charge::default() };
+        let charge = Charging { mode: ChargeMode::Custom, watts: 60.0, guarded: false, slow_at: 300, stop_at: 310, ..Charging::default() };
         assert_eq!(charge.guard_at(Some(900)), Guard::Clear, "however warm it gets");
         assert_eq!(charge.wanted(Some(900)), Some(60.0));
     }
 
     #[test]
     fn a_phone_that_cannot_say_how_warm_it_is_is_charged_as_asked() {
-        let charge = Charge { mode: ChargeMode::Custom, watts: 60.0, ..Charge::default() };
+        let charge = Charging { mode: ChargeMode::Custom, watts: 60.0, ..Charging::default() };
         assert_eq!(charge.guard_at(None), Guard::Clear, "no warmth read: nothing held back");
         assert_eq!(charge.wanted(None), Some(60.0));
     }

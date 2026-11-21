@@ -22,7 +22,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use skyward_ui::app::{Charge, ChargeMode, ChargeState, Guard};
+use skyward_ui::app::{ChargeMode, ChargeNow, Charging, Guard};
 
 /// Where the charger interface's nodes are, as Xiaomi's phones carry them.
 const INTERFACE: &str = "/sys/class/xm_power/charger/charge_interface";
@@ -85,9 +85,9 @@ fn current_for(watts: f32, uv: u64) -> u64 {
 
 /// Put `charge` in place, giving back what the nodes held before, to be put
 /// back when the setting is left.
-pub fn set(charge: &Charge, tenths: Option<i32>) -> Result<(Undo, ChargeState)> {
+pub fn set(charge: &Charging, tenths: Option<i32>) -> Result<(Undo, ChargeNow)> {
     let mut undo = Undo::default();
-    let mut state = ChargeState::default();
+    let mut state = ChargeNow::default();
     let wanted = charge.wanted(tenths);
 
     let Some(watts) = wanted else {
@@ -168,7 +168,7 @@ pub fn supported() -> bool {
 }
 
 /// The trouble to show where the nodes could not be written, if any.
-pub fn trouble(charge: &Charge) -> Option<String> {
+pub fn trouble(charge: &Charging) -> Option<String> {
     if charge.mode == ChargeMode::Default {
         return None;
     }

@@ -3786,7 +3786,7 @@ impl Pages<'_> {
             if let Some(undo) = self.charge_undo.take() {
                 charge::restore(&undo);
             }
-            self.app.set_charge_state(charge::ChargeState::default());
+            self.app.set_charge_state(charge::ChargeNow::default());
             return Ok(());
         }
         let (undo, mut state) = charge::set(&charge, tenths)?;
