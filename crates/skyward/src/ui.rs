@@ -3773,7 +3773,6 @@ impl Pages<'_> {
         self.app.set_charge_state(charge::reading());
         Ok(())
     }
-
     /// Back the parts chosen up into `place`. An install still stopping may
     /// yet write; a backup waits for it.
     fn back_up(&mut self, parts: [bool; 4], place: Place, compress: bool, verify: bool, now: u64) -> Result<()> {        ensure!(self.backuper.is_none(), "a backup or restore is under way already");

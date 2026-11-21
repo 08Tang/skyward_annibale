@@ -31,10 +31,18 @@ const LEAST_UV: u64 = 3_000_000;
 /// current it comes at, the protocol negotiated, and what the charger says
 /// it is rated for.
 ///
+/// Nothing plugged in reads as None, which is what tells the page to forget
+/// what the last charge gave: a charger that is present but has no figure
+/// for its power yet is a gap in the reading, while an absent one is the end
+/// of the charge.
+///
 /// The power is read from the charger's own side where the phone tells it
 /// there, since that is what the charger delivers; where it says nothing,
 /// the battery's own current and voltage stand in.
-pub fn reading() -> ChargeNow {
+pub fn reading() -> Option<ChargeNow> {
+    if !plugged() {
+        return None;
+    }
     let volts = read_u64(USB, "voltage_now").filter(|&uv| uv >= LEAST_UV);
     let amps = read_i64(USB, "current_now").map(|ua| ua.unsigned_abs()).filter(|&ua| ua != 0);
     let now = match (amps, volts) {
@@ -44,20 +52,20 @@ pub fn reading() -> ChargeNow {
             _ => None,
         },
     };
-    ChargeNow {
+    Some(ChargeNow {
         now,
         most: now,
         protocol: read_node(COMMON, "real_type").filter(|s| !s.is_empty()),
         rated: read_u64(COMMON, "power_max").map(|w| w as u32).filter(|&w| w > 0),
         volts: volts.or_else(|| read_u64(BATTERY, "voltage_now").filter(|&uv| uv >= LEAST_UV)),
         amps,
-    }
+    })
 }
 
-/// Whether the phone carries the nodes the page reads. A phone without them
-/// still charges; the page just has less to say about it.
-pub fn supported() -> bool {
-    Path::new(USB).is_dir() || Path::new(BATTERY).is_dir()
+/// Whether a charger is plugged in, as the battery's own status says.
+fn plugged() -> bool {
+    matches!(read_node(BATTERY, "status").as_deref(), Some("Charging" | "Full" | "Not charging"))
+        || read_u64(USB, "present").is_some_and(|p| p != 0)
 }
 
 fn read_node(dir: &str, name: &str) -> Option<String> {

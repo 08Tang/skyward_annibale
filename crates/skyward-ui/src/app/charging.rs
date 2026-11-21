@@ -37,12 +37,23 @@ pub struct ChargeNow {
 }
 
 impl App {
-    /// Take in what the runtime read from the charger.
+    /// Take in what the runtime read from the charger, or None where nothing
+    /// is plugged in.
     ///
     /// The most the charger has given is kept here rather than by the
     /// runtime, since it is a fact about this charge and not about the phone:
     /// it rises as the charge does, and is forgotten when the charger goes.
-    pub fn set_charge_state(&mut self, mut state: ChargeNow) {
+    /// A charger that is plugged in but says nothing of its power leaves the
+    /// most where it stands, since that is a gap in the reading rather than
+    /// the end of the charge.
+    pub fn set_charge_state(&mut self, state: Option<ChargeNow>) {
+        let Some(mut state) = state else {
+            if self.state.charge != ChargeNow::default() {
+                self.state.charge = ChargeNow::default();
+                self.refresh();
+            }
+            return;
+        };
         state.most = match (self.state.charge.most, state.now) {
             (Some(most), Some(now)) => Some(most.max(now)),
             (most, now) => most.or(now),
@@ -62,27 +73,27 @@ mod tests {
     #[test]
     fn the_most_the_charger_gave_is_kept_as_the_charge_rises_and_falls() {
         let mut app = App::new(Screen::Home, W, H, PPD);
-        app.set_charge_state(ChargeNow { now: Some(200), ..ChargeNow::default() });
+        app.set_charge_state(Some(ChargeNow { now: Some(200), ..ChargeNow::default() }));
         assert_eq!(app.state.charge.most, Some(200), "the first reading is the most so far");
-        app.set_charge_state(ChargeNow { now: Some(500), ..ChargeNow::default() });
+        app.set_charge_state(Some(ChargeNow { now: Some(500), ..ChargeNow::default() }));
         assert_eq!(app.state.charge.most, Some(500), "a higher reading raises it");
-        app.set_charge_state(ChargeNow { now: Some(300), ..ChargeNow::default() });
+        app.set_charge_state(Some(ChargeNow { now: Some(300), ..ChargeNow::default() }));
         assert_eq!(app.state.charge.most, Some(500), "and a lower one leaves it standing");
     }
 
     #[test]
     fn a_charger_that_says_nothing_leaves_the_most_where_it_was() {
         let mut app = App::new(Screen::Home, W, H, PPD);
-        app.set_charge_state(ChargeNow { now: Some(400), ..ChargeNow::default() });
-        app.set_charge_state(ChargeNow { now: None, ..ChargeNow::default() });
+        app.set_charge_state(Some(ChargeNow { now: Some(400), ..ChargeNow::default() }));
+        app.set_charge_state(Some(ChargeNow { now: None, ..ChargeNow::default() }));
         assert_eq!(app.state.charge.most, Some(400), "no reading is not a reading of nothing");
     }
 
     #[test]
     fn the_charger_going_forgets_what_it_gave() {
         let mut app = App::new(Screen::Home, W, H, PPD);
-        app.set_charge_state(ChargeNow { now: Some(400), ..ChargeNow::default() });
-        app.set_charge_state(ChargeNow::default());
+        app.set_charge_state(Some(ChargeNow { now: Some(400), ..ChargeNow::default() }));
+        app.set_charge_state(None);
         assert_eq!(app.state.charge, ChargeNow::default(), "nothing plugged in: nothing to say");
     }
 }
