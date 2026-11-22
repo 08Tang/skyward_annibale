@@ -111,6 +111,12 @@ const NO_LINE_START: &str = "，。、；：！？）」』》%,.;:!?)]>”";
 /// opens.
 const NO_LINE_END: &str = "（「『《([<“";
 
+/// How far past the width it was given a line may hang punctuation that never
+/// starts a line. A subtitle is drawn without a width of its own, so anything
+/// past this is not hung in the card's own padding but cut off by the panel,
+/// which leaves part of a mark showing where a full stop should be.
+const HANG_ROOM: f32 = 0.0;
+
 pub(crate) fn wrap(c: &Canvas, face: &Face, text: &str, px: f32, max_w: f32) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
@@ -119,8 +125,19 @@ pub(crate) fn wrap(c: &Canvas, face: &Face, text: &str, px: f32, max_w: f32) -> 
         probe.push(ch);
         if !line.is_empty() && c.text_width(face, &probe, px) > max_w {
             if NO_LINE_START.contains(ch) {
-                line.push(ch);
-                continue;
+                // Punctuation that never starts a line hangs past the edge of
+                // the line rather than moving down, but only within
+                // [`HANG_ROOM`]: a row's subtitle is drawn with no width of
+                // its own, so punctuation that hangs further is cut off by the
+                // panel's edge and reads as a mark of its own rather than as
+                // the full stop it is. Past that room the line ends where it
+                // does and the punctuation moves down with the last character
+                // before it, which keeps every line inside its card.
+                let hanging = c.text_width(face, &line, px) + c.text_width(face, &ch.to_string(), px);
+                if hanging <= max_w + HANG_ROOM {
+                    line.push(ch);
+                    continue;
+                }
             }
             // A Latin word, file names, links and English words with an
             // apostrophe among them, moves to the next line whole, unless it
@@ -3171,6 +3188,32 @@ mod tests {
                     if c.text_width(&f.body, word, px) <= max_w {
                         assert!(lines.iter().any(|l| l.contains(word)), "{word:?} broken at {ems} em: {lines:?}");
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_line_is_drawn_past_the_width_it_was_given() {
+        // A row's subtitle is drawn with no width of its own, so a line that
+        // ran past the width it was wrapped to is cut off by the card's edge:
+        // a full stop hung past it showed as a mark of its own, which is what
+        // the charge page's steps read as a plus.
+        let f = crate::font::bundled();
+        let c = Canvas::new(1, 1);
+        let px = 40.0;
+        let texts = [
+            "不启动充电服务，内核把电流限在它给未认证电池的上限，约 5 W。",
+            "启动小米充电服务，内核被告知电池已通过认证，约 12 W。",
+            "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，约 40 W。",
+            "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: about 5 W.",
+        ];
+        for text in texts {
+            for ems in 4..30 {
+                let max_w = ems as f32 * px;
+                for line in wrap(&c, &f.body, text, px, max_w) {
+                    let w = c.text_width(&f.body, &line, px);
+                    assert!(w <= max_w + HANG_ROOM + 0.5, "{line:?} is {w} wide at {ems} em, which is {max_w}: a card would cut it");
                 }
             }
         }

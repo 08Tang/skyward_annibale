@@ -2218,7 +2218,13 @@ impl App {
 
     /// What the page shows changed only in rows `first..end`: draw those
     /// again, and the rest stays as drawn.
-    fn refresh_rows(&mut self, first: u32, end: u32) {
+    ///
+    /// This is what a reading that changes every second should ask for rather
+    /// than [`App::refresh`]: the frame is kept and only the rows named are
+    /// drawn again, where a refresh throws the whole frame away and draws the
+    /// page from the top, which on a long page is a visible stall every time
+    /// a figure changes.
+    pub(crate) fn refresh_rows(&mut self, first: u32, end: u32) {
         if self.frame.is_none() {
             return;
         }

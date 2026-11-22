@@ -46,6 +46,11 @@ impl App {
     /// A charger that is plugged in but says nothing of its power leaves the
     /// most where it stands, since that is a gap in the reading rather than
     /// the end of the charge.
+    ///
+    /// A change is drawn again as rows rather than as a whole page: the
+    /// figures move every second, and a refresh for each of them threw the
+    /// frame away and redrew a long page, which showed as a stall each time a
+    /// digit changed.
     pub fn set_charge_state(&mut self, state: Option<ChargeNow>) {
         let Some(mut state) = state else {
             if self.state.charge != ChargeNow::default() {
@@ -60,7 +65,12 @@ impl App {
         };
         if self.state.charge != state {
             self.state.charge = state;
-            self.refresh();
+            // The rows a charge figure is drawn in: the page's own heading and
+            // the charger and battery cards, from the top of the page down.
+            // Naming them all is what keeps the frame: only these are drawn
+            // again, and the rest of the page stays as it was.
+            let h = self.theme().m.h;
+            self.refresh_rows(0, h);
         }
     }
 }

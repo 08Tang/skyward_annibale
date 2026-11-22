@@ -1482,7 +1482,11 @@ impl<'a> Pages<'a> {
             haptics,
             backlight,
             keeper,
-            charging: crate::take_charging(),
+            // Taken by the first turn that finds them: the bringing-up starts
+            // these programs seconds after the pages are built, so taking them
+            // here would find none and a step chosen later would have nothing
+            // to end or start.
+            charging: Vec::new(),
             shown_clock: String::new(),
             arriving: Some(Incoming::Arrived),
             readings,
@@ -1741,6 +1745,16 @@ impl<'a> Pages<'a> {
             }
         }
         self.app.state.prepared = crate::prepared();
+        // The say over the programs that settle how fast a charge may run is
+        // taken by the first turn that finds it: the bringing-up starts those
+        // programs seconds after the pages are built, and a step chosen before
+        // then would have nothing to end or start.
+        if self.charging.is_empty()
+            && let taken = crate::take_charging()
+            && !taken.is_empty()
+        {
+            self.charging = taken;
+        }
         self.tick(now)?;
         // The opening kept back for the phone's own parts starts the turn they
         // are up, rather than the turn the page asked for it.
