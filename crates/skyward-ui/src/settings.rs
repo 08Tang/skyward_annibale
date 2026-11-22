@@ -5,7 +5,7 @@
 //! a time zone, a part or a place by its name, so a later version that lists
 //! them otherwise reads them the same.
 
-use crate::app::{ChargeMode, Place, State, SCREEN_OFF, TIME_ZONES};
+use crate::app::{ChargeMode, Place, State, SCREEN_OFF, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES};
 use crate::Lang;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};

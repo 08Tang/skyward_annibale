@@ -18,6 +18,7 @@ impl App {
                     let said = match which {
                         Slider::Brightness => ["按音量键调节亮度，按电源键完成", "按音量鍵調整亮度，按電源鍵完成", "Set the brightness with the volume keys, then press the power key"],
                         Slider::Vibration => ["按音量键调节振动强度，按电源键完成", "按音量鍵調整震動強度，按電源鍵完成", "Set the vibration with the volume keys, then press the power key"],
+                        Slider::ThermalLimit => ["按音量键调节电池温度上限，按电源键完成", "按音量鍵調整電池溫度上限，按電源鍵完成", "Set the battery temperature limit with the volume keys, then press the power key"],
                     };
                     self.say(l.pick(said), now);
                 }
