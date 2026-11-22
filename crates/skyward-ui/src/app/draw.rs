@@ -43,10 +43,20 @@ impl App {
                 let band = Band { rows, cols: (0, self.cols) };
                 let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band) };
                 let fresh = pages::render(screen, &cx);
-                let mut canvas = self.frame.take().expect("checked above").canvas;
-                assert_eq!(canvas.h, fresh.canvas.h, "a page drawn again in part is as tall as it was");
-                canvas.replace(&fresh.canvas);
-                self.frame = Some(Frame { canvas, ..fresh });
+                let Some(mut frame) = self.frame.take() else { break };
+                // A page drawn again in part is drawn over the frame there
+                // already is, so it has to be as tall as that frame. A page
+                // whose cards are as tall as what they have to say is not: a
+                // charger card gains or loses a row as the charger comes up or
+                // goes, and the charge figures move while it charges. Rather
+                // than refuse to draw, the frame is let go and the page drawn
+                // whole, which is what a change of height asks for anyway.
+                if frame.canvas.h != fresh.canvas.h {
+                    self.frame = None;
+                    break;
+                }
+                frame.canvas.replace(&fresh.canvas);
+                self.frame = Some(Frame { canvas: frame.canvas, ..fresh });
             }
         }
         if self.frame.is_none() {

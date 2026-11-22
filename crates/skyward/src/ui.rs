@@ -39,7 +39,7 @@ use skyward_sys::sleep::{Sleeper, Slept};
 use skyward_sys::uevent;
 use skyward_systems::Who;
 use skyward_ui::app::{
-    App, Asked, AvbCheck, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ChargeMode, ClashChoice, DATA_OPENING, DATA_PARTITION, DOWNLOADS, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp, FileRow,
+    App, Asked, AvbCheck, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ChargeMode, ChargeNow, ClashChoice, DATA_OPENING, DATA_PARTITION, DOWNLOADS, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp, FileRow,
     FileTask, FsAction, FsRow, Have, Held, INSTALL_UNFINISHED, ImageEnd, ImageFlow, ImagePart, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place, RenameRefused, Screen, Shot, SkywardEnd, SkywardStage,
     Target, USB_DRIVE, UsbDrive, UsbLink, Wipe,
 };
@@ -1255,6 +1255,9 @@ struct Pages<'a> {
     /// Whether what the charge nodes answer has been said, so it is said
     /// once rather than with every reading.
     charge_said: bool,
+    /// Whether a charger or a computer powered the phone as of the last
+    /// reading, so the cable coming out is known as it does.
+    plugged: bool,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1523,6 +1526,7 @@ impl<'a> Pages<'a> {
             backuper: None,
             imager: None,
             charge_said: false,
+            plugged: false,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -1884,21 +1888,35 @@ impl<'a> Pages<'a> {
     fn take_readings(&mut self, now: u64) -> Result<()> {
         for reading in self.readings.taken() {
             match reading {
-                Reading::Battery(battery, at) => {
+                Reading::Battery(battery, charge, at) => {
                     if self.asked.is_some_and(|asked| at >= asked) {
                         self.asked = None;
                     }
                     untaken(&mut self.unread.battery, "the battery", battery.as_ref().err())?;
+                    let was_plugged = self.plugged;
                     if let Ok(battery) = battery
                         && battery != self.info.battery
                     {
                         plug(&mut self.app, &self.info.battery, &battery, now)?;
+                        self.plugged = battery.as_ref().is_some_and(|b| b.plugged);
                         self.info.battery = battery;
                         self.app.refresh();
                     }
-                    // The charger is read again with the battery, so the page
-                    // says what it delivers now rather than when last opened.
-                    self.charge_watch(now)?;
+                    // The cable coming out is what lets a step chosen on the
+                    // charge page reach the phone: the kernel keeps what a
+                    // program told it of a charge for as long as the cable is
+                    // in, so a program the step does not name has to be gone
+                    // before the next plug, not merely asked to stop at the
+                    // time it was chosen.
+                    if was_plugged && !self.plugged {
+                        self.charge_step(self.app.state.charge_mode)?;
+                    }
+                    // What the charger is doing came back with the battery,
+                    // read on the readings thread rather than here: the
+                    // charger's nodes take milliseconds to answer, and reading
+                    // them where the page is drawn was a stall each time a
+                    // charge figure moved.
+                    self.charge_taken(charge, now)?;
                 }
                 Reading::All(all, at) => {
                     if self.asked.is_some_and(|asked| at >= asked) {
@@ -3802,7 +3820,20 @@ impl Pages<'_> {
             self.charge_said = true;
             charge::describe();
         }
-        self.app.set_charge_state(charge::reading());
+        // The charger is read on the readings thread, so asking for a reading
+        // of the battery asks for one of the charger with it.
+        self.readings.ask();
+        self.asked = Some(Instant::now());
+        Ok(())
+    }
+
+    /// Take in what the charger was doing as the readings thread read it.
+    fn charge_taken(&mut self, charge: Option<ChargeNow>, _now: u64) -> Result<()> {
+        if !self.charge_said {
+            self.charge_said = true;
+            charge::describe();
+        }
+        self.app.set_charge_state(charge);
         // The battery's own temperature is still read, since the battery card
         // shows it: what the recovery no longer does is watch it and drop the
         // charge back itself. The phone's own chain and the battery's cutoff
@@ -3827,16 +3858,16 @@ impl Pages<'_> {
     /// recovery did not start, has nothing to start: the phone charges as
     /// the programs it does carry let it.
     fn charge_step(&mut self, mode: ChargeMode) -> Result<()> {
-        // The say over each is kept in the order the programs were started,
-        // the charging service before the secret keeper, so the step decides
-        // each by the place it was started in. The say is not given up here:
-        // a step chosen later has to be able to start a program an earlier
-        // step ended, and the program is started again by the thread that
-        // supervises it.
-        for (i, running) in self.charging.iter().enumerate() {
-            let wanted = match i {
-                0 => mode.charging_service(),
-                _ => mode.secret_keeper(),
+        // Each program is decided by which of the two it is, not by where it
+        // came in the list: the list holds whatever the phone's own init named
+        // that settles a charge, which is not the same phone by phone, and a
+        // phone carrying only one of the two would have had the other's step
+        // taken for it.
+        for running in &self.charging {
+            let wanted = if running.path().contains("micharge") {
+                mode.charging_service()
+            } else {
+                mode.secret_keeper()
             };
             match wanted {
                 true if !running.kept() => running.resume(),

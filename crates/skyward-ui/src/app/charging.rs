@@ -47,10 +47,12 @@ impl App {
     /// most where it stands, since that is a gap in the reading rather than
     /// the end of the charge.
     ///
-    /// A change is drawn again as rows rather than as a whole page: the
-    /// figures move every second, and a refresh for each of them threw the
-    /// frame away and redrew a long page, which showed as a stall each time a
-    /// digit changed.
+    /// A change is drawn as a whole page rather than as rows: the charger
+    /// cards are as tall as what they have to say, and a card gains or loses
+    /// a row as the charger comes up or goes — so a page drawn again in part
+    /// came back a different height, which the drawing refuses. The refresh
+    /// is asked for only where the figures a page shows have changed, which is
+    /// what the comparison above settles.
     pub fn set_charge_state(&mut self, state: Option<ChargeNow>) {
         let Some(mut state) = state else {
             if self.state.charge != ChargeNow::default() {
@@ -65,12 +67,7 @@ impl App {
         };
         if self.state.charge != state {
             self.state.charge = state;
-            // The rows a charge figure is drawn in: the page's own heading and
-            // the charger and battery cards, from the top of the page down.
-            // Naming them all is what keeps the frame: only these are drawn
-            // again, and the rest of the page stays as it was.
-            let h = self.theme().m.h;
-            self.refresh_rows(0, h);
+            self.refresh();
         }
     }
 }

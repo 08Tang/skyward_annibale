@@ -62,6 +62,9 @@ const LIBRARY_PATH: &str = "LD_LIBRARY_PATH";
 /// the next plug, not at once. The page says so.
 #[derive(Clone)]
 pub struct Running {
+    /// The program this is the say over, as it was started, so a step of the
+    /// charge page can tell which of the programs that settle a charge it has.
+    path: String,
     /// Whether the supervising thread is to keep the program running.
     keeping: Arc<AtomicBool>,
     /// The process the program is in, so it can be ended once the thread is
@@ -73,6 +76,10 @@ pub struct Running {
 }
 
 impl Running {
+    /// The program this is the say over.
+    pub fn path(&self) -> &str {
+        &self.path
+    }
     /// Have the program ended, and kept from starting again.
     pub fn stop(&self) {
         self.keeping.store(false, Ordering::SeqCst);
@@ -148,7 +155,7 @@ pub fn start_each(programs: &[Started], libraries: Option<&Path>) -> Result<Vec<
             .name(name)
             .spawn(move || supervise(&s, &who, &given, &thread_keep, &thread_pid))
             .context("start a supervising thread")?;
-        kept.push(Running { keeping: keep, pid, wake: Arc::new(handle.thread().clone()) });
+        kept.push(Running { path: s.path.clone(), keeping: keep, pid, wake: Arc::new(handle.thread().clone()) });
         let waited = Instant::now();
         ready(&waiting)?;
         // How long this program took to say it was up, which is what the

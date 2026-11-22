@@ -817,12 +817,13 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
     // later has to be able to reach the phone without a start of the recovery;
     // the ones the kept step does not name are ended at once, before the page
     // is drawn, so the phone comes up charging as the step says.
+    //
+    // Each is decided by which of the two it is rather than by where it came
+    // in the list, since the list holds whatever this phone's own init named
+    // that settles a charge.
     let mode = charging_mode();
-    for (i, running) in kept.iter().enumerate() {
-        let wanted = match i {
-            0 => mode.charging_service(),
-            _ => mode.secret_keeper(),
-        };
+    for running in &kept {
+        let wanted = if running.path().contains("micharge") { mode.charging_service() } else { mode.secret_keeper() };
         if !wanted {
             running.stop();
         }

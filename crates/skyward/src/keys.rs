@@ -117,7 +117,16 @@ pub fn start(steps: &[Step]) -> Result<Vec<services::Running>> {
         match step {
             Step::Start(program) => {
                 let mut started = services::start_each(std::slice::from_ref(program.as_ref()), None)?;
-                if settles_the_charge(&program.service.path) {
+                // Said so that a phone whose charge steps do nothing says which
+                // of the two programs it carries and whether its own init named
+                // them at all, rather than leaving it to be guessed at.
+                let settles = settles_the_charge(&program.service.path);
+                skyward_sys::kmsg(&format!(
+                    "{} settles how fast a charge may run: {settles}, and the say over it came back {} time(s)",
+                    program.service.path,
+                    started.len()
+                ))?;
+                if settles {
                     kept.append(&mut started);
                 }
             }

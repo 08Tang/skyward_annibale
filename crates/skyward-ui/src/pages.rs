@@ -1228,27 +1228,27 @@ pub fn charge(cx: &Ctx) -> Frame {
                 ChargeMode::Plain,
                 ["默认", "預設", "Default"],
                 [
-                    "不启动充电服务，内核把电流限在它给未认证电池的上限，约 5 W。",
-                    "不啟動充電服務，核心把電流限在它給未認證電池的上限，約 5 W。",
-                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: about 5 W.",
+                    "不启动充电服务，内核把电流限在它给未认证电池的上限，5 W+。",
+                    "不啟動充電服務，核心把電流限在它給未認證電池的上限，5 W+。",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5 W+.",
                 ],
             ),
             (
                 ChargeMode::Fast,
                 ["快充", "快充", "Fast"],
                 [
-                    "启动小米充电服务，内核被告知电池已通过认证，约 12 W。",
-                    "啟動小米充電服務，核心被告知電池已通過認證，約 12 W。",
-                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: about 12 W.",
+                    "启动小米充电服务，内核被告知电池已通过认证，12 W+。",
+                    "啟動小米充電服務，核心被告知電池已通過認證，12 W+。",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 12 W+.",
                 ],
             ),
             (
                 ChargeMode::Fastest,
                 ["超快充", "超快充", "Fastest"],
                 [
-                    "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，约 40 W。",
-                    "再啟動小米的認證行程，充電器通過校驗後可升壓到 PPS 檔，約 40 W。",
-                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: about 40 W.",
+                    "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，40 W+。",
+                    "再啟動小米的認證行程，充電器通過校驗後可升壓到 PPS 檔，40 W+。",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40 W+.",
                 ],
             ),
         ];
