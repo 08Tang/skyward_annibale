@@ -3203,10 +3203,10 @@ mod tests {
         let f = crate::font::bundled();
         let c = Canvas::new(1440, 3200);
         let notes = [
-            "不启动充电服务，内核把电流限在它给未认证电池的上限，约 5 W。",
-            "启动小米充电服务，内核被告知电池已通过认证，约 12 W。",
-            "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，约 40 W。",
-            "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: about 5 W.",
+            "不启动充电服务，内核把电流限在它给未认证电池的上限，5W+。",
+            "启动小米充电服务，内核被告知电池已通过认证，10W+。",
+            "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，40W+。",
+            "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
         ];
         for note in notes {
             let row = Row::new("a step").subtitle(note).trail(Trail::Check(false));

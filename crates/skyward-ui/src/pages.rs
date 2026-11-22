@@ -1228,27 +1228,27 @@ pub fn charge(cx: &Ctx) -> Frame {
                 ChargeMode::Plain,
                 ["默认", "預設", "Default"],
                 [
-                    "不启动充电服务，内核把电流限在它给未认证电池的上限，5 W+。",
-                    "不啟動充電服務，核心把電流限在它給未認證電池的上限，5 W+。",
-                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5 W+.",
+                    "不启动充电服务，内核把电流限在它给未认证电池的上限，5W+。",
+                    "不啟動充電服務，核心把電流限在它給未認證電池的上限，5W+。",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
                 ],
             ),
             (
                 ChargeMode::Fast,
                 ["快充", "快充", "Fast"],
                 [
-                    "启动小米充电服务，内核被告知电池已通过认证，12 W+。",
-                    "啟動小米充電服務，核心被告知電池已通過認證，12 W+。",
-                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 12 W+.",
+                    "启动小米充电服务，内核被告知电池已通过认证，10W+。",
+                    "啟動小米充電服務，核心被告知電池已通過認證，10W+。",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
                 ],
             ),
             (
                 ChargeMode::Fastest,
                 ["超快充", "超快充", "Fastest"],
                 [
-                    "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，40 W+。",
-                    "再啟動小米的認證行程，充電器通過校驗後可升壓到 PPS 檔，40 W+。",
-                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40 W+.",
+                    "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，40W+。",
+                    "再啟動小米的認證行程，充電器通過校驗後可升壓到 PPS 檔，40W+。",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
                 ],
             ),
         ];
@@ -1289,13 +1289,13 @@ pub fn charge(cx: &Ctx) -> Frame {
         let span = f32::from(THERMAL_LIMIT_MOST - THERMAL_LIMIT_LEAST);
         let level = (f32::from(s.thermal_limit - THERMAL_LIMIT_LEAST) / span).clamp(0.0, 1.0);
         // The limit is written into the label, since the card has no value of
-        // its own: the row below it is the switch.
+        // its own: the switch below it is the guard itself.
         let label = format!(
             "{} · {} °C",
             l.pick(["电池温度上限", "電池溫度上限", "Battery temperature limit"]),
             s.thermal_limit
         );
-        let below = Row::new(l.pick(["超出后降低一档并重启", "超出後降低一檔並重啟", "Step down and restart when past"]))
+        let below = Row::new(l.pick(["超出后降低充电档位", "超出後降低充電檔位", "Step the charge down when past"]))
             .trail(Trail::Switch(s.thermal_guard && guarded));
         let card = widgets::slider_card(&mut c, t, f, y + t.m.dp(8.0), Caption::Thermometer, &label, level, Some(below));
         // The limit is the same number whatever the step, so it is drawn as it
@@ -1321,9 +1321,9 @@ pub fn charge(cx: &Ctx) -> Frame {
             y + t.m.dp(8.0),
             if guarded {
                 l.pick([
-                    "电池到这一步温度时，档位降低一档并重启回 recovery，重启后按新的档位充电。默认档不启动任何服务，充电很慢，不会让电池过热，所以默认档下这一项不可调，也不生效。",
-                    "電池到這一步溫度時，檔位降低一檔並重啟回 recovery，重啟後按新的檔位充電。預設檔不啟動任何服務，充電很慢，不會讓電池過熱，所以預設檔下這一項不可調，也不生效。",
-                    "At this temperature the step goes down one and the recovery starts again, charging at the new step. The default step starts no service at all, so its charge is slow enough not to overheat the battery: the guard is neither offered nor obeyed there.",
+                    "开关和温度都是即时生效的：调完就按新温度盯着，电池一到这个温度就把充电档位降一档，然后重启回 recovery 按新档位充电。默认档不启动任何服务，充电很慢，不会让电池过热，所以默认档下这一项不可调，也不生效。",
+                    "開關和溫度都是即時生效的：調完就按新溫度盯著，電池一到這個溫度就把充電檔位降一檔，然後重啟回 recovery 按新檔位充電。預設檔不啟動任何服務，充電很慢，不會讓電池過熱，所以預設檔下這一項不可調，也不生效。",
+                    "The switch and the temperature both take at once: the limit is watched as it is set, and the charge steps down one the moment the battery reaches it, starting the recovery again to charge at the new step. The default step starts no service at all, so its charge is slow enough not to overheat the battery: the guard is neither offered nor obeyed there.",
                 ])
             } else {
                 l.pick([

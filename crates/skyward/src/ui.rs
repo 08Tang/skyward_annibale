@@ -1252,6 +1252,9 @@ struct Pages<'a> {
     /// Whether the last reading found a charger, so the nodes are said again
     /// as one comes or goes.
     charge_present: bool,
+    /// Whether the thermal guard has stepped the charge down this start, so it
+    /// steps down no further before the recovery has started again.
+    stepped_down: bool,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1516,6 +1519,7 @@ impl<'a> Pages<'a> {
             imager: None,
             charge_said: false,
             charge_present: false,
+            stepped_down: false,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -3836,6 +3840,13 @@ impl Pages<'_> {
         if !self.app.state.thermal_guard || !self.app.state.charge_mode.guarded() {
             return Ok(());
         }
+        // A step already taken this start is not taken again: the readings go
+        // on coming while the recovery is being started again, and a second
+        // step would be taken from the step the first one chose before the
+        // phone had ever charged at it.
+        if self.stepped_down {
+            return Ok(());
+        }
         let Some(temp) = self.app.state.battery_temp else { return Ok(()) };
         // The temperature is in tenths of a degree; the limit is whole degrees.
         let limit = i32::from(self.app.state.thermal_limit) * 10;
@@ -3844,6 +3855,7 @@ impl Pages<'_> {
         }
         let Some(cooler) = self.app.state.charge_mode.stepped_down() else { return Ok(()) };
         self.app.state.charge_mode = cooler;
+        self.stepped_down = true;
         let kept = self.app.settings();
         skyward_sys::kmsg(&format!(
             "the battery is at {:.1} C, past the {} C limit: the charge steps down to {} and the recovery starts again",
