@@ -5348,27 +5348,24 @@ pub fn feedback(cx: &Ctx) -> Frame {
     let top = m.content_top;
     let fb = &s.feedback;
     let title = l.pick(["问题反馈", "問題回報", "Report a bug"]);
-    match &fb.report {
-        // A report was taken: the number it was given is the whole of what
-        // the page has to say, since nothing more may be sent this start.
-        Report::Sent { id } => {
-            let y = widgets::section_first(&mut c, t, f, top, l.pick(["本次已反馈", "本次已回報", "Sent this start"]));
-            let done = widgets::info_card(&mut c, t, f, y, &[(l.pick(["问题 ID", "問題 ID", "Report ID"]), id.clone())]);
-            let y = widgets::footnote(
-                &mut c,
-                t,
-                f,
-                done + m.dp(8.0),
-                l.pick([
-                    "把上面这个 ID 写在作者的评论区，就能对应到这次反馈的日志。一次开机只能反馈一次，重启后可以再反馈新的问题。",
-                    "把上面這個 ID 寫在作者的留言區，就能對應到這次回報的記錄。一次開機只能回報一次，重啟後可以再回報新的問題。",
-                    "Mention this ID where the author takes comments, and it leads to the logs of this report. One report goes per start; start again to report another bug.",
-                ]),
-            );
-            let c = fit(c, t, y);
-            return Frame::new(t, c, out, title, top);
-        }
-        _ => {}
+    // A report was taken: the number it was given is the whole of what the
+    // page has to say, since nothing more may be sent this start.
+    if let Report::Sent { id } = &fb.report {
+        let y = widgets::section_first(&mut c, t, f, top, l.pick(["本次已反馈", "本次已回報", "Sent this start"]));
+        let done = widgets::info_card(&mut c, t, f, y, &[(l.pick(["问题 ID", "問題 ID", "Report ID"]), id.clone())]);
+        let y = widgets::footnote(
+            &mut c,
+            t,
+            f,
+            done + m.dp(8.0),
+            l.pick([
+                "把上面这个 ID 写在作者的评论区，就能对应到这次反馈的日志。一次开机只能反馈一次，重启后可以再反馈新的问题。",
+                "把上面這個 ID 寫在作者的留言區，就能對應到這次回報的記錄。一次開機只能回報一次，重啟後可以再回報新的問題。",
+                "Mention this ID where the author takes comments, and it leads to the logs of this report. One report goes per start; start again to report another bug.",
+            ]),
+        );
+        let c = fit(c, t, y);
+        return Frame::new(t, c, out, title, top);
     }
     let y = widgets::section_first(&mut c, t, f, top, l.pick(["问题描述", "問題描述", "What went wrong"]));
     let (field, caret) = widgets::text_field(&mut c, t, f, y, &fb.words);
