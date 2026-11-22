@@ -324,10 +324,8 @@ fn main() -> Result<()> {
             let libraries = secure::libraries()?;
             services::start(&services, libraries.as_deref())?;
             // The step kept in the settings is what this start settles on, and
-            // there is no page here to choose another: the say over the
-            // programs is dropped with them, and they run until this process
-            // ends.
-            keys::start(&keys::found(slot, libraries.as_deref())?.steps?)?;
+            // there is no page here to choose another.
+            keys::start(&keys::found(slot, libraries.as_deref())?.steps?, charging_mode())?;
             loop {
                 std::thread::park();
             }
@@ -604,19 +602,6 @@ fn gate() -> &'static Gate {
 static WLAN: std::sync::OnceLock<std::sync::Mutex<Option<crate::wlan::Worker>>> = std::sync::OnceLock::new();
 
 #[cfg(target_os = "android")]
-/// The say over the programs that settle how fast a charge may run, kept
-/// from the bringing-up for the charge page: it ends the ones a chosen step
-/// does not name, and a step may be chosen long after those programs start.
-static CHARGING: std::sync::OnceLock<std::sync::Mutex<Vec<crate::services::Running>>> = std::sync::OnceLock::new();
-
-#[cfg(target_os = "android")]
-/// Take the say over the charging programs the bringing-up kept, if any.
-pub(crate) fn take_charging() -> Vec<crate::services::Running> {
-    let kept = CHARGING.get_or_init(|| std::sync::Mutex::new(Vec::new()));
-    std::mem::take(&mut *kept.lock().unwrap_or_else(|e| e.into_inner()))
-}
-
-#[cfg(target_os = "android")]
 /// The DNS servers the joined network gave, for looking names up: the WLAN
 /// thread started by the bringing-up fills it, and the pages look through the
 /// same one.
@@ -810,26 +795,18 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
     for line in keys::describe(&steps) {
         skyward_sys::kmsg(&format!("for the phone's keys: {}", line.replace("\n  ", ", ")))?;
     }
-    let kept = keys::start(&steps)?;
-    // The charge page takes the say over these once its pages are up: a step
-    // chosen there ends the ones it does not name, or starts one it does. Both
-    // programs are started here whatever step is kept, since a step chosen
-    // later has to be able to reach the phone without a start of the recovery;
-    // the ones the kept step does not name are ended at once, before the page
-    // is drawn, so the phone comes up charging as the step says.
-    //
-    // Each is decided by which of the two it is rather than by where it came
-    // in the list, since the list holds whatever this phone's own init named
-    // that settles a charge.
+    // The step kept from the charge page decides which of these the recovery
+    // starts at all: one it does not name is never started, since what the
+    // secret keeper tells the kernel of a charge cannot be taken back while
+    // the cable is in. The page says the step reaches the phone at the next
+    // start of the recovery, which is this.
     let mode = charging_mode();
-    for running in &kept {
-        let wanted = if running.path().contains("micharge") { mode.charging_service() } else { mode.secret_keeper() };
-        if !wanted {
-            running.stop();
-        }
-    }
-    skyward_sys::kmsg(&format!("the charge step kept is {}: {} of the programs that settle it are kept", mode.name(), kept.iter().filter(|r| r.kept()).count()))?;
-    *CHARGING.get_or_init(|| std::sync::Mutex::new(Vec::new())).lock().unwrap_or_else(|e| e.into_inner()) = kept;
+    let kept = keys::start(&steps, mode)?;
+    skyward_sys::kmsg(&format!(
+        "the charge step kept is {}: {} program(s) of the phone's that settle it were started",
+        mode.name(),
+        kept.len()
+    ))?;
     agree_on_the_notes_key(&registering)
 }
 

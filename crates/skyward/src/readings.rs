@@ -66,8 +66,14 @@ impl Readings {
                     let reading = if !at_once && ticks.is_multiple_of(ALL_EVERY) {
                         Reading::All(Box::new(skyward_info::collect(&cfg)), at)
                     } else {
+                        // The battery is read before the charger, since
+                        // reading it is what has the kernel bring the
+                        // charger's own nodes up to date: read first, the
+                        // charger answered with the figures it had before the
+                        // cable went in.
+                        let battery = skyward_info::battery_now();
                         let charge = crate::charge::reading();
-                        Reading::Battery(skyward_info::battery_now(), charge, at)
+                        Reading::Battery(battery, charge, at)
                     };
                     if !tell.tell(reading) {
                         return;

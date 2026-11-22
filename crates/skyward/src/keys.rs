@@ -107,27 +107,38 @@ pub fn serves_elements(steps: &[Step]) -> bool {
 /// the weaver that reaches its secure element through it starts. Each
 /// program names every folder its libraries are looked for in.
 ///
-/// The programs that settle how fast a charge may run are among the last,
-/// and the say over each is given back, in the order they were started, so
-/// that a step chosen on the charge page can end them without a start of
-/// the recovery.
-pub fn start(steps: &[Step]) -> Result<Vec<services::Running>> {
-    let mut kept = Vec::new();
+/// The programs that settle how fast a charge may run are among the last.
+/// Which of them are started is the step the charge page kept, decided here
+/// rather than by starting them all and ending some: what the secret keeper
+/// tells the kernel of a charge cannot be taken back while the cable is in,
+/// so one that runs even for a moment leaves the charge as fast as it would
+/// have been. Gives how many of them were started.
+pub fn start(steps: &[Step], mode: skyward_ui::app::ChargeMode) -> Result<usize> {
+    let mut started = 0;
     for step in steps {
         match step {
             Step::Start(program) => {
-                let mut started = services::start_each(std::slice::from_ref(program.as_ref()), None)?;
-                // Said so that a phone whose charge steps do nothing says which
-                // of the two programs it carries and whether its own init named
-                // them at all, rather than leaving it to be guessed at.
                 let settles = settles_the_charge(&program.service.path);
-                skyward_sys::kmsg(&format!(
-                    "{} settles how fast a charge may run: {settles}, and the say over it came back {} time(s)",
-                    program.service.path,
-                    started.len()
-                ))?;
+                let wanted = if !settles {
+                    true
+                } else if program.service.path.contains("micharge") {
+                    mode.charging_service()
+                } else {
+                    mode.secret_keeper()
+                };
                 if settles {
-                    kept.append(&mut started);
+                    skyward_sys::kmsg(&format!(
+                        "{} settles how fast a charge may run, and the step {} names it: {wanted}",
+                        program.service.path,
+                        mode.name()
+                    ))?;
+                }
+                if !wanted {
+                    continue;
+                }
+                services::start(std::slice::from_ref(program.as_ref()), None)?;
+                if settles {
+                    started += 1;
                 }
             }
             Step::ServeElements => {
@@ -136,7 +147,7 @@ pub fn start(steps: &[Step]) -> Result<Vec<services::Running>> {
             }
         }
     }
-    Ok(kept)
+    Ok(started)
 }
 
 /// Whether the program at `path` is one of the two that settle how fast a

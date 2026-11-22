@@ -1163,12 +1163,6 @@ struct Pages<'a> {
     haptics: Option<Haptics>,
     backlight: Backlight,
     keeper: Keeper,
-    /// The say over the programs that settle how fast a charge may run, in
-    /// the order they were started: the charging service first, then the
-    /// secret keeper, on a phone that carries them. A step chosen on the
-    /// charge page ends the ones it does not name and keeps the ones it
-    /// does.
-    charging: Vec<crate::services::Running>,
     shown_clock: String,
     /// The page shown first, until it has been told it shows.
     arriving: Option<Incoming>,
@@ -1255,9 +1249,9 @@ struct Pages<'a> {
     /// Whether what the charge nodes answer has been said, so it is said
     /// once rather than with every reading.
     charge_said: bool,
-    /// Whether a charger or a computer powered the phone as of the last
-    /// reading, so the cable coming out is known as it does.
-    was_powered: bool,
+    /// Whether the last reading found a charger, so the nodes are said again
+    /// as one comes or goes.
+    charge_present: bool,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1485,11 +1479,6 @@ impl<'a> Pages<'a> {
             haptics,
             backlight,
             keeper,
-            // Taken by the first turn that finds them: the bringing-up starts
-            // these programs seconds after the pages are built, so taking them
-            // here would find none and a step chosen later would have nothing
-            // to end or start.
-            charging: Vec::new(),
             shown_clock: String::new(),
             arriving: Some(Incoming::Arrived),
             readings,
@@ -1526,7 +1515,7 @@ impl<'a> Pages<'a> {
             backuper: None,
             imager: None,
             charge_said: false,
-            was_powered: false,
+            charge_present: false,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -1749,16 +1738,6 @@ impl<'a> Pages<'a> {
             }
         }
         self.app.state.prepared = crate::prepared();
-        // The say over the programs that settle how fast a charge may run is
-        // taken by the first turn that finds it: the bringing-up starts those
-        // programs seconds after the pages are built, and a step chosen before
-        // then would have nothing to end or start.
-        if self.charging.is_empty()
-            && let taken = crate::take_charging()
-            && !taken.is_empty()
-        {
-            self.charging = taken;
-        }
         self.tick(now)?;
         // The opening kept back for the phone's own parts starts the turn they
         // are up, rather than the turn the page asked for it.
@@ -1893,23 +1872,12 @@ impl<'a> Pages<'a> {
                         self.asked = None;
                     }
                     untaken(&mut self.unread.battery, "the battery", battery.as_ref().err())?;
-                    let was_powered = self.was_powered;
                     if let Ok(battery) = battery
                         && battery != self.info.battery
                     {
                         plug(&mut self.app, &self.info.battery, &battery, now)?;
-                        self.was_powered = battery.as_ref().is_some_and(|b| b.plugged);
                         self.info.battery = battery;
                         self.app.refresh();
-                    }
-                    // The cable coming out is what lets a step chosen on the
-                    // charge page reach the phone: the kernel keeps what a
-                    // program told it of a charge for as long as the cable is
-                    // in, so a program the step does not name has to be gone
-                    // before the next plug, not merely asked to stop at the
-                    // time it was chosen.
-                    if was_powered && !self.was_powered {
-                        self.charge_step(self.app.state.charge_mode)?;
                     }
                     // What the charger is doing came back with the battery,
                     // read on the readings thread rather than here: the
@@ -3833,6 +3801,14 @@ impl Pages<'_> {
             self.charge_said = true;
             charge::describe();
         }
+        // What the nodes say as the charger comes and goes, so a page that says
+        // nothing of a charge that is plainly running says why: the nodes it
+        // reads may be quiet, or may be the wrong ones.
+        let said = charge.is_some();
+        if said != self.charge_present {
+            self.charge_present = said;
+            charge::describe();
+        }
         self.app.set_charge_state(charge);
         // The battery's own temperature is still read, since the battery card
         // shows it: what the recovery no longer does is watch it and drop the
@@ -3844,41 +3820,23 @@ impl Pages<'_> {
         self.app.state.fast_charge_kernel = charge::fast();
         Ok(())
     }
-    /// Make the programs that settle how fast a charge may run be the ones
-    /// `mode` names: the ones it leaves out are ended, and one it names that
-    /// was ended is started again.
+    /// Take in the step chosen on the charge page.
     ///
-    /// A program the recovery starts is supervised, so ending it alone would
-    /// only have it started again a second later; the say over it is kept
-    /// for this, and taken back here. The kernel keeps what a program told it
-    /// of a charge until the cable comes out, so what is done here reaches
-    /// the phone at the next plug, which the page says.
+    /// The step is kept and reaches the phone at the next start of the
+    /// recovery, which the page says. It cannot reach it sooner: the programs
+    /// that settle a charge are started once, as the recovery comes up, and
+    /// what the secret keeper tells the kernel of a charge cannot be taken
+    /// back while the cable is in — so ending it later leaves the charge as
+    /// fast as it would have been, and starting it later does nothing until
+    /// the phone is started again anyway.
     ///
-    /// A step that names a program this phone does not carry, or that the
-    /// recovery did not start, has nothing to start: the phone charges as
-    /// the programs it does carry let it.
+    /// The step is saved by the keeper that saves the rest of the settings,
+    /// so nothing is done here but to say which one it is.
     fn charge_step(&mut self, mode: ChargeMode) -> Result<()> {
-        // Each program is decided by which of the two it is, not by where it
-        // came in the list: the list holds whatever the phone's own init named
-        // that settles a charge, which is not the same phone by phone, and a
-        // phone carrying only one of the two would have had the other's step
-        // taken for it.
-        for running in &self.charging {
-            let wanted = if running.path().contains("micharge") {
-                mode.charging_service()
-            } else {
-                mode.secret_keeper()
-            };
-            match wanted {
-                true if !running.kept() => running.resume(),
-                false if running.kept() => running.stop(),
-                _ => {}
-            }
-        }
         skyward_sys::kmsg(&format!(
-            "the charge step is {}: {} of the programs that settle it are kept, and the step takes effect at the next plug",
+            "the charge step is {}: it takes effect at the next start of the recovery, and the {} program(s) running now are the ones this start chose",
             mode.name(),
-            self.charging.iter().filter(|r| r.kept()).count()
+            self.charging.len()
         ))?;
         Ok(())
     }

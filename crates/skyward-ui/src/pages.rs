@@ -1272,9 +1272,9 @@ pub fn charge(cx: &Ctx) -> Frame {
             f,
             y + t.m.dp(8.0),
             l.pick([
-                "修改后插拔充电线生效：内核会记住上一次的认证结果，直到线被拔下为止。",
-                "修改後插拔充電線生效：核心會記住上一次的認證結果，直到線被拔下為止。",
-                "A step takes effect when the cable is taken out and put back: the kernel keeps the last check until the cable comes out.",
+                "档位在下次开机时生效：它决定 recovery 启动哪些小米服务，而这些服务只在启动时决定一次。",
+                "檔位在下次開機時生效：它決定 recovery 啟動哪些小米服務，而這些服務只在啟動時決定一次。",
+                "A step takes effect the next time the recovery starts: it decides which of Xiaomi's services the recovery starts, and those are decided once, as it starts.",
             ]),
         );
     }

@@ -50,11 +50,14 @@ pub enum SearchScope {
 /// phone's own programs that tell the kernel what a charge may draw and
 /// whether the charger may be verified.
 ///
-/// The programs that settle it are started and ended as the step is chosen,
-/// but the kernel keeps what they told it of a charge until the cable comes
-/// out, so a change made here reaches the phone at the next plug — which the
-/// page says, since a step that looked as if it had taken at once would have
-/// the page saying one thing and the phone doing another.
+/// A step reaches the phone at the next start of the recovery, not at once:
+/// the programs are started once, as the recovery comes up, and what the
+/// secret keeper tells the kernel of a charge cannot be taken back while the
+/// cable is in — so ending it later leaves the charge as fast as it would
+/// have been, and starting it later would have nothing to say until the phone
+/// was started again anyway. The page says so, since a step that looked as if
+/// it had taken at once would have the page saying one thing and the phone
+/// doing another.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ChargeMode {
     /// Neither program: the kernel holds the charge at the ceiling it sets

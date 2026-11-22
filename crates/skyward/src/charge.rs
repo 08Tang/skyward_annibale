@@ -66,7 +66,11 @@ const LEAST_UV: u64 = 3_000_000;
 pub fn reading() -> Option<ChargeNow> {
     let volts = read_u64(USB, "voltage_now").filter(|&uv| uv >= LEAST_UV);
     let protocol = read_node(COMMON, "real_type").filter(|s| !s.is_empty() && s != "Unknown");
-    if !present(volts, protocol.as_deref()) {
+    // The battery's own side is read whatever the charger's says, since it is
+    // the fallback for both whether a charger is attached and what it gives.
+    let cell_amps = read_i64(BATTERY, "current_now");
+    let cell_volts = read_u64(BATTERY, "voltage_now").filter(|&uv| uv >= LEAST_UV);
+    if !present(volts, protocol.as_deref(), cell_amps, cell_volts) {
         return None;
     }
     let amps = read_i64(USB, "current_now").map(|ua| ua.unsigned_abs()).filter(|&ua| ua != 0);
@@ -75,7 +79,7 @@ pub fn reading() -> Option<ChargeNow> {
     // what the power is worked out from, and the charger's side only stands
     // in where the battery says nothing. The battery's current is negative
     // while it charges, so the sign is dropped.
-    let now = match (read_i64(BATTERY, "current_now"), read_u64(BATTERY, "voltage_now")) {
+    let now = match (cell_amps, cell_volts) {
         (Some(ua), Some(uv)) if ua != 0 => Some(((ua.unsigned_abs() as f64 * uv as f64) / 1e11).round() as u32),
         _ => match (amps, volts) {
             (Some(ua), Some(uv)) => Some(((ua as f64 * uv as f64) / 1e11).round() as u32),
@@ -87,7 +91,7 @@ pub fn reading() -> Option<ChargeNow> {
         most: now,
         protocol,
         rated: read_u64(COMMON, "power_max").map(|w| w as u32).filter(|&w| w > 0),
-        volts: volts.or_else(|| read_u64(BATTERY, "voltage_now").filter(|&uv| uv >= LEAST_UV)),
+        volts: volts.or(cell_volts),
         amps,
     })
 }
@@ -108,9 +112,24 @@ pub fn reading() -> Option<ChargeNow> {
 /// negotiated, or its own word that something is there. A charger that is
 /// attached but has not settled yet reads as absent for a second, and the
 /// next reading picks it up.
-fn present(volts: Option<u64>, protocol: Option<&str>) -> bool {
-    volts.is_some() || protocol.is_some() || read_u64(USB, "present").is_some_and(|p| p != 0)
+///
+/// The battery's own side stands in where the charger's says nothing at all:
+/// a cell taking current at its own voltage is being charged, whatever the
+/// charger's nodes answer. They answer nothing on a phone whose charger
+/// service has been ended, which is what the charge page's steps do — the
+/// page then said no charger was attached while the phone charged.
+fn present(volts: Option<u64>, protocol: Option<&str>, cell_amps: Option<i64>, cell_volts: Option<u64>) -> bool {
+    if volts.is_some() || protocol.is_some() || read_u64(USB, "present").is_some_and(|p| p != 0) {
+        return true;
+    }
+    // Current into the cell, at a cell's voltage: a phone on its battery alone
+    // draws a tenth of an amp at most, and a charger pushes an amp or more.
+    cell_amps.is_some_and(|ua| ua <= -CHARGING_UA) && cell_volts.is_some()
 }
+
+/// The least current into the cell that is taken for a charge, in microamps:
+/// below it the phone is drawing on its battery rather than filling it.
+const CHARGING_UA: i64 = 300_000;
 
 fn read_node(dir: &str, name: &str) -> Option<String> {
     fs::read_to_string(Path::new(dir).join(name)).ok().map(|s| s.trim().to_owned())
@@ -187,16 +206,31 @@ mod tests {
 
     #[test]
     fn a_charger_is_there_when_its_own_side_shows_a_voltage() {
-        assert!(present(Some(16_905_000), None), "a voltage on the charger's side is a charger");
+        assert!(present(Some(16_905_000), None, None, None), "a voltage on the charger's side is a charger");
     }
 
     #[test]
     fn a_charger_that_has_negotiated_a_protocol_is_there_even_with_no_voltage_yet() {
-        assert!(present(None, Some("PD_PPS")), "a protocol named is a charger talking");
+        assert!(present(None, Some("PD_PPS"), None, None), "a protocol named is a charger talking");
     }
 
     #[test]
     fn a_phone_with_nothing_attached_reads_as_no_charger() {
-        assert!(!present(None, None), "no voltage and no protocol: nothing is there");
+        assert!(!present(None, None, None, None), "no voltage and no protocol: nothing is there");
+        assert!(
+            !present(None, None, Some(-120_000), Some(3_800_000)),
+            "a cell sipping current is the phone itself, not a charger"
+        );
+    }
+
+    #[test]
+    fn a_cell_taking_current_is_a_charge_even_where_the_charger_says_nothing() {
+        // What the charge page's steps do on a phone whose charger service is
+        // not started: the charger's own nodes answer nothing at all, and the
+        // page said no charger was attached while the phone charged.
+        assert!(
+            present(None, None, Some(-1_500_000), Some(3_900_000)),
+            "an amp into the cell is a charge"
+        );
     }
 }
