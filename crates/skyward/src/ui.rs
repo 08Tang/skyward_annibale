@@ -12,6 +12,7 @@ use crate::partwork;
 use crate::pty;
 use crate::readings::{Reading, Readings};
 use crate::relabel;
+use crate::report;
 use crate::secure;
 use crate::services;
 use crate::settings;

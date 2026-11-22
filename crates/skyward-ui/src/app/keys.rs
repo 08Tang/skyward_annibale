@@ -383,9 +383,9 @@ mod tests {
         press(&mut app, Key::VolumeUp, 0);
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))));
         press(&mut app, Key::VolumeUp, 0);
-        // Up from the first goes round to the last row of the page: wiping data
-        // is above rebooting now.
-        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Wipe))), "up from the first goes round to the last");
+        // Up from the first goes round to the last row of the page: reporting
+        // a bug is below the version and wiping data.
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Feedback))), "up from the first goes round to the last");
         app.tick(5000);
         let last = app.lit().expect("lit");
         assert!(app.shows(&last, app.top().1), "scrolled into view");
