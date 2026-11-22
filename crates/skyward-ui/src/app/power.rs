@@ -706,19 +706,16 @@ mod tests {
         assert!(app.key_up(Key::VolumeUp, 230).is_empty());
         assert!(app.locked(), "the volume keys leave the lock alone");
         assert_eq!(app.screen(), Screen::Settings, "and open nothing");
-        // Neither does a long press, or the power key with volume up: the lock
-        // is exactly what those must not get past.
+        // Neither does a long press open the reboot page: it slides the lock
+        // away instead, which is the only way past it.
         assert!(app.key(Key::Power, 300).is_empty());
         assert!(app.tick(300 + POWER_HOLD_MS).is_empty());
         assert_eq!(app.screen(), Screen::Settings, "a long press on the lock opens no reboot page");
-        assert!(app.key_up(Key::Power, 300 + POWER_HOLD_MS + 10).is_empty());
-        assert!(app.locked(), "and the lock is still there");
-        // Held, the power key takes the knob the whole way along, as a finger
-        // would, and the lock gives way as it comes up.
-        assert!(app.key(Key::Power, 4000).is_empty());
-        app.tick(4000 + SLIDE_MS);
+        assert!(app.locked(), "and the lock is still there, its knob at the start");
+        // Held on, the knob goes the whole way along as a finger would.
+        app.tick(300 + POWER_HOLD_MS + SLIDE_MS);
         assert!(app.state.confirm > SLID, "the knob went along its track");
-        app.key_up(Key::Power, 4000 + SLIDE_MS + 10);
+        app.key_up(Key::Power, 300 + POWER_HOLD_MS + SLIDE_MS + 10);
         assert!(!app.locked(), "let go there, the lock gives way");
         assert!(app.display_on(), "with the page lit behind it");
         assert_eq!(app.screen(), Screen::Settings);
@@ -737,12 +734,17 @@ mod tests {
         assert!(app.locked());
         app.key_up(Key::Power, 220);
         app.key_up(Key::VolumeUp, 230);
-        assert_eq!(app.screen(), Screen::Files);
-        // Slid away, the same chord opens it again.
-        unlock(&mut app, &f, 300);
+        assert_eq!(app.screen(), Screen::Files, "and the chord opened none either");
+        // A short press on the lock only turns the panel off again.
+        assert!(!app.display_on());
+        // Slid away, the same chord opens the reboot page.
+        press(&mut app, Key::Power, 300);
+        assert!(app.display_on());
+        unlock(&mut app, &f, 400);
         assert!(!app.locked());
-        assert!(app.key(Key::Power, 400).is_empty());
-        assert!(app.key(Key::VolumeUp, 410).is_empty());
+        // Past the guard that a press just after the wake only keeps awake.
+        assert!(app.key(Key::Power, 900).is_empty());
+        assert!(app.key(Key::VolumeUp, 910).is_empty());
         assert_eq!(app.screen(), Screen::Reboot, "with the lock gone, the chord opens the reboot page");
     }
 }

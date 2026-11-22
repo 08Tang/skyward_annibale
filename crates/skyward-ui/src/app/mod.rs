@@ -1914,10 +1914,10 @@ impl App {
             Some((_, Press::Power { spot: Spot { stop: Stop::Hit(Action::OpenEntry(_)), .. }, at })) => Some(at + LONG_PRESS_MS),
             _ => None,
         };
-        // The power key held on no control opens the reboot page, unless the
-        // lock is over the page, where holding it goes no further.
+        // The power key held on no control opens the reboot page, or slides
+        // the lock away when the lock is over the page.
         let hold = match self.button {
-            Some((_, Press::Sleep { at, .. })) if self.lock.is_none() => Some(at + POWER_HOLD_MS),
+            Some((_, Press::Sleep { at, .. })) => Some(at + POWER_HOLD_MS),
             _ => None,
         };
         let blink = self.blink_at(now).filter(|_| self.display_on).map(|(_, next)| next);
@@ -2045,15 +2045,24 @@ impl App {
             fx.extend(self.held_entry(i));
         }
         // The power key held on no control opens the reboot page over the
-        // page shown, as a phone's long press does. Under the lock it does
-        // nothing more: the lock is exactly what a long press must not get
-        // past, and it is slid away first.
-        if let Some((key, Press::Sleep { at, .. })) = self.button
+        // page shown, as a phone's long press does. Under the lock it slides
+        // the lock's knob along instead: the reboot page is what the lock must
+        // not let through.
+        if let Some((key, Press::Sleep { at, dark })) = self.button
             && now >= at + POWER_HOLD_MS
-            && self.lock.is_none()
         {
-            self.button = Some((key, Press::Spent));
-            fx.extend(self.reboot_page(now));
+            if self.lock.is_some() && !dark {
+                let track = self.lock_track();
+                // 滑轨从这一刻才开始走：按住的那三秒是「想长按」，不是
+                // 「已经滑到底」，否则一松手锁就没了。
+                self.state.confirm = 0.0;
+                self.button = Some((key, Press::Slide { which: Confirm::Unlock, track, at: now }));
+            } else {
+                self.button = Some((key, Press::Spent));
+                if self.lock.is_none() {
+                    fx.extend(self.reboot_page(now));
+                }
+            }
         }
         let active = *self.active.get_or_insert(now);
         if let (true, Some(after)) = (self.display_on, SCREEN_OFF[self.state.screen_off]) {

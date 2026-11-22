@@ -611,11 +611,10 @@ impl App {
     /// A button went down while the lock was over the page. The volume keys do
     /// nothing at all: the light they would move is on a page the lock is
     /// hiding, and a press of the power key would work whatever that light
-    /// came to rest on. On a dark panel the power key lights it, as it does
-    /// anywhere else, and does only that; on a lit one it slides the lock's
-    /// knob along as a finger does. Held there it goes no further: a long
-    /// press opens no reboot page, since the lock is exactly what a long press
-    /// must not get past.
+    /// came to rest on. On a dark panel the power key lights it; on a lit one
+    /// a short press turns it off again, as a phone's does on its lock screen,
+    /// and a long press slides the lock's knob along -- the reboot page a long
+    /// press opens elsewhere is exactly what the lock must not let through.
     fn locked_key(&mut self, key: Key, now: u64) -> Vec<Effect> {
         self.fling = None;
         self.end_turn();
@@ -626,7 +625,7 @@ impl App {
             }
             (Key::Power, true) => {
                 self.stir(now);
-                self.button = Some((key, Press::Slide { which: Confirm::Unlock, track: self.lock_track(), at: now }));
+                self.button = Some((key, Press::Sleep { at: now, dark: false }));
             }
             _ => self.button = Some((key, Press::Spent)),
         }
