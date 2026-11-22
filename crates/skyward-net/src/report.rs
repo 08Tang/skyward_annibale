@@ -110,99 +110,65 @@ fn boundary() -> String {
     format!("----Skyward{:016x}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0))
 }
 
-/// The request body, written out as it is read: a part for each field, in
-/// the order the address reads them.
-struct Body<'a> {
-    parts: Vec<Part<'a>>,
+/// The request body, written out as it is read, so that how far it has come
+/// can be told while it goes.
+///
+/// The whole of it is held: the address takes ten megabytes of either log, and
+/// a report is read once, so streaming it from the logs would save memory the
+/// recovery has and cost a second pass over them.
+struct Body {
+    bytes: Vec<u8>,
     /// Where in the whole body the next read starts.
     at: usize,
     progress: Arc<AtomicU64>,
 }
 
-enum Part<'a> {
-    /// Words written out at once: the form's own lines, and the report.
-    Whole(Vec<u8>),
-    /// A log, read from what is already in memory.
-    Log(&'a [u8]),
-}
-
-impl<'a> Body<'a> {
-    fn new(boundary: &str, words: &str, kernel: &'a [u8], recovery: &'a [u8], progress: Arc<AtomicU64>) -> Body<'a> {
-        let mut parts = Vec::with_capacity(6);
-        parts.push(Part::Whole(field(boundary, "key", KEY.as_bytes(), None)));
-        parts.push(Part::Whole(field(boundary, WORDS_FIELD, words.as_bytes(), Some("question.txt"))));
-        parts.push(Part::Whole(field(boundary, KERNEL_FIELD, &[], Some("kernel.log"))));
-        parts.push(Part::Log(kernel));
-        parts.push(Part::Whole(field(boundary, RECOVERY_FIELD, &[], Some("recovery.log"))));
-        parts.push(Part::Log(recovery));
+impl Body {
+    fn new(boundary: &str, words: &str, kernel: &[u8], recovery: &[u8], progress: Arc<AtomicU64>) -> Body {
+        let mut bytes = Vec::with_capacity(words.len() + kernel.len() + recovery.len() + 1024);
+        field(&mut bytes, boundary, "key", KEY.as_bytes(), None);
+        field(&mut bytes, boundary, WORDS_FIELD, words.as_bytes(), Some("question.txt"));
+        field(&mut bytes, boundary, KERNEL_FIELD, kernel, Some("kernel.log"));
+        field(&mut bytes, boundary, RECOVERY_FIELD, recovery, Some("recovery.log"));
         // The last line closes the form, and is not a field's own.
-        parts.push(Part::Whole(format!("\r\n--{boundary}--\r\n").into_bytes()));
-        Body { parts, at: 0, progress }
+        bytes.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        Body { bytes, at: 0, progress }
     }
 
     fn len(&self) -> usize {
-        self.parts
-            .iter()
-            .map(|p| match p {
-                Part::Whole(bytes) => bytes.len(),
-                Part::Log(bytes) => bytes.len(),
-            })
-            .sum()
+        self.bytes.len()
     }
 }
 
-impl Read for Body<'_> {
+impl Read for Body {
     fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
-        if self.at >= self.len() {
-            return Ok(0);
-        }
-        // Which part the next byte is in, and how far into it.
-        let mut left = self.at;
-        let mut n = 0;
-        for part in &self.parts {
-            let (bytes, len) = match part {
-                Part::Whole(bytes) => (bytes.as_slice(), bytes.len()),
-                Part::Log(bytes) => (*bytes, bytes.len()),
-            };
-            if left < len {
-                let take = (len - left).min(out.len() - n);
-                out[n..n + take].copy_from_slice(&bytes[left..left + take]);
-                n += take;
-                left = 0;
-                if n == out.len() {
-                    break;
-                }
-            } else {
-                left -= len;
-            }
-        }
-        self.at += n;
+        let take = (self.bytes.len() - self.at).min(out.len());
+        out[..take].copy_from_slice(&self.bytes[self.at..self.at + take]);
+        self.at += take;
         self.progress.store(self.at as u64, Ordering::Relaxed);
-        Ok(n)
+        Ok(take)
     }
 }
 
 /// One field of the form: the line that names it, its contents, and the blank
 /// line after it.
-fn field(boundary: &str, name: &str, contents: &[u8], file: Option<&str>) -> Vec<u8> {
-    let mut out = Vec::with_capacity(contents.len() + 256);
+fn field(out: &mut Vec<u8>, boundary: &str, name: &str, contents: &[u8], file: Option<&str>) {
     out.extend_from_slice(format!("\r\n--{boundary}\r\n").as_bytes());
     match file {
         Some(filename) => out.extend_from_slice(format!("Content-Disposition: form-data; name=\"{name}\"; filename=\"{filename}\"\r\nContent-Type: application/octet-stream\r\n\r\n").as_bytes()),
         None => out.extend_from_slice(format!("Content-Disposition: form-data; name=\"{name}\"\r\n\r\n").as_bytes()),
     }
     out.extend_from_slice(contents);
-    out
 }
 
 /// What a refusal means for the one who read it, in the words the page shows:
 /// what to do about it, rather than the code alone.
 pub fn explain(refused: &Refused) -> &'static str {
     match refused {
-        Refused::Said { status, error, .. } => match (status, error.as_str()) {
-            (403, "INVALID_KEY") | (_, "INVALID_KEY") => "the address turned the key down; this build cannot send reports",
-            (413, "FILE_TOO_LARGE") | (413, "QUESTION_TOO_LARGE") | (413, "PAYLOAD_TOO_LARGE") | (413, _) => "the report is larger than the address takes",
-            (400, "MISSING_FIELD") | (400, "DUPLICATE_FIELD") | (400, "UNKNOWN_FIELD") | (400, "INVALID_MULTIPART") | (400, "INVALID_QUESTION") => {
+        Refused::Said { status, error, .. } => match (*status, error.as_str()) {
+            (_, "INVALID_KEY") => "the address turned the key down; this build cannot send reports",
+            (413, _) => "the report is larger than the address takes",
+            (400, "MISSING_FIELD" | "DUPLICATE_FIELD" | "UNKNOWN_FIELD" | "INVALID_MULTIPART" | "INVALID_QUESTION") => {
                 "the address could not read the form this sent"
             }
             (405, _) => "the address does not take reports this way",
