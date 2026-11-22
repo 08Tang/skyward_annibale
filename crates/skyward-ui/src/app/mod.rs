@@ -42,6 +42,7 @@ mod decrypt;
 mod charging;
 mod draw;
 mod entry;
+mod feedback;
 mod filesystem;
 mod frame;
 mod image;
@@ -71,6 +72,7 @@ pub use avb::*;
 pub use backup::*;
 pub use decrypt::*;
 pub use entry::*;
+pub use feedback::*;
 pub use charging::*;
 pub use filesystem::*;
 pub use frame::*;
@@ -191,6 +193,9 @@ pub enum Screen {
     /// Skyward's newest release, and updating to it: its build for the
     /// phone downloaded and written into the recovery partitions.
     SkywardUpdate,
+    /// Reporting a bug: the words written about it, and the two logs sent
+    /// with them to the address that keeps reports.
+    Feedback,
     /// Android Verified Boot's checks in the running slot, and switching
     /// them off or on.
     Avb,
@@ -360,6 +365,12 @@ pub enum Action {
     LogsTo(usize),
     /// Save the logs ticked where they are to go.
     ExportLogs,
+    /// Send the bug report written on the feedback page.
+    SendReport,
+    /// Send it again, after the address turned it down.
+    SendReportAgain,
+    /// Write the report out again, keeping the words as they are.
+    WriteReportAgain,
     /// Pick this slot to start next; a swipe then switches to it.
     PickSlot(Slot),
     /// Pick this system to start next; a swipe then switches to it.
@@ -775,6 +786,12 @@ pub enum Effect {
         kernel: bool,
         storage: bool,
     },
+    /// Send the words written on the feedback page with the recovery's own
+    /// log and the kernel's to the address that keeps reports, telling how it
+    /// goes with [`App::report_at`] and [`App::report_ended`].
+    SendReport,
+    /// Send the words written again, after a report was turned down.
+    SendReportAgain,
     /// Back up the parts ticked, by their place in [`BACKUP_PARTS`], into
     /// a folder of their own in `place`, telling how it goes with
     /// [`App::backup_started`], [`App::backup_plan`], [`App::backup_at`]

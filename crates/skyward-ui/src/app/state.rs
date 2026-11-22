@@ -396,6 +396,8 @@ pub struct State {
     /// nor obeyed there.
     pub thermal_guard: bool,
     pub thermal_limit: u8,
+    /// The bug report being written, and where sending it stands.
+    pub feedback: Feedback,
     /// Where an update the system installed stands, as the runtime last
     /// read it.
     pub update: Standing,
@@ -554,6 +556,7 @@ impl Default for State {
             charge_mode: ChargeMode::default(),
         thermal_guard: true,
         thermal_limit: THERMAL_LIMIT_DEFAULT,
+        feedback: Feedback::default(),
             update: Standing::None,
             wlan: None,
             remember: false,
@@ -693,6 +696,9 @@ impl State {
             Screen::Wlan => self.wlan.is_some(),
             Screen::SkywardUpdate => self.updates && self.wlan.is_some() && self.recovery_partitions,
             Screen::Systems => self.dual_boot,
+            // A report goes to an address, so the page is offered where the
+            // phone can reach one.
+            Screen::Feedback => self.wlan.is_some(),
             _ => true,
         }
     }

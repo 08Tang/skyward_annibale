@@ -1278,6 +1278,8 @@ struct Pages<'a> {
     /// The download under way, and the page another device types an address
     /// for it on.
     fetcher: Option<fetch::Worker>,
+    /// The bug report on its way to the address that keeps reports.
+    reporter: Option<report::Worker>,
     /// Whether verified boot's checks have been read for the avb page shown.
     avb_read: bool,
     portal: Option<crate::portal::Portal>,
@@ -1531,6 +1533,7 @@ impl<'a> Pages<'a> {
             wlan: None,
             serving: None,
             fetcher: None,
+            reporter: None,
             avb_read: false,
             portal: None,
             scanned_at: Instant::now(),
@@ -2671,6 +2674,22 @@ impl Pages<'_> {
                 self.fetcher = None;
             }
         }
+        // How the report goes: how much of it has gone, and how it ended.
+        if let Some(worker) = &self.reporter {
+            let (done, total) = worker.progress();
+            if self.app.state.feedback.report.sending() {
+                self.app.report_at(done, total);
+            }
+            if let Some(end) = worker.ended() {
+                skyward_sys::kmsg(&report::described(&end))?;
+                match end {
+                    report::Ended::Taken(id) => self.app.report_taken(&id),
+                    report::Ended::Refused { why, again } => self.app.report_refused(&why, again),
+                    report::Ended::Failed(why) => self.app.report_refused(&why, true),
+                }
+                self.reporter = None;
+            }
+        }
         // The page another device types an address on is served while the
         // download page shows and the phone is on a network.
         let joined = self.app.state.wlan.as_ref().and_then(|w| w.joined.as_ref()).and_then(|j| match &j.stage {
@@ -3456,6 +3475,20 @@ impl Pages<'_> {
                     Err(e) => self.app.report(&skyward_ui::fmt::export_failed(self.app.state.lang, &format!("{e:#}")), now),
                 }
             }
+            // A report is sent once per start: the page offers the form only
+            // while nothing has been taken, so a second one is only asked for
+            // where the first was turned down.
+            Effect::SendReport | Effect::SendReportAgain => {
+                ensure!(self.reporter.is_none(), "a report is on its way already");
+                ensure!(!self.app.state.feedback.report.sent(), "this start has already sent a report");
+                ensure!(self.app.state.feedback.ready(), "nothing is written about the bug");
+                let logs = report::logs()?;
+                let words = self.app.state.feedback.words.clone();
+                self.reporter = Some(report::Worker::start(words, logs, self.servers.clone())?);
+                self.app.state.feedback.report = skyward_ui::app::Report::Sending { done: 0, total: 0 };
+                self.app.refresh();
+            }
+            Effect::WriteReportAgain => self.app.report_again(),
             Effect::SetMode { path, mode } => {
                 let outcome = skyward_files::set_mode(Path::new(&path), mode).map_err(|e| format!("{e:#}"));
                 self.app.mode_set(mode, outcome, now);

@@ -2,7 +2,7 @@ use crate::app::{
     ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ChargeMode, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
-    SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target,
+    SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target, Report,
     USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
 };
 use crate::canvas::Canvas;
@@ -107,6 +107,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::Fetch => fetch(cx),
         Screen::Avb => avb(cx),
         Screen::SkywardUpdate => skyward_update(cx),
+        Screen::Feedback => feedback(cx),
         Screen::License => license(cx),
         Screen::FontLicense => font_license(cx),
         Screen::Slot => slot(cx),
@@ -189,6 +190,8 @@ const LOGS: Text = ["导出日志", "匯出記錄", "Export logs"];
 const SCREEN_TIMEOUT: Text = ["息屏时间", "螢幕自動關閉", "Screen timeout"];
 const UPDATE: Text = ["系统更新", "系統更新", "System update"];
 const SKYWARD_UPDATE: Text = ["版本更新", "版本更新", "Version update"];
+/// Reporting a bug to the author, with the logs that show it.
+const FEEDBACK: Text = ["问题反馈", "問題回報", "Report a bug"];
 const FILES: Text = ["文件管理", "檔案管理", "File manager"];
 const TERMINAL: Text = ["终端", "終端機", "Terminal"];
 const LANGUAGE: Text = ["语言", "語言", "Language"];
@@ -403,6 +406,9 @@ pub fn home(cx: &Ctx) -> Frame {
         });
         footer_opens.push(Action::Open(Screen::SkywardUpdate));
     }
+    // 问题反馈排在版本更新下面：更新之后多半就是发现了问题。
+    footer_rows.push(Row::new(l.pick(FEEDBACK)).icon(BLUE, Icon::Log));
+    footer_opens.push(Action::Open(Screen::Feedback));
     let footer = widgets::list(&mut c, t, f, system.bottom + t.m.card_gap, &footer_rows);
     out.extend(hits(&footer.rows, &footer_opens));
     // However little it holds, the page scrolls far enough to fold its bar
@@ -5330,6 +5336,117 @@ pub fn logs(cx: &Ctx) -> Frame {
     let export = widgets::button(&mut c, t, f, y + t.m.dp(24.0), l.pick(["导出", "匯出", "Export"]));
     out.push(Hit { rect: export, action: Action::ExportLogs });
     Frame::new(t, c, out, l.pick(LOGS), top)
+}
+
+/// Reporting a bug: what is written about it, what goes with it, and where
+/// sending it stands.
+pub fn feedback(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+    let fb = &s.feedback;
+    match &fb.report {
+        // A report was taken: the number it was given is the whole of what
+        // the page has to say, since nothing more may be sent this start.
+        Report::Sent { id } => {
+            let y = widgets::section_first(&mut c, t, f, top, l.pick(["本次已反馈", "本次已回報", "Sent this start"]));
+            let done = widgets::info_card(&mut c, t, f, y, &[(l.pick(["问题 ID", "問題 ID", "Report ID"]), id.clone())]);
+            widgets::footnote(
+                &mut c,
+                t,
+                f,
+                done + t.m.dp(8.0),
+                l.pick([
+                    "把上面这个 ID 写在作者的评论区，就能对应到这次反馈的日志。一次开机只能反馈一次，重启后可以再反馈新的问题。",
+                    "把上面這個 ID 寫在作者的留言區，就能對應到這次回報的記錄。一次開機只能回報一次，重啟後可以再回報新的問題。",
+                    "Mention this ID where the author takes comments, and it leads to the logs of this report. One report goes per start; start again to report another bug.",
+                ]),
+            );
+        }
+        _ => {
+            let y = widgets::section_first(&mut c, t, f, top, l.pick(["问题描述", "問題描述", "What went wrong"]));
+            let (field, caret) = widgets::text_field(&mut c, t, f, y, &fb.words);
+            let mut y = field + t.m.dp(10.0);
+            if fb.words.trim().is_empty() {
+                y = widgets::footnote(
+                    &mut c,
+                    t,
+                    f,
+                    y,
+                    l.pick([
+                        "只能用英文输入。写不出英文也可以用拼音代替，意思到了就行。",
+                        "只能用英文輸入。寫不出英文也可以用拼音代替，意思到了就行。",
+                        "English only, though pinyin standing in for Chinese is fine: what it means is what matters.",
+                    ]),
+                );
+            }
+            y = widgets::section(&mut c, t, f, y + t.m.dp(10.0), l.pick(["会上传什么", "會上傳什麼", "What is sent"]));
+            let sent = widgets::list(
+                &mut c,
+                t,
+                f,
+                y,
+                &[
+                    Row::new("kernel.log").subtitle(l.pick(["内核本次开机的记录", "核心本次開機的記錄", "The kernel's messages since this start"])),
+                    Row::new("recovery.log").subtitle(l.pick(["界面与操作本次开机的记录", "介面與操作本次開機的記錄", "What the pages and actions did this start"])),
+                ],
+            );
+            y = widgets::section(&mut c, t, f, sent.bottom, l.pick(["隐私", "隱私", "Privacy"]));
+            y = widgets::footnote(
+                &mut c,
+                t,
+                f,
+                y,
+                l.pick([
+                    "不会上传任何隐私信息：只有上面两个日志和这里写的问题描述。日志只用于研究这个 bug，不对外公开。",
+                    "不會上傳任何隱私資訊：只有上面兩個記錄和這裡寫的問題描述。記錄只用於研究這個 bug，不對外公開。",
+                    "Nothing private goes: only the two logs above and what is written here. The logs are read to work out this bug and are not made public.",
+                ]),
+            );
+            y = widgets::footnote(
+                &mut c,
+                t,
+                f,
+                y + t.m.dp(8.0),
+                l.pick([
+                    "请在 bug 出现之后再反馈：没触发 bug 就反馈，日志里看不到问题，也就无从查起。",
+                    "請在 bug 出現之後再回報：沒觸發 bug 就回報，記錄裡看不到問題，也就無從查起。",
+                    "Send this after the bug has happened: a report from before it leaves nothing in the logs to look for.",
+                ]),
+            );
+            // The keyboard is at the foot, and what the page has to say stops
+            // above it: the two would otherwise be drawn over one another.
+            match &fb.report {
+                Report::Sending { done, total } => {
+                    let detail = l.pick([
+                        format!("已上传 {done} / {total} 字节"),
+                        format!("已上傳 {done} / {total} 位元組"),
+                        format!("{done} of {total} bytes sent"),
+                    ]);
+                    let share = fb.report.share();
+                    widgets::progress_card(&mut c, t, f, y + t.m.dp(16.0), l.pick(["正在上传", "正在上傳", "Sending"]), &detail, share);
+                }
+                Report::Refused { why, again } => {
+                    let y = widgets::section(&mut c, t, f, y + t.m.dp(10.0), l.pick(["上传失败", "上傳失敗", "Not sent"]));
+                    let y = widgets::footnote(&mut c, t, f, y, why);
+                    if *again {
+                        let retry = widgets::button(&mut c, t, f, y + t.m.dp(16.0), l.pick(["重试", "重試", "Try again"]));
+                        out.push(Hit { rect: retry, action: Action::SendReportAgain });
+                    }
+                    let edit = widgets::button(&mut c, t, f, y + t.m.dp(16.0), l.pick(["重新填写", "重新填寫", "Write again"]));
+                    out.push(Hit { rect: edit, action: Action::WriteReportAgain });
+                }
+                _ => {
+                    let send = widgets::button(&mut c, t, f, y + t.m.dp(20.0), l.pick(["提交", "提交", "Send"]));
+                    out.push(Hit { rect: send, action: Action::SendReport });
+                    keyboard_hits(&mut c, t, f, s, l.pick(["换行", "換行", "Return"]), &mut out);
+                }
+            }
+            return Frame { caret: Some(caret), ..Frame::new(t, c, out, l.pick(["问题反馈", "問題回報", "Report a bug"]), top) };
+        }
+    }
+    Frame::new(t, c, out, l.pick(["问题反馈", "問題回報", "Report a bug"]), top)
 }
 
 /// Skyward's licence, in Chinese, ahead of the words the licence gives for

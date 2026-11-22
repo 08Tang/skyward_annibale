@@ -558,6 +558,20 @@ impl App {
                     return vec![Effect::ExportLogs { recovery, kernel, storage }];
                 }
             }
+            Action::SendReport | Action::SendReportAgain => {
+                if self.state.feedback.report.sent() {
+                    self.say(l.pick(["本次已反馈过，重启后才能再反馈", "本次已回報過，重啟後才能再回報", "A report has been sent this start; start again to send another"]), now);
+                } else if self.state.feedback.report.sending() {
+                    self.say(l.pick(["正在上传，请稍候", "正在上傳，請稍候", "A report is on its way"]), now);
+                } else if !self.state.feedback.ready() {
+                    self.say(l.pick(["请先描述问题，再点提交", "請先描述問題，再點提交", "Write about the bug before sending it"]), now);
+                } else if matches!(action, Action::SendReportAgain) {
+                    return vec![Effect::SendReportAgain];
+                } else {
+                    return vec![Effect::SendReport];
+                }
+            }
+            Action::WriteReportAgain => return vec![Effect::WriteReportAgain],
             Action::PickSlot(slot) => {
                 self.state.next_slot = Some(slot);
                 self.refresh();
@@ -985,6 +999,7 @@ impl App {
             Screen::Rename => &mut self.state.new_name,
             Screen::WlanPassword => &mut self.state.password,
             Screen::Fetch => &mut self.state.fetch_url,
+            Screen::Feedback => &mut self.state.feedback.words,
             Screen::WlanAdd => {
                 let a = self.state.adding.as_mut().expect("the page adds a network");
                 match a.field {
