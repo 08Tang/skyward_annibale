@@ -33,6 +33,8 @@ impl App {
             self.display_on = true;
             self.dirty = true;
             self.darkening = None;
+            // 亮屏由 `display_on` 说话，`lock_shown` 只属于熄屏的那一段。
+            self.lock_shown = false;
             self.curtain.set(true, now);
             // 锁屏是随这次亮屏才露出来的，滑块从头开始。
             if let Some(lock) = &mut self.lock {
@@ -101,6 +103,12 @@ impl App {
     /// now, then the panel goes off. A finger on the glass lets go of what
     /// it held, and the page stops where it is.
     pub(super) fn sleep(&mut self, now: u64) {
+        // 熄屏前屏幕上是锁屏还是页面，得记下来：锁屏关屏时，变暗的那几帧要
+        // 继续画锁屏，否则会先露出锁屏底下那一页——看着就像解锁了才关屏。
+        // 已经熄了就不用再记：那几帧照旧画着上一次记下的东西。
+        if self.display_on {
+            self.lock_shown = self.lock.is_some();
+        }
         // The panel goes dark over the page it shows, and the lock is there
         // for the wake that comes next. The fastboot page takes no lock: it is
         // worked with the keys, since the touchscreen runs from the partitions
@@ -687,6 +695,58 @@ mod tests {
         assert!(app.display_on());
         app.compose(&mut c, &f, &i, "12:00", after + 400);
         assert!(app.lock_rect.is_some(), "the wake draws the lock");
+    }
+
+    #[test]
+    fn going_dark_from_the_lock_shows_the_lock_to_the_end_not_the_page_under_it() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Settings, W, H, PPD);
+        // Dark the panel, light it again: the lock is what the panel shows.
+        press(&mut app, Key::Power, 0);
+        press(&mut app, Key::Power, 100);
+        assert!(app.display_on());
+        assert!(app.locked());
+        let mut c = Canvas::new(W, H);
+        app.compose(&mut c, &f, &i, "12:00", 100);
+        assert!(app.lock_rect.is_some(), "the lock is up");
+        // A short press turns the panel off from the lock: the frames of the
+        // fade keep the lock, since the page under it was not what showed.
+        assert!(app.key(Key::Power, 200).is_empty());
+        app.key_up(Key::Power, 220);
+        assert!(!app.display_on());
+        for at in [220, 300, 400] {
+            app.compose(&mut c, &f, &i, "12:00", at);
+            assert!(app.lock_rect.is_some(), "the lock is still what shows at {at}");
+        }
+        // Once the backlight has closed, nothing is drawn for either.
+        let closed = 220 + 365 + 10;
+        app.tick(closed);
+        app.compose(&mut c, &f, &i, "12:00", closed);
+        assert_eq!(app.panel(closed), None, "the panel is off");
+        // And the wake brings the lock back, not the page.
+        press(&mut app, Key::Power, closed + 10);
+        app.compose(&mut c, &f, &i, "12:00", closed + 10);
+        assert!(app.lock_rect.is_some(), "the wake shows the lock again");
+        assert!(app.locked());
+    }
+
+    #[test]
+    fn going_dark_from_the_lock_by_itself_keeps_the_lock_to_the_end_too() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Settings, W, H, PPD);
+        press(&mut app, Key::Power, 0);
+        press(&mut app, Key::Power, 100);
+        assert!(app.locked());
+        // Left alone on the lock, the panel dims and goes off the same way.
+        app.tick(100);
+        let after = SCREEN_OFF[app.state.screen_off].expect("the page goes dark on its own");
+        app.tick(100 + after);
+        assert!(!app.display_on());
+        let mut c = Canvas::new(W, H);
+        for at in [100 + after, 100 + after + 150, 100 + after + 350] {
+            app.compose(&mut c, &f, &i, "12:00", at);
+            assert!(app.lock_rect.is_some(), "the lock goes dark with the panel, at {at}");
+        }
     }
 
     #[test]

@@ -1593,6 +1593,10 @@ pub struct App {
     /// The lock over the page once the panel went dark, until its knob is slid
     /// along.
     lock: Option<Lock>,
+    /// Whether the lock was what the panel showed when it began to go dark: the
+    /// frames of the fade keep it drawn, since the page under it is not what
+    /// was on the screen.
+    lock_shown: bool,
     /// Where the lock's knob was last drawn, which is where a finger finds it,
     /// and when the dark panel was last tapped.
     lock_rect: Option<Rect>,
@@ -1765,6 +1769,7 @@ impl App {
             state: State::default(),
             stack: vec![(start, 0.0, Focus::Unset)],
             lock: None,
+            lock_shown: false,
             lock_rect: None,
             tap_at: None,
             asking: None,
@@ -2090,6 +2095,7 @@ impl App {
         // with it.
         if !self.display_on && self.darkening.is_some() && self.curtain.level(now) <= 0.0 {
             self.darkening = None;
+            self.lock_shown = false;
             self.end_charging();
         }
         if self.curtain.moving(now) || self.charging.is_some() {

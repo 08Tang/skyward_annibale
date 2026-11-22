@@ -221,11 +221,12 @@ impl App {
             self.compose_image_ask(out, f);
         }
         // The page comes up from black as the panel lights, and goes dark as
-        // it goes off. The lock is drawn on a lit panel only: a phone's own
-        // screen closes on the page it was showing, and its lock is what the
-        // next wake brings up -- a lock sliding in for the moment before the
-        // backlight shuts is a flash of a page nobody asked for.
-        if self.display_on
+        // it goes off. The lock is drawn while the panel is lit, and through
+        // the fade if the lock was what the panel was showing when it began to
+        // go dark: the page under it is not what was on the screen, and showing
+        // it for the moment the backlight takes to close reads as an unlock.
+        let shown = self.display_on || self.lock_shown;
+        if shown
             && let Some(lock) = &self.lock
         {
             self.compose_lock(out, f, info, clock, lock.drag);
