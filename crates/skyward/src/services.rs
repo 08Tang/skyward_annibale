@@ -155,7 +155,7 @@ pub fn start_each(programs: &[Started], libraries: Option<&Path>) -> Result<Vec<
             .name(name)
             .spawn(move || supervise(&s, &who, &given, &thread_keep, &thread_pid))
             .context("start a supervising thread")?;
-        kept.push(Running { path: s.path.clone(), keeping: keep, pid, wake: Arc::new(handle.thread().clone()) });
+        kept.push(Running { path: waiting.path.clone(), keeping: keep, pid, wake: Arc::new(handle.thread().clone()) });
         let waited = Instant::now();
         ready(&waiting)?;
         // How long this program took to say it was up, which is what the

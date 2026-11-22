@@ -1257,7 +1257,7 @@ struct Pages<'a> {
     charge_said: bool,
     /// Whether a charger or a computer powered the phone as of the last
     /// reading, so the cable coming out is known as it does.
-    plugged: bool,
+    was_powered: bool,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1526,7 +1526,7 @@ impl<'a> Pages<'a> {
             backuper: None,
             imager: None,
             charge_said: false,
-            plugged: false,
+            was_powered: false,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -1893,12 +1893,12 @@ impl<'a> Pages<'a> {
                         self.asked = None;
                     }
                     untaken(&mut self.unread.battery, "the battery", battery.as_ref().err())?;
-                    let was_plugged = self.plugged;
+                    let was_powered = self.was_powered;
                     if let Ok(battery) = battery
                         && battery != self.info.battery
                     {
                         plug(&mut self.app, &self.info.battery, &battery, now)?;
-                        self.plugged = battery.as_ref().is_some_and(|b| b.plugged);
+                        self.was_powered = battery.as_ref().is_some_and(|b| b.plugged);
                         self.info.battery = battery;
                         self.app.refresh();
                     }
@@ -1908,7 +1908,7 @@ impl<'a> Pages<'a> {
                     // in, so a program the step does not name has to be gone
                     // before the next plug, not merely asked to stop at the
                     // time it was chosen.
-                    if was_plugged && !self.plugged {
+                    if was_powered && !self.was_powered {
                         self.charge_step(self.app.state.charge_mode)?;
                     }
                     // What the charger is doing came back with the battery,
