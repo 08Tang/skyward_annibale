@@ -3834,9 +3834,8 @@ impl Pages<'_> {
     /// so nothing is done here but to say which one it is.
     fn charge_step(&mut self, mode: ChargeMode) -> Result<()> {
         skyward_sys::kmsg(&format!(
-            "the charge step is {}: it takes effect at the next start of the recovery, and the {} program(s) running now are the ones this start chose",
-            mode.name(),
-            self.charging.len()
+            "the charge step is {}: it takes effect at the next start of the recovery",
+            mode.name()
         ))?;
         Ok(())
     }

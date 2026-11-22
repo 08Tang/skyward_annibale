@@ -801,11 +801,11 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
     // the cable is in. The page says the step reaches the phone at the next
     // start of the recovery, which is this.
     let mode = charging_mode();
-    let kept = keys::start(&steps, mode)?;
+    let started = keys::start(&steps, mode)?;
     skyward_sys::kmsg(&format!(
         "the charge step kept is {}: {} program(s) of the phone's that settle it were started",
         mode.name(),
-        kept.len()
+        started
     ))?;
     agree_on_the_notes_key(&registering)
 }
