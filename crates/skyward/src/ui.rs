@@ -2686,7 +2686,6 @@ impl Pages<'_> {
                 match end {
                     report::Ended::Taken(id) => self.app.report_taken(&id),
                     report::Ended::Refused { why, again } => self.app.report_refused(&why, again),
-                    report::Ended::Failed(why) => self.app.report_refused(&why, true),
                 }
                 self.reporter = None;
             }
@@ -3483,11 +3482,23 @@ impl Pages<'_> {
                 ensure!(self.reporter.is_none(), "a report is on its way already");
                 ensure!(!self.app.state.feedback.report.sent(), "this start has already sent a report");
                 ensure!(self.app.state.feedback.ready(), "nothing is written about the bug");
-                let logs = report::logs()?;
-                let words = self.app.state.feedback.words.clone();
-                self.reporter = Some(report::Worker::start(words, logs, self.servers.clone())?);
-                self.app.state.feedback.report = skyward_ui::app::Report::Sending { done: 0, total: 0 };
-                self.app.refresh();
+                // A log that cannot be read is said on the page rather than
+                // ending the tick: the recovery keeps running, and the user
+                // can try again once the reason is seen.
+                match report::logs() {
+                    Ok(logs) => {
+                        let words = self.app.state.feedback.words.clone();
+                        match report::Worker::start(words, logs, self.servers.clone()) {
+                            Ok(worker) => {
+                                self.reporter = Some(worker);
+                                self.app.state.feedback.report = skyward_ui::app::Report::Sending { done: 0, total: 0 };
+                                self.app.refresh();
+                            }
+                            Err(e) => self.app.report_refused(&format!("{e:#}"), true),
+                        }
+                    }
+                    Err(e) => self.app.report_refused(&format!("{e:#}"), true),
+                }
             }
             Effect::SetMode { path, mode } => {
                 let outcome = skyward_files::set_mode(Path::new(&path), mode).map_err(|e| format!("{e:#}"));

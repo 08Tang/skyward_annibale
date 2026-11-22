@@ -15,9 +15,6 @@ pub enum Ended {
     /// Turned down: why, in the page's words, and whether trying again may
     /// end otherwise.
     Refused { why: String, again: bool },
-    /// The logs could not be read to send them, or the sending failed in a
-    /// way that is worth trying again.
-    Failed(String),
 }
 
 pub struct Worker {
@@ -110,7 +107,6 @@ pub fn described(ended: &Ended) -> String {
     match ended {
         Ended::Taken(id) => format!("the report was taken as {id}"),
         Ended::Refused { why, again } => format!("the report was turned down: {why} (again: {again})"),
-        Ended::Failed(why) => format!("the report could not be sent: {why}"),
     }
 }
 
@@ -121,7 +117,6 @@ mod tests {
     #[test]
     fn a_report_says_in_the_log_how_it_ended() {
         assert_eq!(described(&Ended::Taken("12".into())), "the report was taken as 12");
-        assert!(described(&Ended::Failed("no route".into())).contains("no route"), "the reason is kept");
         assert!(described(&Ended::Refused { why: "too large".into(), again: false }).contains("too large"));
     }
 }
