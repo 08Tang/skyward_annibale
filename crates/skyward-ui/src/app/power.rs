@@ -691,7 +691,6 @@ mod tests {
 
     #[test]
     fn the_power_key_slides_the_lock_away_and_nothing_else_gets_past_it() {
-        let (f, i) = (fonts(), info());
         let mut app = App::new(Screen::Settings, W, H, PPD);
         // Dark the panel, then light it again: the lock is over the page.
         press(&mut app, Key::Power, 0);
@@ -727,7 +726,7 @@ mod tests {
 
     #[test]
     fn the_power_key_and_volume_up_open_no_reboot_page_under_the_lock() {
-        let (f, i) = (fonts(), info());
+        let f = fonts();
         let mut app = App::new(Screen::Files, W, H, PPD);
         press(&mut app, Key::Power, 0);
         press(&mut app, Key::Power, 100);
