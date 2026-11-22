@@ -174,9 +174,9 @@ impl App {
                 }
                 // A charge step is chosen, not switched: tapping the one that
                 // is already chosen does nothing. The programs that settle how
-                // fast a charge may run are started or ended here and now, but
-                // the kernel keeps what they told it until the cable comes out,
-                // so the page says the step reaches the phone at the next plug.
+                // fast a charge may run are started as the recovery comes up,
+                // so the page says the step reaches the phone at the next
+                // start.
                 if let Switch::ChargeStep(mode) = switch {
                     if self.state.charge_mode == mode {
                         return Vec::new();
@@ -184,6 +184,12 @@ impl App {
                     self.state.charge_mode = mode;
                     self.refresh();
                     return vec![Effect::ChargeStep(mode)];
+                }
+                // The guard is not offered on the plain step, and does nothing
+                // there: nothing a charge draws at that step can warm the
+                // battery enough to be worth watching.
+                if switch == Switch::ThermalGuard && !self.state.charge_mode.guarded() {
+                    return Vec::new();
                 }
                 let on = match switch {
                     Switch::Vibrate => &mut self.state.vibrate,
@@ -196,6 +202,7 @@ impl App {
                     Switch::Remember => &mut self.state.remember,
                     Switch::WlanAuto => &mut self.state.wlan_auto,
                     Switch::WlanKeep => &mut self.state.wlan_keep,
+                    Switch::ThermalGuard => &mut self.state.thermal_guard,
                     Switch::Wlan => unreachable!("the WLAN switch is turned above"),
                     Switch::ChargeStep(_) => unreachable!("a charge step is chosen above"),
                 };

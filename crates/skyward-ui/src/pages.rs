@@ -2,7 +2,7 @@ use crate::app::{
     ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ChargeMode, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
-    SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, TIME_ZONES, Target,
+    SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target,
     USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
 };
 use crate::canvas::Canvas;
@@ -1252,8 +1252,7 @@ pub fn charge(cx: &Ctx) -> Frame {
                 ],
             ),
         ];
-        y = widgets::section(&mut c, t, f, y, l.pick(["充电档位", "充電檔位", "Charge step"]));
-        let rows: Vec<Row> = steps
+        y = widgets::section(&mut c, t, f, y, l.pick(["充电档位", "充電檔位", "Charge step"]));        let rows: Vec<Row> = steps
             .iter()
             .map(|(mode, name, detail)| Row::new(l.pick(*name)).subtitle(l.pick(*detail)).trail(Trail::Check(s.charge_mode == *mode)))
             .collect();
@@ -1276,6 +1275,63 @@ pub fn charge(cx: &Ctx) -> Frame {
                 "檔位在下次開機時生效：它決定 recovery 啟動哪些小米服務，而這些服務只在啟動時決定一次。",
                 "A step takes effect the next time the recovery starts: it decides which of Xiaomi's services the recovery starts, and those are decided once, as it starts.",
             ]),
+        );
+    }
+
+    // The thermal guard, above the charger it watches: how warm the battery
+    // may get before the charge is stepped down, and starting the recovery
+    // again to make the step take. It is neither offered nor obeyed on the
+    // plain step, where nothing a charge draws can warm the battery enough to
+    // matter, so the slider is drawn dimmed and takes no touch.
+    {
+        let guarded = s.charge_mode.guarded();
+        y = widgets::section(&mut c, t, f, y + t.m.dp(8.0), l.pick(["温控", "溫控", "Thermal guard"]));
+        let span = f32::from(THERMAL_LIMIT_MOST - THERMAL_LIMIT_LEAST);
+        let level = (f32::from(s.thermal_limit - THERMAL_LIMIT_LEAST) / span).clamp(0.0, 1.0);
+        // The limit is written into the label, since the card has no value of
+        // its own: the row below it is the switch.
+        let label = format!(
+            "{} · {} °C",
+            l.pick(["电池温度上限", "電池溫度上限", "Battery temperature limit"]),
+            s.thermal_limit
+        );
+        let below = Row::new(l.pick(["超出后降低一档并重启", "超出後降低一檔並重啟", "Step down and restart when past"]))
+            .trail(Trail::Switch(s.thermal_guard && guarded));
+        let card = widgets::slider_card(&mut c, t, f, y + t.m.dp(8.0), Caption::Thermometer, &label, level, Some(below));
+        // The limit is the same number whatever the step, so it is drawn as it
+        // stands even where it cannot be changed: a slider drawn at its left
+        // end would say the limit had been moved there.
+        if !guarded {
+            // Laid over the whole card, the way a finger's press is laid over a
+            // row it holds: it says the card takes no touch without hiding what
+            // it holds.
+            let top = y + t.m.dp(8.0);
+            c.fill_round_rect(t.m.margin, top, t.m.w as f32 - t.m.margin * 2.0, card.bottom - top, t.m.card_radius, t.pal.row_press);
+        } else {
+            out.push(Hit { rect: card.track, action: Action::Slider(Slider::ThermalLimit) });
+            if let Some(r) = card.below {
+                out.push(Hit { rect: r, action: Action::Toggle(Switch::ThermalGuard) });
+            }
+        }
+        y = card.bottom;
+        y = widgets::footnote(
+            &mut c,
+            t,
+            f,
+            y + t.m.dp(8.0),
+            if guarded {
+                l.pick([
+                    "电池到这一步温度时，档位降低一档并重启回 recovery，重启后按新的档位充电。默认档不启动任何服务，充电很慢，不会让电池过热，所以默认档下这一项不可调，也不生效。",
+                    "電池到這一步溫度時，檔位降低一檔並重啟回 recovery，重啟後按新的檔位充電。預設檔不啟動任何服務，充電很慢，不會讓電池過熱，所以預設檔下這一項不可調，也不生效。",
+                    "At this temperature the step goes down one and the recovery starts again, charging at the new step. The default step starts no service at all, so its charge is slow enough not to overheat the battery: the guard is neither offered nor obeyed there.",
+                ])
+            } else {
+                l.pick([
+                    "默认档不启动任何服务，充电很慢，不会让电池过热，所以这一项不可调，也不生效。",
+                    "預設檔不啟動任何服務，充電很慢，不會讓電池過熱，所以這一項不可調，也不生效。",
+                    "The default step starts no service at all, so its charge is slow enough not to overheat the battery: this is neither offered nor obeyed there.",
+                ])
+            },
         );
     }
 

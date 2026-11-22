@@ -3810,15 +3810,59 @@ impl Pages<'_> {
             charge::describe();
         }
         self.app.set_charge_state(charge);
-        // The battery's own temperature is still read, since the battery card
-        // shows it: what the recovery no longer does is watch it and drop the
-        // charge back itself. The phone's own chain and the battery's cutoff
-        // table are what hold the charge now.
+        // The battery's own temperature, which the battery card shows and the
+        // thermal guard watches.
         self.app.state.battery_temp = charge::temperature();
         // What the kernel says about the battery's check, which is what
         // decides the current the charge may draw.
         self.app.state.fast_charge_kernel = charge::fast();
+        self.thermal_guard(_now)?;
         Ok(())
+    }
+
+    /// Step the charge down where the battery has got warmer than the limit
+    /// the charge page keeps, and start the recovery again so the step takes.
+    ///
+    /// The step is the programs the recovery starts, so a step cannot change
+    /// under a charge that is already running: the kernel keeps what those
+    /// programs told it for as long as the cable is in. Starting the recovery
+    /// again is what makes a step take, and a start takes a moment while the
+    /// charge has been running for minutes.
+    ///
+    /// Nothing is done on the plain step, which starts neither of Xiaomi's
+    /// programs: what a charge draws there cannot warm the battery enough to
+    /// matter, so the page neither offers the guard nor obeys it there.
+    fn thermal_guard(&mut self, _now: u64) -> Result<()> {
+        if !self.app.state.thermal_guard || !self.app.state.charge_mode.guarded() {
+            return Ok(());
+        }
+        let Some(temp) = self.app.state.battery_temp else { return Ok(()) };
+        // The temperature is in tenths of a degree; the limit is whole degrees.
+        let limit = i32::from(self.app.state.thermal_limit) * 10;
+        if temp < limit {
+            return Ok(());
+        }
+        let Some(cooler) = self.app.state.charge_mode.stepped_down() else { return Ok(()) };
+        self.app.state.charge_mode = cooler;
+        let kept = self.app.settings();
+        skyward_sys::kmsg(&format!(
+            "the battery is at {:.1} C, past the {} C limit: the charge steps down to {} and the recovery starts again",
+            temp as f64 / 10.0,
+            self.app.state.thermal_limit,
+            cooler.name()
+        ))?;
+        // The step is written before the recovery starts again, since the
+        // start reads it back: a step left in memory would be gone with the
+        // recovery that held it.
+        match settings::write(&kept) {
+            Ok(()) => self.keeper.written(kept),
+            Err(e) => {
+                skyward_sys::kmsg(&format!("the settings were not kept: {e:#}"))?;
+                self.keeper.failed();
+                return Ok(());
+            }
+        }
+        power(Target::Recovery)
     }
     /// Take in the step chosen on the charge page.
     ///

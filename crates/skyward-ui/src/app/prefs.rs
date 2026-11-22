@@ -9,6 +9,10 @@ pub enum Slider {
     Brightness,
     /// How strongly the motor taps.
     Vibration,
+    /// How warm the battery may get before the charge is stepped down, in
+    /// whole degrees Celsius from [`THERMAL_LIMIT_LEAST`] to
+    /// [`THERMAL_LIMIT_MOST`].
+    ThermalLimit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,10 +41,12 @@ pub enum Switch {
     /// Show the password typed rather than a dot for each character.
     ShowPassword,
     /// How fast the phone is let to charge, as one of the three steps the
-    /// charge page offers. The programs that settle it are started and ended
-    /// as the step is chosen, and the kernel keeps what they told it until
-    /// the cable comes out, so the step reaches the phone at the next plug.
+    /// charge page offers. The programs that settle it are started as the
+    /// recovery comes up, so the step reaches the phone at the next start.
     ChargeStep(ChargeMode),
+    /// Step the charge down a step when the battery gets warmer than the
+    /// limit the slider sets, and start the recovery again to do it.
+    ThermalGuard,
 }
 
 /// How long the screen stays on with nothing touched, in milliseconds, in
@@ -72,6 +78,10 @@ impl App {
         match which {
             Slider::Brightness => self.state.brightness,
             Slider::Vibration => self.state.vibration,
+            Slider::ThermalLimit => {
+                let span = f32::from(THERMAL_LIMIT_MOST - THERMAL_LIMIT_LEAST);
+                (f32::from(self.state.thermal_limit - THERMAL_LIMIT_LEAST) / span).clamp(0.0, 1.0)
+            }
         }
     }
 
@@ -79,9 +89,26 @@ impl App {
     /// floor, and draw the slider at `track` on the page again.
     pub(super) fn set_level(&mut self, t: &Theme, which: Slider, track: Rect, level: f32) {
         let level = level.clamp(0.0, 1.0);
+        if which == Slider::ThermalLimit {
+            // The limit is a whole degree, so the slider lands on one rather
+            // than between two: the span is short, and half a degree either
+            // way would be a limit the page could not name.
+            let span = f32::from(THERMAL_LIMIT_MOST - THERMAL_LIMIT_LEAST);
+            let step = (level * span).round() as u8;
+            self.state.thermal_limit = (THERMAL_LIMIT_LEAST + step).min(THERMAL_LIMIT_MOST);
+            let value = self.level(which);
+            if let Some(fr) = self.frame.as_mut() {
+                fr.canvas.fill_rect(track.x, track.y, track.w, track.h, t.pal.card);
+                widgets::slider(&mut fr.canvas, t, track.x, track.y, track.w, value);
+            }
+            self.layer = None;
+            self.dirty = true;
+            return;
+        }
         let value = match which {
             Slider::Brightness => &mut self.state.brightness,
             Slider::Vibration => &mut self.state.vibration,
+            Slider::ThermalLimit => unreachable!("a temperature limit is a whole degree, set above"),
         };
         *value = level.clamp(if which == Slider::Brightness { MIN_BRIGHTNESS } else { 0.0 }, 1.0);
         let value = self.level(which);

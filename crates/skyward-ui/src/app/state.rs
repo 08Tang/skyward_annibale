@@ -45,6 +45,12 @@ pub enum SearchScope {
     Modules,
 }
 
+/// The warmest and coolest the charge may be let to warm the battery to, in
+/// whole degrees Celsius, and where the slider starts.
+pub const THERMAL_LIMIT_LEAST: u8 = 40;
+pub const THERMAL_LIMIT_MOST: u8 = 55;
+pub const THERMAL_LIMIT_DEFAULT: u8 = 45;
+
 /// How fast the phone is let to charge, as the charge page offers it: three
 /// steps, each the programs the recovery starts for it, since it is the
 /// phone's own programs that tell the kernel what a charge may draw and
@@ -101,6 +107,24 @@ impl ChargeMode {
     /// Whether Xiaomi's secret keeper is started for it.
     pub fn secret_keeper(self) -> bool {
         matches!(self, ChargeMode::Fastest)
+    }
+
+    /// The step below this one, where there is one: what the thermal guard
+    /// chooses when the battery gets too warm.
+    pub fn stepped_down(self) -> Option<ChargeMode> {
+        match self {
+            ChargeMode::Plain => None,
+            ChargeMode::Fast => Some(ChargeMode::Plain),
+            ChargeMode::Fastest => Some(ChargeMode::Fast),
+        }
+    }
+
+    /// Whether a charge at this step is fast enough for its warmth to be
+    /// worth watching: the plain step starts neither of Xiaomi's programs,
+    /// and what it draws cannot warm the battery enough to matter, so the
+    /// thermal guard is neither offered nor obeyed there.
+    pub fn guarded(self) -> bool {
+        !matches!(self, ChargeMode::Plain)
     }
 }
 
@@ -360,10 +384,18 @@ pub struct State {
     /// is what decides the current the charge may draw.
     pub fast_charge_kernel: bool,
     /// How fast the phone is let to charge, as the page offers it. The
-    /// programs that settle it are started and ended as the step is chosen,
-    /// and the kernel keeps what they told it until the cable comes out, so
-    /// the step reaches the phone at the next plug.
+    /// programs that settle it are started as the recovery comes up, so the
+    /// step reaches the phone at the next start.
     pub charge_mode: ChargeMode,
+    /// Whether the charge is stepped down when the battery gets too warm, and
+    /// how warm is too warm in whole degrees Celsius.
+    ///
+    /// A step only counts above the plain one: the plain step starts neither
+    /// of Xiaomi's programs, and what a charge draws there cannot warm the
+    /// battery enough to be worth watching, so the guard is neither offered
+    /// nor obeyed there.
+    pub thermal_guard: bool,
+    pub thermal_limit: u8,
     /// Where an update the system installed stands, as the runtime last
     /// read it.
     pub update: Standing,
@@ -520,6 +552,8 @@ impl Default for State {
             battery_temp: None,
             fast_charge_kernel: false,
             charge_mode: ChargeMode::default(),
+        thermal_guard: true,
+        thermal_limit: THERMAL_LIMIT_DEFAULT,
             update: Standing::None,
             wlan: None,
             remember: false,
