@@ -507,15 +507,20 @@ impl App {
             return self.screenshot(key, now);
         }
         // The power key and volume up together open the reboot page over the
-        // page shown, the way holding the power key does: volume up pressed
-        // while the power key is still down counts too.
-        if key == Key::VolumeUp
-            && (matches!(self.chord, Some((Key::Power, at)) if now < at + CHORD_MS)
-                || matches!(self.button, Some((Key::Power, Press::Sleep { .. }))))
-        {
+        // page shown, as holding the power key does, whichever of the two went
+        // down first: the power key waiting on its partner or held on no
+        // control, or volume up held while the power key comes down.
+        let reboot = matches!(
+            (key, self.chord),
+            (Key::VolumeUp, Some((Key::Power, at))) if now < at + CHORD_MS
+        ) || matches!(
+            (key, self.button),
+            (Key::VolumeUp, Some((Key::Power, Press::Sleep { .. }))) | (Key::Power, Some((Key::VolumeUp, Press::Volume { .. })))
+        );
+        if reboot {
             return self.reboot_page(now);
         }
-        let mut fx = self.let_chord_go(now);
+        let mut fx = self.let_chord_go();
         if !self.display_on {
             // The power key lights the dark panel, and does only that, as on
             // the phone's own system; the other keys leave it dark. Held on
@@ -547,7 +552,7 @@ impl App {
             self.chord = Some((key, now));
             return fx;
         }
-        fx.extend(self.key_down(key, now, now));
+        fx.extend(self.key_down(key, now));
         fx
     }
 
@@ -573,6 +578,10 @@ impl App {
         self.chord = None;
         self.stir(now);
         self.button = Some((Key::Power, Press::Spent));
+        // On the reboot page already, there is nothing to open it over.
+        if self.screen() == Screen::Reboot {
+            return Vec::new();
+        }
         self.lock = None;
         self.open(Screen::Reboot);
         self.refresh();
@@ -580,17 +589,17 @@ impl App {
     }
 
     /// The key waiting for its partner in a screenshot does what it does
-    /// alone `now`, as pressed when it went down.
-    pub(super) fn let_chord_go(&mut self, now: u64) -> Vec<Effect> {
+    /// alone, as pressed when it went down.
+    pub(super) fn let_chord_go(&mut self) -> Vec<Effect> {
         match self.chord.take() {
-            Some((key, at)) => self.key_down(key, at, now),
+            Some((key, at)) => self.key_down(key, at),
             None => Vec::new(),
         }
     }
 
-    /// What a button that went down `at` does on its own, `now`: a key
-    /// held is timed from when it went down, the screen goes off from now.
-    fn key_down(&mut self, key: Key, at: u64, now: u64) -> Vec<Effect> {
+    /// What a button that went down `at` does on its own: a key held is timed
+    /// from when it went down, and the screen goes off as it comes back up.
+    fn key_down(&mut self, key: Key, at: u64) -> Vec<Effect> {
         match key {
             Key::Back => {
                 self.button = Some((key, Press::Spent));
@@ -790,7 +799,7 @@ impl App {
 
     pub fn key_up(&mut self, key: Key, now: u64) -> Vec<Effect> {
         let mut fx = match self.chord {
-            Some((first, _)) if first == key => self.let_chord_go(now),
+            Some((first, _)) if first == key => self.let_chord_go(),
             _ => Vec::new(),
         };
         let Some((down, press)) = self.button else { return fx };

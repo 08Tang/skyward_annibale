@@ -221,23 +221,21 @@ impl App {
             self.compose_image_ask(out, f);
         }
         // The page comes up from black as the panel lights, and goes dark as
-        // it goes off.
-        //
-        // Lighting, the lock is under the light with the page and comes up
-        // with it. Going off, the page goes dark first and the lock stays lit
-        // over it until the backlight itself closes: the screen closes on the
+        // it goes off. Lighting, the lock comes up with the page under the
+        // same light. Going off, the page goes dark first and the lock stays
+        // lit over it until the backlight closes: the screen closes on the
         // lock, not the lock on the screen, which is the order a phone's own
         // does it in.
         let gone = self.curtain.level(now);
-        let lock = self.lock.as_ref().map(|lock| lock.drag);
+        let drag = self.lock.as_ref().map(|lock| lock.drag);
         if self.display_on {
-            if let Some(drag) = lock {
+            if let Some(drag) = drag {
                 self.compose_lock(out, f, info, clock, drag);
             }
             out.dim(gone);
         } else {
             out.dim(gone);
-            if let Some(drag) = lock {
+            if let Some(drag) = drag {
                 self.compose_lock(out, f, info, clock, drag);
             }
         }
