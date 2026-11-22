@@ -28,6 +28,17 @@
 //! thing without forging anything; the recovery's own heat guard, which used
 //! to drop the charge back here, is gone: the phone's own chain and the
 //! battery's cutoff table are what hold the charge now.
+//!
+//! The ADSP is what carries all of that: the charging framework talks to the
+//! charger over the ADSP's glink, so a boot whose ADSP did not come up reads
+//! no `usb_online` at all, never learns `real_type`, and shows a phone on a
+//! charger as one charging at nothing. Its firmware is asked for by name from
+//! `/odm`, which is a partition mounted by this recovery and an index ueventd
+//! builds, and the ask is made from several threads at once: a segment asked
+//! for in the moment the index is not yet there answers `ENOENT`, and
+//! `qcom_q6v5_pas` does not ask again — the whole processor is left down for
+//! the boot. `raise_the_adsp` is the ask made a second time, once the
+//! recovery's own partitions are up and its services are about to start.
 
 use std::fs;
 use std::path::Path;
@@ -130,6 +141,29 @@ fn present(volts: Option<u64>, protocol: Option<&str>, cell_amps: Option<i64>, c
 /// The least current into the cell that is taken for a charge, in microamps:
 /// below it the phone is drawing on its battery rather than filling it.
 const CHARGING_UA: i64 = 300_000;
+
+/// Raise the ADSP where the boot left it down.
+///
+/// The processor is asked for its firmware from several threads as the drivers
+/// load, and one segment answered `ENOENT` stops the whole start:
+/// `qcom_q6v5_pas` logs `can't start rproc 3000000.remoteproc-adsp: -2` and
+/// never asks again. Everything the charge page reads comes through the ADSP's
+/// glink, so that boot then shows a phone on a charger as one charging at
+/// nothing: `usb_online` is never read, `real_type` stays `0`, and no protocol
+/// is negotiated for the whole boot.
+///
+/// Asking again is worth doing once the recovery's partitions are mounted and
+/// ueventd has built the index the firmware is found through, which is where
+/// this is called from. The asking only queues the start: the page's reading
+/// each second is what finds the processor up, so nothing here waits on it.
+/// Nothing of the firmware or the loader is touched, and a processor that is
+/// already running is left alone.
+pub fn raise_the_adsp() {
+    let raised = skyward_sys::remoteproc::ask("adsp");
+    // What it came to is worth having in the log either way: a boot that still
+    // charges at nothing is then known to be one whose ADSP stayed down.
+    let _ = skyward_sys::kmsg(&format!("the ADSP: {}", raised.said()));
+}
 
 fn read_node(dir: &str, name: &str) -> Option<String> {
     fs::read_to_string(Path::new(dir).join(name)).ok().map(|s| s.trim().to_owned())

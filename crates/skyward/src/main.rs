@@ -729,6 +729,11 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
         skyward_sys::kmsg(&format!("loaded {}", path.display()))?;
     }
     skyward_sys::kmsg(&format!("the modules are in at {:.2} s", loading.elapsed().as_secs_f64()))?;
+    // The charge page reads everything through the ADSP, and a boot that asked
+    // for its firmware while the index under /odm was still being built left it
+    // down for good. The partitions are mounted and the modules are in by now,
+    // so this is the first moment asking again can work.
+    charge::raise_the_adsp();
     skyward_ui::progress::reached(skyward_ui::progress::DRIVERS);
     // The WLAN's driver is started here, without waiting for its interface, so
     // that the supplicant finds a driver ready when the page asks for the WLAN
