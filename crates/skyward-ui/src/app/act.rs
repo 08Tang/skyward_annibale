@@ -1128,6 +1128,12 @@ impl App {
                         }
                     }
                 }
+                // The report is written over as many lines as it takes: the
+                // return key starts another, and goes nowhere else.
+                Screen::Feedback => {
+                    self.state.feedback.push('\n');
+                    self.edits += 1;
+                }
                 other => unreachable!("{other:?} shows no keyboard"),
             },
         }

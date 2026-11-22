@@ -5342,111 +5342,128 @@ pub fn logs(cx: &Ctx) -> Frame {
 /// sending it stands.
 pub fn feedback(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-    let mut c = page(cx);
+    let m = &t.m;
+    let mut c = long_page(cx);
     let mut out = Vec::new();
-    let top = t.m.content_top;
+    let top = m.content_top;
     let fb = &s.feedback;
+    let title = l.pick(["问题反馈", "問題回報", "Report a bug"]);
     match &fb.report {
         // A report was taken: the number it was given is the whole of what
         // the page has to say, since nothing more may be sent this start.
         Report::Sent { id } => {
             let y = widgets::section_first(&mut c, t, f, top, l.pick(["本次已反馈", "本次已回報", "Sent this start"]));
             let done = widgets::info_card(&mut c, t, f, y, &[(l.pick(["问题 ID", "問題 ID", "Report ID"]), id.clone())]);
-            widgets::footnote(
+            let y = widgets::footnote(
                 &mut c,
                 t,
                 f,
-                done + t.m.dp(8.0),
+                done + m.dp(8.0),
                 l.pick([
                     "把上面这个 ID 写在作者的评论区，就能对应到这次反馈的日志。一次开机只能反馈一次，重启后可以再反馈新的问题。",
                     "把上面這個 ID 寫在作者的留言區，就能對應到這次回報的記錄。一次開機只能回報一次，重啟後可以再回報新的問題。",
                     "Mention this ID where the author takes comments, and it leads to the logs of this report. One report goes per start; start again to report another bug.",
                 ]),
             );
+            let c = fit(c, t, y);
+            return Frame::new(t, c, out, title, top);
+        }
+        _ => {}
+    }
+    let y = widgets::section_first(&mut c, t, f, top, l.pick(["问题描述", "問題描述", "What went wrong"]));
+    let (field, caret) = widgets::text_field(&mut c, t, f, y, &fb.words);
+    let mut y = field + m.dp(10.0);
+    if fb.words.trim().is_empty() {
+        y = widgets::footnote(
+            &mut c,
+            t,
+            f,
+            y,
+            l.pick([
+                "只能用英文输入。写不出英文也可以用拼音代替，意思到了就行。",
+                "只能用英文輸入。寫不出英文也可以用拼音代替，意思到了就行。",
+                "English only, though pinyin standing in for Chinese is fine: what it means is what matters.",
+            ]),
+        );
+    }
+    // What is sent is close under the field: the list is what the page is
+    // read for, and the gap above it only put it further away.
+    y = widgets::section(&mut c, t, f, y + m.dp(2.0), l.pick(["会上传什么", "會上傳什麼", "What is sent"]));
+    let sent = widgets::list(
+        &mut c,
+        t,
+        f,
+        y,
+        &[
+            Row::new("kernel.log").subtitle(l.pick(["内核本次开机的记录", "核心本次開機的記錄", "The kernel's messages since this start"])),
+            Row::new("recovery.log").subtitle(l.pick(["界面与操作本次开机的记录", "介面與操作本次開機的記錄", "What the pages and actions did this start"])),
+        ],
+    );
+    y = widgets::section(&mut c, t, f, sent.bottom, l.pick(["隐私", "隱私", "Privacy"]));
+    y = widgets::footnote(
+        &mut c,
+        t,
+        f,
+        y,
+        l.pick([
+            "只上传上面两个日志和你写的问题描述，不会有别的东西：通讯录、短信、照片这些一概不读。日志只用来查这个 bug，不公开。",
+            "只上傳上面兩個記錄和你寫的問題描述，不會有別的東西：通訊錄、簡訊、照片這些一概不讀。記錄只用來查這個 bug，不公開。",
+            "Only the two logs above and what you write here go; nothing else is read at all, and the logs are looked at to work out this bug, not published.",
+        ]),
+    );
+    y = widgets::footnote(
+        &mut c,
+        t,
+        f,
+        y + m.dp(8.0),
+        l.pick([
+            "请在 bug 出现之后再反馈：没触发 bug 就反馈，日志里看不到问题，也就无从查起。",
+            "請在 bug 出現之後再回報：沒觸發 bug 就回報，記錄裡看不到問題，也就無從查起。",
+            "Send this after the bug has happened: a report from before it leaves nothing in the logs to look for.",
+        ]),
+    );
+    match &fb.report {
+        Report::Sending { done, total } => {
+            let detail = l.pick([
+                format!("已上传 {done} / {total} 字节"),
+                format!("已上傳 {done} / {total} 位元組"),
+                format!("{done} of {total} bytes sent"),
+            ]);
+            widgets::progress_card(&mut c, t, f, y + m.dp(16.0), l.pick(["正在上传", "正在上傳", "Sending"]), &detail, fb.report.share());
+        }
+        Report::Refused { why, again } => {
+            let y = widgets::section(&mut c, t, f, y + m.dp(10.0), l.pick(["上传失败", "上傳失敗", "Not sent"]));
+            let y = widgets::footnote(&mut c, t, f, y, why);
+            if *again {
+                let retry = widgets::button(&mut c, t, f, y + m.dp(16.0), l.pick(["重试", "重試", "Try again"]));
+                out.push(Hit { rect: retry, action: Action::SendReportAgain });
+            }
+            let edit = widgets::button(&mut c, t, f, y + m.dp(16.0), l.pick(["重新填写", "重新填寫", "Write again"]));
+            out.push(Hit { rect: edit, action: Action::WriteReportAgain });
         }
         _ => {
-            let y = widgets::section_first(&mut c, t, f, top, l.pick(["问题描述", "問題描述", "What went wrong"]));
-            let (field, caret) = widgets::text_field(&mut c, t, f, y, &fb.words);
-            let mut y = field + t.m.dp(10.0);
-            if fb.words.trim().is_empty() {
-                y = widgets::footnote(
-                    &mut c,
-                    t,
-                    f,
-                    y,
-                    l.pick([
-                        "只能用英文输入。写不出英文也可以用拼音代替，意思到了就行。",
-                        "只能用英文輸入。寫不出英文也可以用拼音代替，意思到了就行。",
-                        "English only, though pinyin standing in for Chinese is fine: what it means is what matters.",
-                    ]),
-                );
-            }
-            y = widgets::section(&mut c, t, f, y + t.m.dp(10.0), l.pick(["会上传什么", "會上傳什麼", "What is sent"]));
-            let sent = widgets::list(
-                &mut c,
-                t,
-                f,
-                y,
-                &[
-                    Row::new("kernel.log").subtitle(l.pick(["内核本次开机的记录", "核心本次開機的記錄", "The kernel's messages since this start"])),
-                    Row::new("recovery.log").subtitle(l.pick(["界面与操作本次开机的记录", "介面與操作本次開機的記錄", "What the pages and actions did this start"])),
-                ],
-            );
-            y = widgets::section(&mut c, t, f, sent.bottom, l.pick(["隐私", "隱私", "Privacy"]));
-            y = widgets::footnote(
-                &mut c,
-                t,
-                f,
-                y,
-                l.pick([
-                    "不会上传任何隐私信息：只有上面两个日志和这里写的问题描述。日志只用于研究这个 bug，不对外公开。",
-                    "不會上傳任何隱私資訊：只有上面兩個記錄和這裡寫的問題描述。記錄只用於研究這個 bug，不對外公開。",
-                    "Nothing private goes: only the two logs above and what is written here. The logs are read to work out this bug and are not made public.",
-                ]),
-            );
-            y = widgets::footnote(
-                &mut c,
-                t,
-                f,
-                y + t.m.dp(8.0),
-                l.pick([
-                    "请在 bug 出现之后再反馈：没触发 bug 就反馈，日志里看不到问题，也就无从查起。",
-                    "請在 bug 出現之後再回報：沒觸發 bug 就回報，記錄裡看不到問題，也就無從查起。",
-                    "Send this after the bug has happened: a report from before it leaves nothing in the logs to look for.",
-                ]),
-            );
-            // The keyboard is at the foot, and what the page has to say stops
-            // above it: the two would otherwise be drawn over one another.
-            match &fb.report {
-                Report::Sending { done, total } => {
-                    let detail = l.pick([
-                        format!("已上传 {done} / {total} 字节"),
-                        format!("已上傳 {done} / {total} 位元組"),
-                        format!("{done} of {total} bytes sent"),
-                    ]);
-                    let share = fb.report.share();
-                    widgets::progress_card(&mut c, t, f, y + t.m.dp(16.0), l.pick(["正在上传", "正在上傳", "Sending"]), &detail, share);
-                }
-                Report::Refused { why, again } => {
-                    let y = widgets::section(&mut c, t, f, y + t.m.dp(10.0), l.pick(["上传失败", "上傳失敗", "Not sent"]));
-                    let y = widgets::footnote(&mut c, t, f, y, why);
-                    if *again {
-                        let retry = widgets::button(&mut c, t, f, y + t.m.dp(16.0), l.pick(["重试", "重試", "Try again"]));
-                        out.push(Hit { rect: retry, action: Action::SendReportAgain });
-                    }
-                    let edit = widgets::button(&mut c, t, f, y + t.m.dp(16.0), l.pick(["重新填写", "重新填寫", "Write again"]));
-                    out.push(Hit { rect: edit, action: Action::WriteReportAgain });
-                }
-                _ => {
-                    let send = widgets::button(&mut c, t, f, y + t.m.dp(20.0), l.pick(["提交", "提交", "Send"]));
-                    out.push(Hit { rect: send, action: Action::SendReport });
-                    keyboard_hits(&mut c, t, f, s, l.pick(["换行", "換行", "Return"]), &mut out);
-                }
-            }
-            return Frame { caret: Some(caret), ..Frame::new(t, c, out, l.pick(["问题反馈", "問題回報", "Report a bug"]), top) };
+            let send = widgets::button(&mut c, t, f, y + m.dp(20.0), l.pick(["提交", "提交", "Send"]));
+            out.push(Hit { rect: send, action: Action::SendReport });
         }
     }
-    Frame::new(t, c, out, l.pick(["问题反馈", "問題回報", "Report a bug"]), top)
+    // The keyboard is held at the foot of the screen rather than drawn on the
+    // page: a page that scrolls would take the keys with it, and the report is
+    // written over more lines than a screen holds.
+    // A report on its way, or one turned down, is read rather than written:
+    // the keys would cover what it has to say.
+    let dock = if matches!(fb.report, Report::Writing) {
+        let keys = widgets::keyboard_height(t);
+        let mut key_canvas = Canvas::new(m.w, keys.ceil() as u32);
+        let held = widgets::keyboard(&mut key_canvas, t, f, l, 0.0, s.layer, s.key_held(), l.pick(["换行", "換行", "Return"]));
+        Some(Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect() })
+    } else {
+        None
+    };
+    // What the page scrolls to is where its content stops: `fit` adds the
+    // margin under it, and the keys at the foot are counted in the page's
+    // height rather than taken from it, so the last line stops above them.
+    let c = fit(c, t, y);
+    Frame { caret: Some(caret), dock, content_end: Some(y), ..Frame::new(t, c, out, title, top) }
 }
 
 /// Skyward's licence, in Chinese, ahead of the words the licence gives for
