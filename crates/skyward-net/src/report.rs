@@ -8,7 +8,6 @@
 //! stalled.
 
 use crate::http;
-use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::io::{self, Read};
 use std::sync::Arc;
@@ -92,7 +91,7 @@ pub fn send(words: &str, kernel: &[u8], recovery: &[u8], progress: Arc<AtomicU64
     let text = response.body_mut().read_to_string().map_err(|e| Refused::Unreadable(format!("read the answer: {e}")))?;
     let answer: Answer = serde_json::from_str(&text).map_err(|e| Refused::Unreadable(format!("the address answered in words this does not know ({e}): {}", shortened(&text))))?;
     if answer.success {
-        let id = answer.question_id.context("the address took the report but named no number for it")?;
+        let id = answer.question_id.ok_or_else(|| Refused::Unreadable("the address took the report but named no number for it".into()))?;
         return Ok(Taken { id });
     }
     Err(Refused::Said { status, error: answer.error.unwrap_or_else(|| "UNKNOWN".into()), message: answer.message.unwrap_or_default() })
