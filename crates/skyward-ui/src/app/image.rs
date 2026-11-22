@@ -227,7 +227,7 @@ mod tests {
         // its swipe is: a tap has to land outside that.
         let t = app.theme();
         let mut c = Canvas::new(t.m.w, t.m.h);
-        app.compose_image_ask(&mut c, f);
+        app.compose_image_ask(&mut c, &f);
         app.touch(Touch::Down(W as f32 / 2.0, 10.0), &f, 0);
         assert!(app.state.image_asking.is_none(), "a tap elsewhere puts it away");
         assert!(app.state.image_job.is_none(), "and writes nothing");
