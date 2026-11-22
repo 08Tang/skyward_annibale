@@ -244,6 +244,9 @@ pub enum Screen {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Confirm {
+    /// Slide the lock away from over the page, its knob taken along its track
+    /// as a finger takes it: what the power key works while the lock shows.
+    Unlock,
     Reboot,
     /// Turn the phone off.
     PowerOff,
@@ -1911,9 +1914,10 @@ impl App {
             Some((_, Press::Power { spot: Spot { stop: Stop::Hit(Action::OpenEntry(_)), .. }, at })) => Some(at + LONG_PRESS_MS),
             _ => None,
         };
-        // The power key held on no control opens the reboot page.
+        // The power key held on no control opens the reboot page, unless the
+        // lock is over the page, where holding it goes no further.
         let hold = match self.button {
-            Some((_, Press::Sleep { at, .. })) => Some(at + POWER_HOLD_MS),
+            Some((_, Press::Sleep { at, .. })) if self.lock.is_none() => Some(at + POWER_HOLD_MS),
             _ => None,
         };
         let blink = self.blink_at(now).filter(|_| self.display_on).map(|(_, next)| next);
@@ -2041,9 +2045,12 @@ impl App {
             fx.extend(self.held_entry(i));
         }
         // The power key held on no control opens the reboot page over the
-        // page shown, as a phone's long press does.
+        // page shown, as a phone's long press does. Under the lock it does
+        // nothing more: the lock is exactly what a long press must not get
+        // past, and it is slid away first.
         if let Some((key, Press::Sleep { at, .. })) = self.button
             && now >= at + POWER_HOLD_MS
+            && self.lock.is_none()
         {
             self.button = Some((key, Press::Spent));
             fx.extend(self.reboot_page(now));
@@ -2146,11 +2153,15 @@ impl App {
             let along = (now.saturating_sub(at) as f32 / SLIDE_MS as f32).min(1.0);
             if along != self.state.confirm {
                 self.state.confirm = along;
+                // 锁屏的滑块是锁屏自己画的，它读的是锁的 drag，所以按住电源键
+                // 滑锁时两边都得走，否则画出来的滑块不会动。
+                if which == Confirm::Unlock && let Some(lock) = &mut self.lock {
+                    lock.drag = along;
+                }
                 self.knob = Some((which, track));
                 self.dirty = true;
             }
-        }
-        // A volume key held moves the light on and on, once the page it
+        }        // A volume key held moves the light on and on, once the page it
         // last moved on has been drawn.
         if let Some((key, Press::Volume { down, next })) = self.button
             && now >= next

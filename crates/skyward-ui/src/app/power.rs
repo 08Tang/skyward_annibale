@@ -34,6 +34,13 @@ impl App {
             self.dirty = true;
             self.darkening = None;
             self.curtain.set(true, now);
+            // 锁屏是随这次亮屏才露出来的，滑块从头开始。
+            if let Some(lock) = &mut self.lock {
+                lock.drag = 0.0;
+                lock.held = false;
+            }
+            self.state.confirm = 0.0;
+            self.lock_rect = None;
         }
         self.woke_at = Some(now);
         self.stir(now);
@@ -94,18 +101,20 @@ impl App {
     /// now, then the panel goes off. A finger on the glass lets go of what
     /// it held, and the page stops where it is.
     pub(super) fn sleep(&mut self, now: u64) {
-        // The panel goes dark under a lock, as a phone's does: the page behind
-        // it is there once the knob is slid along. The fastboot page takes no
-        // lock: it is worked with the keys, since the touchscreen runs from the
-        // partitions fastbootd leaves out, and a knob that no panel could slide
-        // would hold the page shut for good.
+        // The panel goes dark over the page it shows, and the lock is there
+        // for the wake that comes next. The fastboot page takes no lock: it is
+        // worked with the keys, since the touchscreen runs from the partitions
+        // fastbootd leaves out, and a knob that no panel could slide would
+        // hold the page shut for good.
         if self.screen() != Screen::Fastboot {
             self.lock = Some(Lock { drag: 0.0, held: false });
         }
-        // The lock is drawn over the page as the panel goes off, so the frame
-        // that shows it has to be drawn: the panel keeps the last one up
-        // while its light fades.
+        // 息屏过程中不画锁屏：锁屏只属于下一次亮屏，若在这一帧就画出来，会在
+        // 屏幕彻底熄灭前闪一下解锁页。
         self.dirty = true;
+        // 锁屏的滑轨从头开始，上一轮解到哪儿都不带来。
+        self.state.confirm = 0.0;
+        self.lock_rect = None;
         // A sheet half pulled is let go of: it does not wait over a dark panel
         // for a finger that is no longer there.
         self.shade = 0.0;
@@ -129,6 +138,8 @@ impl App {
             _ => {}
         }
         self.drop_button();
+        // 锁屏的滑轨画在锁屏上，页面这边没有要重画的一段。
+        self.knob = None;
         self.adjusting = false;
         self.fling = None;
         self.bounce = None;
@@ -653,5 +664,86 @@ mod tests {
             assert!(!app.display_on());
             assert!(app.locked(), "{screen:?} keeps the lock a phone's panel has");
         }
+    }
+
+    #[test]
+    fn going_dark_shows_the_page_until_the_backlight_closes_not_the_lock() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        app.tick(0);
+        let after = SCREEN_OFF[app.state.screen_off].expect("the page goes dark on its own");
+        app.tick(after + 1);
+        assert!(!app.display_on());
+        assert!(app.locked(), "the lock waits for the wake");
+        // The frames drawn as the backlight shuts are the page going dark: a
+        // lock brought up there is the flash of a page nobody asked for.
+        let mut c = Canvas::new(W, H);
+        for at in [after + 1, after + 100, after + 300] {
+            app.compose(&mut c, &f, &i, "12:00", at);
+            assert_eq!(app.lock_rect, None, "no lock was drawn at {at}");
+        }
+        // The wake brings it up, and there the knob answers.
+        press(&mut app, Key::Power, after + 400);
+        assert!(app.display_on());
+        app.compose(&mut c, &f, &i, "12:00", after + 400);
+        assert!(app.lock_rect.is_some(), "the wake draws the lock");
+    }
+
+    #[test]
+    fn the_power_key_slides_the_lock_away_and_nothing_else_gets_past_it() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Settings, W, H, PPD);
+        // Dark the panel, then light it again: the lock is over the page.
+        press(&mut app, Key::Power, 0);
+        assert!(!app.display_on());
+        press(&mut app, Key::Power, 100);
+        assert!(app.display_on());
+        assert!(app.locked());
+        // The volume keys do nothing: the light they would move is on the page
+        // the lock is hiding.
+        assert!(app.key(Key::VolumeDown, 200).is_empty());
+        assert!(app.key_up(Key::VolumeDown, 210).is_empty());
+        assert!(app.key(Key::VolumeUp, 220).is_empty());
+        assert!(app.key_up(Key::VolumeUp, 230).is_empty());
+        assert!(app.locked(), "the volume keys leave the lock alone");
+        assert_eq!(app.screen(), Screen::Settings, "and open nothing");
+        // Neither does a long press, or the power key with volume up: the lock
+        // is exactly what those must not get past.
+        assert!(app.key(Key::Power, 300).is_empty());
+        assert!(app.tick(300 + POWER_HOLD_MS).is_empty());
+        assert_eq!(app.screen(), Screen::Settings, "a long press on the lock opens no reboot page");
+        assert!(app.key_up(Key::Power, 300 + POWER_HOLD_MS + 10).is_empty());
+        assert!(app.locked(), "and the lock is still there");
+        // Held, the power key takes the knob the whole way along, as a finger
+        // would, and the lock gives way as it comes up.
+        assert!(app.key(Key::Power, 4000).is_empty());
+        app.tick(4000 + SLIDE_MS);
+        assert!(app.state.confirm > SLID, "the knob went along its track");
+        app.key_up(Key::Power, 4000 + SLIDE_MS + 10);
+        assert!(!app.locked(), "let go there, the lock gives way");
+        assert!(app.display_on(), "with the page lit behind it");
+        assert_eq!(app.screen(), Screen::Settings);
+    }
+
+    #[test]
+    fn the_power_key_and_volume_up_open_no_reboot_page_under_the_lock() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Files, W, H, PPD);
+        press(&mut app, Key::Power, 0);
+        press(&mut app, Key::Power, 100);
+        assert!(app.locked());
+        assert!(app.key(Key::Power, 200).is_empty());
+        assert!(app.key(Key::VolumeUp, 210).is_empty(), "volume up adds nothing under the lock");
+        assert_eq!(app.screen(), Screen::Files, "no reboot page opened");
+        assert!(app.locked());
+        app.key_up(Key::Power, 220);
+        app.key_up(Key::VolumeUp, 230);
+        assert_eq!(app.screen(), Screen::Files);
+        // Slid away, the same chord opens it again.
+        unlock(&mut app, &f, 300);
+        assert!(!app.locked());
+        assert!(app.key(Key::Power, 400).is_empty());
+        assert!(app.key(Key::VolumeUp, 410).is_empty());
+        assert_eq!(app.screen(), Screen::Reboot, "with the lock gone, the chord opens the reboot page");
     }
 }

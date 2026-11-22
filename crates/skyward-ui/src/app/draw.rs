@@ -221,24 +221,16 @@ impl App {
             self.compose_image_ask(out, f);
         }
         // The page comes up from black as the panel lights, and goes dark as
-        // it goes off. Lighting, the lock comes up with the page under the
-        // same light. Going off, the page goes dark first and the lock stays
-        // lit over it until the backlight closes: the screen closes on the
-        // lock, not the lock on the screen, which is the order a phone's own
-        // does it in.
-        let gone = self.curtain.level(now);
-        let drag = self.lock.as_ref().map(|lock| lock.drag);
-        if self.display_on {
-            if let Some(drag) = drag {
-                self.compose_lock(out, f, info, clock, drag);
-            }
-            out.dim(gone);
-        } else {
-            out.dim(gone);
-            if let Some(drag) = drag {
-                self.compose_lock(out, f, info, clock, drag);
-            }
+        // it goes off. The lock is drawn on a lit panel only: a phone's own
+        // screen closes on the page it was showing, and its lock is what the
+        // next wake brings up -- a lock sliding in for the moment before the
+        // backlight shuts is a flash of a page nobody asked for.
+        if self.display_on
+            && let Some(lock) = &self.lock
+        {
+            self.compose_lock(out, f, info, clock, lock.drag);
         }
+        out.dim(self.curtain.level(now));
     }
 
     /// The card that asks before an entry, or a backup, is deleted: the words,
@@ -675,10 +667,10 @@ impl App {
             out.text(&face, &note, (w - width) / 2.0, h * 0.375, px, Rgba::rgb(150, 154, 164), None);
         }
         let track = self.lock_track();
-        let label = crate::tr!(self.state.lang, "滑动解锁", "滑動解鎖", "Slide to unlock");
+        let (label, _) = crate::pages::confirm_label(Confirm::Unlock, &self.state);
         // Drawn in the rect `lock_track` gives, which is also where the finger
         // has to land: a control across the whole page is a bar, not a slide.
-        self.lock_rect = Some(widgets::confirm_in(out, &t, f, track, &label, false, drag));
+        self.lock_rect = Some(widgets::confirm_in(out, &t, f, track, label, false, drag));
     }
 
     /// The charging screen, `level` of the way over the page drawn on `out`.
@@ -728,7 +720,13 @@ impl App {
         }
         let t = self.theme();
         if let Some((which, track)) = self.knob.take() {
-            self.paint_knob(&t, f, which, track);
+            // 锁屏的滑轨不在页面上：它随锁屏一起画，所以按住电源键滑它时要
+            // 重画的是整块锁屏，不是页面上的那一段。
+            if which == Confirm::Unlock {
+                self.lock_rect = None;
+            } else {
+                self.paint_knob(&t, f, which, track);
+            }
         }
         if self.toast.as_ref().is_some_and(|m| now >= m.1) {
             self.toast = None;

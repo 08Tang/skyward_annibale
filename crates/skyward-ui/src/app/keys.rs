@@ -312,7 +312,9 @@ impl App {
     /// falls with the page `offset` pixels down, how round it is, and its
     /// tint, stronger while the power key is held down on it.
     pub(super) fn light(&mut self, offset: f32) -> Option<(Group, Rect, f32, Rgba)> {
-        if !self.keys {
+        // 锁屏挡着页面：页面上的控件一个都不该亮，否则那道光会泄在锁屏底下
+        // 露出一块，也正是音量键能「选中被挡住的东西」的根源。
+        if !self.keys || self.lock.is_some() {
             return None;
         }
         let spot = self.lit()?;

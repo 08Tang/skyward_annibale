@@ -143,6 +143,8 @@ impl App {
                     }
                     if unlocked {
                         self.lock = None;
+                        self.state.confirm = 0.0;
+                        self.lock_rect = None;
                         self.refresh();
                         // The lock gave way: the same click a slider gives.
                         if self.state.vibrate {
@@ -497,6 +499,12 @@ impl App {
             self.dirty = true;
             return Vec::new();
         }
+        // 锁屏挡着页面的时候，只有电源键能解它：音量键不许再挪动被锁屏盖住的
+        // 页面上的光，长按电源键、电源键+音量上也不许跳去重启页。按住电源键
+        // 会沿滑轨把锁推到底，和用手指滑一样。
+        if self.lock.is_some() {
+            return self.locked_key(key, now);
+        }
         // Any button stops a gliding page, and brings a sliding one to rest.
         self.fling = None;
         self.end_turn();
@@ -578,11 +586,14 @@ impl App {
         self.chord = None;
         self.stir(now);
         self.button = Some((Key::Power, Press::Spent));
+        // 锁屏挡着的时候不许跳过去：长按电源键、电源键+音量上都得先把锁滑开。
+        if self.lock.is_some() {
+            return Vec::new();
+        }
         // On the reboot page already, there is nothing to open it over.
         if self.screen() == Screen::Reboot {
             return Vec::new();
         }
-        self.lock = None;
         self.open(Screen::Reboot);
         self.refresh();
         Vec::new()
@@ -595,6 +606,32 @@ impl App {
             Some((key, at)) => self.key_down(key, at),
             None => Vec::new(),
         }
+    }
+
+    /// A button went down while the lock was over the page. The volume keys do
+    /// nothing at all: the light they would move is on a page the lock is
+    /// hiding, and a press of the power key would work whatever that light
+    /// came to rest on. On a dark panel the power key lights it, as it does
+    /// anywhere else, and does only that; on a lit one it slides the lock's
+    /// knob along as a finger does. Held there it goes no further: a long
+    /// press opens no reboot page, since the lock is exactly what a long press
+    /// must not get past.
+    fn locked_key(&mut self, key: Key, now: u64) -> Vec<Effect> {
+        self.fling = None;
+        self.end_turn();
+        match (key, self.display_on) {
+            (Key::Power, false) => {
+                self.wake(now);
+                self.button = Some((key, Press::Sleep { at: now, dark: true }));
+            }
+            (Key::Power, true) => {
+                self.stir(now);
+                self.button = Some((key, Press::Slide { which: Confirm::Unlock, track: self.lock_track(), at: now }));
+            }
+            _ => self.button = Some((key, Press::Spent)),
+        }
+        self.dirty = true;
+        Vec::new()
     }
 
     /// What a button that went down `at` does on its own: a key held is timed
@@ -825,7 +862,9 @@ impl App {
                 self.let_knob_go(which, track);
                 if done {
                     fx.extend(self.confirmed(which, now));
-                } else {
+                } else if which != Confirm::Unlock {
+                    // 锁屏没滑到底，只说一句「请按住电源键」；锁屏自己的滑轨
+                    // 什么都不用说，松手就回原位。
                     self.say(self.state.lang.pick(["请按住电源键", "請按住電源鍵", "Hold the power key"]), now);
                 }
             }
@@ -848,6 +887,10 @@ impl App {
     /// start of its track.
     fn let_knob_go(&mut self, which: Confirm, track: Rect) {
         self.state.confirm = 0.0;
+        // 锁屏的滑块画在锁屏上，锁也得跟着回到起点。
+        if which == Confirm::Unlock && let Some(lock) = &mut self.lock {
+            lock.drag = 0.0;
+        }
         self.knob = Some((which, track));
         self.dirty = true;
     }

@@ -1181,6 +1181,11 @@ impl App {
             fx.push(Effect::Haptic);
         }
         match which {
+            // 锁屏被滑开：锁去了，页面回到手上。
+            Confirm::Unlock => {
+                self.lock = None;
+                self.refresh();
+            }
             Confirm::Reboot => fx.push(Effect::Reboot(TARGETS[self.state.reboot])),
             Confirm::PowerOff => fx.push(Effect::Reboot(Target::PowerOff)),
             // The slider taken across: the lock is kept from now on. The risk

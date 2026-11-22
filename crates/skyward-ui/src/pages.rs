@@ -132,6 +132,8 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
 pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
     const INSTALL: Text = ["滑动以安装", "滑動以安裝", "Slide to install"];
     let (label, danger) = match which {
+        // 锁屏自己画它，这张只给按住电源键时的滑块用。
+        Confirm::Unlock => (["滑动解锁", "滑動解鎖", "Slide to unlock"], false),
         Confirm::Filesystem => match s.fs_action {
             FsAction::Repair => (["滑动以修复", "滑動以修復", "Slide to repair"], true),
             FsAction::Remake(_) => (["滑动以更换", "滑動以更換", "Slide to change"], true),
