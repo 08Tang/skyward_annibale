@@ -1301,7 +1301,13 @@ pub fn charge(cx: &Ctx) -> Frame {
         // The limit is the same number whatever the step, so it is drawn as it
         // stands even where it cannot be changed: a slider drawn at its left
         // end would say the limit had been moved there.
-        if !guarded {
+        //
+        // A limit is only worth setting while the guard that reads it is on,
+        // so the slider takes no touch where the switch is off, or where the
+        // step starts nothing the guard has any say over. The switch itself is
+        // still the guard's to turn, wherever a step is guarded at all.
+        let lit = guarded && s.thermal_guard;
+        if !lit {
             // Laid over the whole card, the way a finger's press is laid over a
             // row it holds: it says the card takes no touch without hiding what
             // it holds.
@@ -1309,9 +1315,9 @@ pub fn charge(cx: &Ctx) -> Frame {
             c.fill_round_rect(t.m.margin, top, t.m.w as f32 - t.m.margin * 2.0, card.bottom - top, t.m.card_radius, t.pal.row_press);
         } else {
             out.push(Hit { rect: card.track, action: Action::Slider(Slider::ThermalLimit) });
-            if let Some(r) = card.below {
-                out.push(Hit { rect: r, action: Action::Toggle(Switch::ThermalGuard) });
-            }
+        }
+        if guarded && let Some(r) = card.below {
+            out.push(Hit { rect: r, action: Action::Toggle(Switch::ThermalGuard) });
         }
         y = card.bottom;
         y = widgets::footnote(
@@ -1321,9 +1327,9 @@ pub fn charge(cx: &Ctx) -> Frame {
             y + t.m.dp(8.0),
             if guarded {
                 l.pick([
-                    "开关和温度都是即时生效的：调完就按新温度盯着，电池一到这个温度就把充电档位降一档，然后重启回 recovery 按新档位充电。默认档不启动任何服务，充电很慢，不会让电池过热，所以默认档下这一项不可调，也不生效。",
-                    "開關和溫度都是即時生效的：調完就按新溫度盯著，電池一到這個溫度就把充電檔位降一檔，然後重啟回 recovery 按新檔位充電。預設檔不啟動任何服務，充電很慢，不會讓電池過熱，所以預設檔下這一項不可調，也不生效。",
-                    "The switch and the temperature both take at once: the limit is watched as it is set, and the charge steps down one the moment the battery reaches it, starting the recovery again to charge at the new step. The default step starts no service at all, so its charge is slow enough not to overheat the battery: the guard is neither offered nor obeyed there.",
+                    "开关和温度都是即时生效的：开启后温度才可调，调完就按新温度盯着，电池一到这个温度就把充电档位降一档，然后重启回 recovery 按新档位充电。默认档不启动任何服务，充电很慢，不会让电池过热，所以默认档下这一项不可调，也不生效。",
+                    "開關和溫度都是即時生效的：開啟後溫度才可調，調完就按新溫度盯著，電池一到這個溫度就把充電檔位降一檔，然後重啟回 recovery 按新檔位充電。預設檔不啟動任何服務，充電很慢，不會讓電池過熱，所以預設檔下這一項不可調，也不生效。",
+                    "The switch and the temperature both take at once: the limit may be set only while the guard is on, and it is watched as it is set, so a battery that reaches it has the charge stepped down there and then, starting the recovery again to charge at the new step. The default step starts no service at all, so its charge is slow enough not to overheat the battery: the guard is neither offered nor obeyed there.",
                 ])
             } else {
                 l.pick([

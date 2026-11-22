@@ -62,6 +62,12 @@ const USB_TIMEOUT: Duration = Duration::from_secs(5);
 /// before the phone starts the system or powers off.
 const LEAVE_AFTER_MS: u64 = 1500;
 
+/// How long a start has to settle before the thermal guard watches the
+/// battery: a battery still warm from the charge a step was taken over would
+/// otherwise step the charge down again before the phone had charged at the
+/// step the last one chose.
+const THERMAL_SETTLE_MS: u64 = 60_000;
+
 /// How long after the screen starts a touch panel may still come up; with
 /// none by then, the pages are worked with the keys, their light shown.
 ///
@@ -1252,9 +1258,6 @@ struct Pages<'a> {
     /// Whether the last reading found a charger, so the nodes are said again
     /// as one comes or goes.
     charge_present: bool,
-    /// Whether the thermal guard has stepped the charge down this start, so it
-    /// steps down no further before the recovery has started again.
-    stepped_down: bool,
     /// An update's merge followed: one the recovery found under way, which
     /// the kernel took up again as the snapshots were mapped, or one started
     /// on the update page.
@@ -1519,7 +1522,6 @@ impl<'a> Pages<'a> {
             imager: None,
             charge_said: false,
             charge_present: false,
-            stepped_down: false,
             merger: None,
             systems_worker,
             switch_asked: false,
@@ -3836,15 +3838,18 @@ impl Pages<'_> {
     /// Nothing is done on the plain step, which starts neither of Xiaomi's
     /// programs: what a charge draws there cannot warm the battery enough to
     /// matter, so the page neither offers the guard nor obeys it there.
-    fn thermal_guard(&mut self, _now: u64) -> Result<()> {
+    ///
+    /// Nothing is done in the first minute of a start either, and that is what
+    /// keeps a step from being taken twice: the readings go on coming while
+    /// the recovery is being started again, and a battery still warm from the
+    /// charge just ended would step the charge down a second time before the
+    /// phone had charged at the step the first one chose. A minute is longer
+    /// than a start takes and long enough for the charge to settle.
+    fn thermal_guard(&mut self, now: u64) -> Result<()> {
         if !self.app.state.thermal_guard || !self.app.state.charge_mode.guarded() {
             return Ok(());
         }
-        // A step already taken this start is not taken again: the readings go
-        // on coming while the recovery is being started again, and a second
-        // step would be taken from the step the first one chose before the
-        // phone had ever charged at it.
-        if self.stepped_down {
+        if now < THERMAL_SETTLE_MS {
             return Ok(());
         }
         let Some(temp) = self.app.state.battery_temp else { return Ok(()) };
@@ -3855,7 +3860,6 @@ impl Pages<'_> {
         }
         let Some(cooler) = self.app.state.charge_mode.stepped_down() else { return Ok(()) };
         self.app.state.charge_mode = cooler;
-        self.stepped_down = true;
         let kept = self.app.settings();
         skyward_sys::kmsg(&format!(
             "the battery is at {:.1} C, past the {} C limit: the charge steps down to {} and the recovery starts again",
