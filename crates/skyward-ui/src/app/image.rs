@@ -190,10 +190,14 @@ mod tests {
             size: 4096,
             made: 1_792_348_260,
         };
-        let mut app = App::new(Screen::ImageBackup, W, H, PPD);
-        app.set_images(Ok(Vec::new()), Ok(vec![file.clone()]));
-        app.state.image_showing_parts = false;
-        app.frame(&f, &i);
+        let listing = || {
+            let mut app = App::new(Screen::ImageBackup, W, H, PPD);
+            app.set_images(Ok(Vec::new()), Ok(vec![file.clone()]));
+            app.state.image_showing_parts = false;
+            app.frame(&f, &i);
+            app
+        };
+        let mut app = listing();
         tap(&mut app, &f, &i, Action::ImportImage(0));
         assert!(app.state.image_job.is_none(), "a tap on the image writes nothing");
         assert_eq!(app.state.image_asking, Some(Confirm::ImportImage(0)), "it asks with a swipe");
@@ -202,6 +206,9 @@ mod tests {
             path: "/data/media/0/skyward/boot_a.img".into(),
             sha256: "ab".repeat(32),
         }]);
+        // The image being written back is the page now, so deleting one is
+        // asked on the list afresh.
+        let mut app = listing();
         tap(&mut app, &f, &i, Action::DeleteImage(0));
         assert!(app.state.image_files == Ok(vec![file.clone()]), "a tap on delete deletes nothing");
         assert_eq!(app.state.image_asking, Some(Confirm::DeleteImage(0)));
@@ -216,6 +223,11 @@ mod tests {
         app.set_images(Ok(parts), Ok(Vec::new()));
         tap(&mut app, &f, &i, Action::ExportImage(0));
         assert!(app.state.image_asking.is_some());
+        // The card is drawn over the page as the loop draws it, which is where
+        // its swipe is: a tap has to land outside that.
+        let t = app.theme();
+        let mut c = Canvas::new(t.m.w, t.m.h);
+        app.compose_image_ask(&mut c, f);
         app.touch(Touch::Down(W as f32 / 2.0, 10.0), &f, 0);
         assert!(app.state.image_asking.is_none(), "a tap elsewhere puts it away");
         assert!(app.state.image_job.is_none(), "and writes nothing");
