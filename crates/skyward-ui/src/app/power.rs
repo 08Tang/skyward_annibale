@@ -728,18 +728,19 @@ mod tests {
         press(&mut app, Key::Power, 0);
         press(&mut app, Key::Power, 100);
         assert!(app.locked());
-        assert!(app.key(Key::Power, 200).is_empty());
-        assert!(app.key(Key::VolumeUp, 210).is_empty(), "volume up adds nothing under the lock");
-        assert_eq!(app.screen(), Screen::Files, "no reboot page opened");
-        assert!(app.locked());
+        // A short press on the lock only turns the panel off again: nothing
+        // else gets through it.
         app.key_up(Key::Power, 220);
-        app.key_up(Key::VolumeUp, 230);
-        assert_eq!(app.screen(), Screen::Files, "and the chord opened none either");
-        // A short press on the lock only turns the panel off again.
-        assert!(!app.display_on());
-        // Slid away, the same chord opens the reboot page.
+        assert!(!app.display_on(), "a short press on the lock turns the panel off");
+        // The power key with volume up opens nothing either: volume up adds
+        // nothing under the lock.
         press(&mut app, Key::Power, 300);
         assert!(app.display_on());
+        assert!(app.key(Key::VolumeUp, 310).is_empty(), "volume up adds nothing under the lock");
+        assert_eq!(app.screen(), Screen::Files, "and the chord opened none");
+        assert!(app.locked());
+        app.key_up(Key::VolumeUp, 320);
+        // Slid away, the same chord opens the reboot page.
         unlock(&mut app, &f, 400);
         assert!(!app.locked());
         // Past the guard that a press just after the wake only keeps awake.
