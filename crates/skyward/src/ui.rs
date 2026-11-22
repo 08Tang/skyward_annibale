@@ -3488,7 +3488,6 @@ impl Pages<'_> {
                 self.app.state.feedback.report = skyward_ui::app::Report::Sending { done: 0, total: 0 };
                 self.app.refresh();
             }
-            Effect::WriteReportAgain => self.app.report_again(),
             Effect::SetMode { path, mode } => {
                 let outcome = skyward_files::set_mode(Path::new(&path), mode).map_err(|e| format!("{e:#}"));
                 self.app.mode_set(mode, outcome, now);

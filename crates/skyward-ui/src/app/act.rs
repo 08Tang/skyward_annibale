@@ -571,7 +571,7 @@ impl App {
                     return vec![Effect::SendReport];
                 }
             }
-            Action::WriteReportAgain => return vec![Effect::WriteReportAgain],
+            Action::WriteReportAgain => self.report_again(),
             Action::PickSlot(slot) => {
                 self.state.next_slot = Some(slot);
                 self.refresh();
