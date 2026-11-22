@@ -374,6 +374,9 @@ pub struct State {
     pub image_to_drive: bool,
     /// Work on an image under way, or how it last ended.
     pub image_job: Option<ImageJob>,
+    /// The row of the image page whose swipe is showing: a partition to write
+    /// out, or an image to write back or delete, chosen by tapping its row.
+    pub image_asking: Option<Confirm>,
     /// What the runtime last read from the charger: the power it delivers,
     /// the protocol it negotiated, and the most it has given this charge.
     pub charge: ChargeNow,
@@ -550,6 +553,7 @@ impl Default for State {
             image_showing_parts: true,
             image_to_drive: false,
             image_job: None,
+            image_asking: None,
             charge: ChargeNow::default(),
             battery_temp: None,
             fast_charge_kernel: false,

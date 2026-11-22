@@ -155,6 +155,9 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
         Confirm::RemoveSystem => (["滑动以删除", "滑動以刪除", "Slide to remove"], true),
         Confirm::DeleteApp => (["滑动以卸载", "滑動以卸載", "Slide to uninstall"], true),
         Confirm::InstallSystem => (INSTALL, false),
+        Confirm::ExportImage(_) => (["滑动以备份", "滑動以備份", "Slide to back up"], false),
+        Confirm::ImportImage(_) => (["滑动以写回", "滑動以寫回", "Slide to write back"], true),
+        Confirm::DeleteImage(_) => (["滑动以删除", "滑動以刪除", "Slide to delete"], true),
     };
     (s.lang.pick(label), danger)
 }

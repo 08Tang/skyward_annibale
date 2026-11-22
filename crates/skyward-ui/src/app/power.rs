@@ -102,6 +102,10 @@ impl App {
         if self.screen() != Screen::Fastboot {
             self.lock = Some(Lock { drag: 0.0, held: false });
         }
+        // The lock is drawn over the page as the panel goes off, so the frame
+        // that shows it has to be drawn: the panel keeps the last one up
+        // while its light fades.
+        self.dirty = true;
         // A sheet half pulled is let go of: it does not wait over a dark panel
         // for a finger that is no longer there.
         self.shade = 0.0;
@@ -157,16 +161,58 @@ mod tests {
         let mut app = App::new(Screen::Home, W, H, PPD);
         assert!(app.key(Key::Power, 0).is_empty());
         assert_eq!(app.panel(0), Some(SLIDER_START), "it waits for volume down first");
-        assert_eq!(app.deadline(0), Some(CHORD_MS));
-        assert_eq!(app.tick(CHORD_MS), vec![Effect::Ticks], "held on alone, it turns the panel off, ticking the motor");
+        assert_eq!(app.deadline(0), Some(CHORD_MS), "and for the press to end, or to run long");
+        assert!(app.tick(CHORD_MS).is_empty(), "held on alone, it waits to see how long");
+        assert!(app.display_on(), "the panel is still up");
+        assert_eq!(app.key_up(Key::Power, CHORD_MS + 50), vec![Effect::Ticks], "let go, it turns the panel off, ticking the motor");
         assert!(!app.display_on());
-        assert!(app.key_up(Key::Power, CHORD_MS + 50).is_empty());
         assert!(app.key(Key::Power, CHORD_MS + 60).is_empty());
         assert_eq!(app.panel(CHORD_MS + 60), Some(SLIDER_START));
         assert!(app.key_up(Key::Power, CHORD_MS + 100).is_empty());
         assert!(app.key(Key::Power, 1000).is_empty());
         assert_eq!(app.key_up(Key::Power, 1050), vec![Effect::Ticks]);
         assert!(!app.display_on(), "let go sooner, it turns the panel off then");
+    }
+
+    #[test]
+    fn the_power_key_held_long_opens_the_reboot_page_over_the_one_shown() {
+        let mut app = App::new(Screen::Settings, W, H, PPD);
+        assert!(app.key(Key::Power, 0).is_empty());
+        assert!(app.tick(CHORD_MS).is_empty(), "short of the long press, nothing happens yet");
+        assert!(app.display_on(), "the panel stays up while the key is held");
+        assert_eq!(app.deadline(CHORD_MS), Some(POWER_HOLD_MS), "the page opens at three seconds");
+        assert!(app.tick(POWER_HOLD_MS - 1).is_empty());
+        assert_eq!(app.screen(), Screen::Settings, "still the page it was pressed on");
+        assert!(app.tick(POWER_HOLD_MS).is_empty());
+        assert_eq!(app.screen(), Screen::Reboot, "held to the end, the reboot page opens over it");
+        assert!(app.display_on(), "with the panel up");
+        assert!(app.key_up(Key::Power, POWER_HOLD_MS + 50).is_empty(), "letting go there does nothing more");
+        // Back comes to the page the key was pressed on, not home.
+        app.act(Action::Back, POWER_HOLD_MS + 100);
+        assert_eq!(app.screen(), Screen::Settings, "back from the reboot page comes to the page it opened over");
+    }
+
+    #[test]
+    fn the_power_key_and_volume_up_together_open_the_reboot_page() {
+        let mut app = App::new(Screen::Files, W, H, PPD);
+        assert!(app.key(Key::Power, 0).is_empty());
+        assert!(app.key(Key::VolumeUp, CHORD_MS - 1).is_empty(), "volume up follows in time");
+        assert_eq!(app.screen(), Screen::Reboot, "the reboot page opens over the page shown");
+        assert!(app.display_on(), "and the panel stays up");
+        assert!(app.key_up(Key::VolumeUp, CHORD_MS).is_empty());
+        assert!(app.key_up(Key::Power, CHORD_MS + 10).is_empty());
+        app.act(Action::Back, CHORD_MS + 20);
+        assert_eq!(app.screen(), Screen::Files, "back comes to the page it opened over");
+    }
+
+    #[test]
+    fn volume_up_alone_lights_a_control_and_opens_no_page() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        app.frame(&f, &i);
+        assert!(press(&mut app, Key::VolumeUp, 0).is_empty());
+        assert_eq!(app.screen(), Screen::Home, "volume up on its own opens nothing");
+        assert_eq!(lit(&mut app, &f, &i), Some(Stop::Hit(Action::Open(Screen::Search))), "it lights the first control in view, as it always did");
     }
 
     #[test]

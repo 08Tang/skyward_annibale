@@ -216,11 +216,31 @@ impl App {
         if self.state.place_ask.is_some() {
             self.compose_place(out, f);
         }
-        if let Some(lock) = &self.lock {
-            let drag = lock.drag;
-            self.compose_lock(out, f, info, clock, drag);
+        // 镜像的备份、写回和删除都要先滑一下：写在分区上的东西不该被误触。
+        if self.state.image_asking.is_some() && self.screen() == Screen::ImageBackup {
+            self.compose_image_ask(out, f);
         }
-        out.dim(self.curtain.level(now));
+        // The page comes up from black as the panel lights, and goes dark as
+        // it goes off.
+        //
+        // Lighting, the lock is under the light with the page and comes up
+        // with it. Going off, the page goes dark first and the lock stays lit
+        // over it until the backlight itself closes: the screen closes on the
+        // lock, not the lock on the screen, which is the order a phone's own
+        // does it in.
+        let gone = self.curtain.level(now);
+        let lock = self.lock.as_ref().map(|lock| lock.drag);
+        if self.display_on {
+            if let Some(drag) = lock {
+                self.compose_lock(out, f, info, clock, drag);
+            }
+            out.dim(gone);
+        } else {
+            out.dim(gone);
+            if let Some(drag) = lock {
+                self.compose_lock(out, f, info, clock, drag);
+            }
+        }
     }
 
     /// The card that asks before an entry, or a backup, is deleted: the words,
@@ -238,6 +258,43 @@ impl App {
         let (label, danger) = crate::pages::confirm_label(Confirm::KeepLock, &self.state);
         let (card, track) = widgets::confirm_card(out, &t, f, what, label, danger, self.state.confirm);
         self.asking = Some((card, Confirm::KeepLock));
+        self.asking_track = Some(track);
+    }
+
+    /// The card that asks before a partition is written out as an image, an
+    /// image is written back over one, or an image is deleted: what is to be
+    /// done, and the swipe that does it, over the middle of the screen.
+    pub(super) fn compose_image_ask(&mut self, out: &mut Canvas, f: &Fonts) {
+        let t = self.theme();
+        let l = self.state.lang;
+        let Some(which) = self.state.image_asking else { return };
+        let what = match which {
+            Confirm::ExportImage(k) => {
+                let name = match &self.state.image_parts {
+                    Ok(parts) => parts.get(k).map(|p| p.name.clone()).unwrap_or_default(),
+                    Err(_) => String::new(),
+                };
+                tr!(l, "把 {name} 分区写成镜像文件？分区有多大，镜像就有多大。", "把 {name} 分割區寫成映像檔？分割區有多大，映像檔就有多大。", "Write {name} out as an image file? The image is as large as the partition.")
+            }
+            Confirm::ImportImage(k) => {
+                let name = match &self.state.image_files {
+                    Ok(files) => files.get(k).map(|file| file.partition.clone()).unwrap_or_default(),
+                    Err(_) => String::new(),
+                };
+                tr!(l, "把镜像写回 {name} 分区？该分区现在的内容会被整个覆盖。", "把映像檔寫回 {name} 分割區？該分割區現在的內容會被整個覆蓋。", "Write the image back over {name}? Everything on that partition is replaced.")
+            }
+            Confirm::DeleteImage(k) => {
+                let name = match &self.state.image_files {
+                    Ok(files) => files.get(k).map(|file| file.name.clone()).unwrap_or_default(),
+                    Err(_) => String::new(),
+                };
+                tr!(l, "删除镜像\"{name}\"？删除后无法恢复。", "刪除映像檔「{name}」？刪除後無法復原。", "Delete the image “{name}”? It can't be brought back.")
+            }
+            _ => return,
+        };
+        let (label, danger) = crate::pages::confirm_label(which, &self.state);
+        let (card, track) = widgets::confirm_card(out, &t, f, &what, label, danger, self.state.confirm);
+        self.asking = Some((card, which));
         self.asking_track = Some(track);
     }
 

@@ -34,7 +34,7 @@ impl App {
         // The card asking to delete is over everything: a finger on its swipe
         // works that, and one anywhere on the card does nothing to the page
         // under it.
-        if (self.state.asking_delete || self.state.asking_many.is_some() || self.state.asking_remember)
+        if (self.state.asking_delete || self.state.asking_many.is_some() || self.state.asking_remember || self.state.image_asking.is_some())
             && let Some(track) = self.asking_track
             && let Some((card, which)) = self.asking
         {
@@ -68,8 +68,9 @@ impl App {
                 }
                 // A press anywhere else puts the card away, the page under
                 // it untouched.
-                Touch::Down(..) if self.state.asking_remember => {
+                Touch::Down(..) if self.state.asking_remember || self.state.image_asking.is_some() => {
                     self.state.asking_remember = false;
+                    self.state.image_asking = None;
                     self.dirty = true;
                     return Vec::new();
                 }
@@ -505,14 +506,26 @@ impl App {
         {
             return self.screenshot(key, now);
         }
+        // The power key and volume up together open the reboot page over the
+        // page shown, the way holding the power key does: volume up pressed
+        // while the power key is still down counts too.
+        if key == Key::VolumeUp
+            && (matches!(self.chord, Some((Key::Power, at)) if now < at + CHORD_MS)
+                || matches!(self.button, Some((Key::Power, Press::Sleep { .. }))))
+        {
+            return self.reboot_page(now);
+        }
         let mut fx = self.let_chord_go(now);
         if !self.display_on {
             // The power key lights the dark panel, and does only that, as on
-            // the phone's own system; the other keys leave it dark.
+            // the phone's own system; the other keys leave it dark. Held on
+            // there, it opens the reboot page as it does on a lit one.
             if key == Key::Power {
                 self.wake(now);
+                self.button = Some((key, Press::Sleep { at: now, dark: true }));
+            } else {
+                self.button = Some((key, Press::Spent));
             }
-            self.button = Some((key, Press::Spent));
             return fx;
         }
         // A key other than power sends the charging screen away for the
@@ -553,6 +566,19 @@ impl App {
         fx
     }
 
+    /// The power key and volume up went down together, or the power key was
+    /// held long enough: the reboot page opens over the page shown, so going
+    /// back from it comes to the page the keys were pressed on.
+    pub(super) fn reboot_page(&mut self, now: u64) -> Vec<Effect> {
+        self.chord = None;
+        self.stir(now);
+        self.button = Some((Key::Power, Press::Spent));
+        self.lock = None;
+        self.open(Screen::Reboot);
+        self.refresh();
+        Vec::new()
+    }
+
     /// The key waiting for its partner in a screenshot does what it does
     /// alone `now`, as pressed when it went down.
     pub(super) fn let_chord_go(&mut self, now: u64) -> Vec<Effect> {
@@ -588,12 +614,9 @@ impl App {
                     // its knob along as a finger would.
                     Some(Spot { stop: Stop::Hit(Action::Confirm(which)), rect, .. }) => self.button = Some((key, Press::Slide { which, track: rect, at })),
                     Some(spot) => self.button = Some((key, Press::Power { spot, at })),
-                    // Turning the screen off, the key ticks the motor.
-                    None => {
-                        self.button = Some((key, Press::Spent));
-                        self.sleep(now);
-                        return vec![Effect::Ticks];
-                    }
+                    // On no control the key waits: let go, it turns the
+                    // screen off; held long enough, it opens the reboot page.
+                    None => self.button = Some((key, Press::Sleep { at, dark: false })),
                 }
                 Vec::new()
             }
@@ -766,22 +789,6 @@ impl App {
     }
 
     pub fn key_up(&mut self, key: Key, now: u64) -> Vec<Effect> {
-        // A power key let go on the lock opens the lock, or the reboot page
-        // where it was held long enough.
-        if self.lock.is_some() && key == Key::Power {
-            let held = self.lock_press.take().map_or(0, |at| now.saturating_sub(at));
-            if held >= POWER_HOLD_MS {
-                // Held, it opens the reboot page, and the lock goes with it.
-                self.lock = None;
-                self.open(Screen::Reboot);
-                self.refresh();
-                return Vec::new();
-            }
-            // A press that lit the panel leaves the lock showing -- the guard
-            // just after a wake keeps it from going straight out again -- and
-            // a second press, with the panel up, puts it out as it always
-            // does. The knob is what opens it, not the key.
-        }
         let mut fx = match self.chord {
             Some((first, _)) if first == key => self.let_chord_go(now),
             _ => Vec::new(),
@@ -794,6 +801,16 @@ impl App {
         self.dirty = true;
         match press {
             Press::Power { spot, .. } => fx.extend(self.work(spot, now)),
+            // Let go short of a long press, the power key turns the screen
+            // off, ticking the motor; held to the end, the reboot page it
+            // opens is already over this one. A press that only lit the panel
+            // does nothing more as it comes up.
+            Press::Sleep { dark, .. } => {
+                if !dark {
+                    self.sleep(now);
+                    fx.push(Effect::Ticks);
+                }
+            }
             Press::Slide { which, track, .. } => {
                 let done = self.state.confirm > SLID;
                 self.let_knob_go(which, track);

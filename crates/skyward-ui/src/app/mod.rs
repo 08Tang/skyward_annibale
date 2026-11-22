@@ -284,6 +284,12 @@ pub enum Confirm {
     DeleteApp,
     /// Install the system the installer holds with the room chosen.
     InstallSystem,
+    /// Write the partition at this row of the image page out as an image.
+    ExportImage(usize),
+    /// Write the image at this row back over the partition it came from.
+    ImportImage(usize),
+    /// Delete the image at this row.
+    DeleteImage(usize),
 }
 
 /// What a control does when touched.
@@ -960,6 +966,11 @@ enum Press {
     /// its track at `track` from `at` while the key is held; let go once
     /// it has slid far enough, the control confirms.
     Slide { which: Confirm, track: Rect, at: u64 },
+    /// The power key on no control, from `at`: held long enough it opens the
+    /// reboot page over the page shown, let go sooner it turns the panel off.
+    /// `dark` is a press that only lit a panel that was off, which letting go
+    /// of does nothing more.
+    Sleep { at: u64, dark: bool },
     /// Done with: nothing more comes of it until it is let go.
     Spent,
 }
@@ -1561,8 +1572,10 @@ struct Lock {
 /// How much of the track the knob must reach for the lock to give way.
 const UNLOCK_AT: f32 = 0.96;
 
-/// How long the power key is held on the lock for the reboot page to open.
-const POWER_HOLD_MS: u64 = 1200;
+/// How long the power key is held for the reboot page to open over the page
+/// shown: the page a phone's own system asks about before it reboots, at the
+/// three seconds a long press takes there.
+const POWER_HOLD_MS: u64 = 3000;
 
 /// How close together two taps on the dark panel have to be for it to light.
 const DOUBLE_TAP_MS: u64 = 600;
@@ -1575,9 +1588,8 @@ pub struct App {
     /// scrolled and where the keys are on it.
     stack: Vec<(Screen, f32, Focus)>,
     /// The lock over the page once the panel went dark, until its knob is slid
-    /// along; and when the power key went down on it.
+    /// along.
     lock: Option<Lock>,
-    lock_press: Option<u64>,
     /// Where the lock's knob was last drawn, which is where a finger finds it,
     /// and when the dark panel was last tapped.
     lock_rect: Option<Rect>,
@@ -1750,7 +1762,6 @@ impl App {
             state: State::default(),
             stack: vec![(start, 0.0, Focus::Unset)],
             lock: None,
-            lock_press: None,
             lock_rect: None,
             tap_at: None,
             asking: None,
@@ -1900,9 +1911,14 @@ impl App {
             Some((_, Press::Power { spot: Spot { stop: Stop::Hit(Action::OpenEntry(_)), .. }, at })) => Some(at + LONG_PRESS_MS),
             _ => None,
         };
+        // The power key held on no control opens the reboot page.
+        let hold = match self.button {
+            Some((_, Press::Sleep { at, .. })) => Some(at + POWER_HOLD_MS),
+            _ => None,
+        };
         let blink = self.blink_at(now).filter(|_| self.display_on).map(|(_, next)| next);
         let chord = self.chord.map(|(_, at)| at + CHORD_MS);
-        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, blink, darkens, chord].into_iter().flatten().min()
+        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, hold, blink, darkens, chord].into_iter().flatten().min()
     }
 
     /// Whether the ring about the sign on the decrypt page is turning, which
@@ -2023,6 +2039,14 @@ impl App {
         {
             self.button = Some((key, Press::Spent));
             fx.extend(self.held_entry(i));
+        }
+        // The power key held on no control opens the reboot page over the
+        // page shown, as a phone's long press does.
+        if let Some((key, Press::Sleep { at, .. })) = self.button
+            && now >= at + POWER_HOLD_MS
+        {
+            self.button = Some((key, Press::Spent));
+            fx.extend(self.reboot_page(now));
         }
         let active = *self.active.get_or_insert(now);
         if let (true, Some(after)) = (self.display_on, SCREEN_OFF[self.state.screen_off]) {

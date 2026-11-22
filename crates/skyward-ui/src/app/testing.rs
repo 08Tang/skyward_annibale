@@ -278,6 +278,13 @@ pub(super) fn swipe(app: &mut App, f: &Fonts, i: &DeviceInfo, which: Confirm) ->
         let mut c = Canvas::new(t.m.w, t.m.h);
         app.compose_asking(&mut c, f);
     }
+    // The image page's asking card is drawn over the page too, so it is drawn
+    // here for its track to be where it shows.
+    if app.state.image_asking.is_some() {
+        let t = app.theme();
+        let mut c = Canvas::new(t.m.w, t.m.h);
+        app.compose_image_ask(&mut c, f);
+    }
     let (track, on_card) = match app.asking_track {
         Some(track) if app.asking.is_some_and(|(_, w)| w == which) => (track, true),
         _ => (app.frame(f, i).hits.iter().find(|h| h.action == Action::Confirm(which)).expect("the track is on the page").rect, false),

@@ -111,6 +111,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::testing::*;
 
     #[test]
     fn the_size_of_an_image_is_the_size_of_its_partition() {
@@ -145,5 +146,78 @@ mod tests {
         app.image_at(ImageFlow::Import, "boot_a", 0, 1000);
         app.image_ended(end.clone());
         assert_eq!(app.state.image_job.unwrap().outcome, Some(end), "nothing was written, and it says why");
+    }
+
+    #[test]
+    fn a_tap_on_a_partition_asks_with_a_swipe_before_anything_is_written() {
+        let (f, i) = (fonts(), info());
+        let parts = vec![ImagePart { name: "boot_a".into(), size: 100 * 1024 * 1024 }];
+        let mut app = App::new(Screen::ImageBackup, W, H, PPD);
+        app.set_images(Ok(parts), Ok(Vec::new()));
+        let row = app.frame(&f, &i).hits.iter().find(|h| h.action == Action::ExportImage(0)).expect("the partition's row").rect;
+        let (x, y) = (row.x + row.w / 2.0, row.y + row.h / 2.0);
+        assert!(app.touch(Touch::Down(x, y), &f, 0).is_empty(), "the finger landing writes nothing");
+        assert!(app.touch(Touch::Up, &f, 0).is_empty(), "nor letting go of it");
+        assert!(app.state.image_job.is_none(), "no image is being written");
+        assert_eq!(app.state.image_asking, Some(Confirm::ExportImage(0)), "the swipe asks first");
+    }
+
+    #[test]
+    fn the_swipe_on_a_partition_writes_it_out_and_a_tap_alone_does_not() {
+        let (f, i) = (fonts(), info());
+        let parts = vec![ImagePart { name: "boot_a".into(), size: 100 * 1024 * 1024 }];
+        let mut app = App::new(Screen::ImageBackup, W, H, PPD);
+        app.set_images(Ok(parts), Ok(Vec::new()));
+        let row = app.frame(&f, &i).hits.iter().find(|h| h.action == Action::ExportImage(0)).expect("the partition's row").rect;
+        app.touch(Touch::Down(row.x + row.w / 2.0, row.y + row.h / 2.0), &f, 0);
+        app.touch(Touch::Up, &f, 0);
+        assert_eq!(swipe(&mut app, &f, &i, Confirm::ExportImage(0)), vec![Effect::ExportImage {
+            partition: "boot_a".into(),
+            size: 100 * 1024 * 1024,
+            drive: false,
+        }]);
+        assert!(app.state.image_asking.is_none(), "and the card goes with it");
+    }
+
+    #[test]
+    fn an_image_asks_before_it_is_written_back_or_deleted() {
+        let (f, i) = (fonts(), info());
+        let file = ImageFile {
+            name: "boot_a.img".into(),
+            partition: "boot_a".into(),
+            path: "/data/media/0/skyward/boot_a.img".into(),
+            sha256: "ab".repeat(32),
+            size: 4096,
+            made: 1_792_348_260,
+        };
+        let mut app = App::new(Screen::ImageBackup, W, H, PPD);
+        app.set_images(Ok(Vec::new()), Ok(vec![file.clone()]));
+        app.state.image_showing_parts = false;
+        app.frame(&f, &i);
+        tap(&mut app, &f, &i, Action::ImportImage(0));
+        assert!(app.state.image_job.is_none(), "a tap on the image writes nothing");
+        assert_eq!(app.state.image_asking, Some(Confirm::ImportImage(0)), "it asks with a swipe");
+        assert_eq!(swipe(&mut app, &f, &i, Confirm::ImportImage(0)), vec![Effect::ImportImage {
+            partition: "boot_a".into(),
+            path: "/data/media/0/skyward/boot_a.img".into(),
+            sha256: "ab".repeat(32),
+        }]);
+        tap(&mut app, &f, &i, Action::DeleteImage(0));
+        assert!(app.state.image_files == Ok(vec![file.clone()]), "a tap on delete deletes nothing");
+        assert_eq!(app.state.image_asking, Some(Confirm::DeleteImage(0)));
+        assert_eq!(swipe(&mut app, &f, &i, Confirm::DeleteImage(0)), vec![Effect::DeleteImage("/data/media/0/skyward/boot_a.img".into())]);
+    }
+
+    #[test]
+    fn a_tap_away_puts_the_image_question_away() {
+        let (f, i) = (fonts(), info());
+        let parts = vec![ImagePart { name: "boot_a".into(), size: 100 * 1024 * 1024 }];
+        let mut app = App::new(Screen::ImageBackup, W, H, PPD);
+        app.set_images(Ok(parts), Ok(Vec::new()));
+        tap(&mut app, &f, &i, Action::ExportImage(0));
+        assert!(app.state.image_asking.is_some());
+        app.touch(Touch::Down(W as f32 / 2.0, 10.0), &f, 0);
+        assert!(app.state.image_asking.is_none(), "a tap elsewhere puts it away");
+        assert!(app.state.image_job.is_none(), "and writes nothing");
     }
 }

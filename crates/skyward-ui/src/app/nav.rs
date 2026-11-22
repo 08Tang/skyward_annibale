@@ -253,6 +253,7 @@ impl App {
         }
         self.stack.pop();
         self.state.confirm = 0.0;
+        self.state.image_asking = None;
         if !matches!(self.screen(), Screen::Install | Screen::Choose(_)) {
             self.state.second_system_asked = false;
         }
@@ -313,6 +314,7 @@ impl App {
             // since the last look is one the page no longer knows about.
             Screen::ImageBackup => {
                 self.state.image_showing_parts = true;
+                self.state.image_asking = None;
                 // An image that has ended stops being the page: it was shown
                 // once, to say how it went, and coming back to the page finds
                 // the lists again.
