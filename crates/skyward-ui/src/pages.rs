@@ -192,6 +192,10 @@ const UPDATE: Text = ["系统更新", "系統更新", "System update"];
 const SKYWARD_UPDATE: Text = ["版本更新", "版本更新", "Version update"];
 /// Reporting a bug to the author, with the logs that show it.
 const FEEDBACK: Text = ["问题反馈", "問題回報", "Report a bug"];
+
+/// How many lines of a bug report the field shows at once: more than a
+/// sentence, and few enough that the page under it is still read.
+const WORDS_LINES: usize = 5;
 const FILES: Text = ["文件管理", "檔案管理", "File manager"];
 const TERMINAL: Text = ["终端", "終端機", "Terminal"];
 const LANGUAGE: Text = ["语言", "語言", "Language"];
@@ -5368,7 +5372,7 @@ pub fn feedback(cx: &Ctx) -> Frame {
         return Frame::new(t, c, out, title, top);
     }
     let y = widgets::section_first(&mut c, t, f, top, l.pick(["问题描述", "問題描述", "What went wrong"]));
-    let (field, caret) = widgets::text_field(&mut c, t, f, y, &fb.words);
+    let (field, caret) = widgets::words_field(&mut c, t, f, y, &fb.words, WORDS_LINES);
     let mut y = field + m.dp(10.0);
     if fb.words.trim().is_empty() {
         y = widgets::footnote(
@@ -5403,11 +5407,13 @@ pub fn feedback(cx: &Ctx) -> Frame {
         f,
         y,
         l.pick([
-            "只上传上面两个日志和你写的问题描述，不会有别的东西：通讯录、短信、照片这些一概不读。日志只用来查这个 bug，不公开。",
-            "只上傳上面兩個記錄和你寫的問題描述，不會有別的東西：通訊錄、簡訊、照片這些一概不讀。記錄只用來查這個 bug，不公開。",
-            "Only the two logs above and what you write here go; nothing else is read at all, and the logs are looked at to work out this bug, not published.",
+            "上传的只有上面两个日志和这里写的内容。日志用于定位这个 bug，不会公开。",
+            "上傳的只有上面兩個記錄和這裡寫的內容。記錄用於定位這個 bug，不會公開。",
+            "What goes is the two logs above and what you write here. They are read to place this bug, and are not made public.",
         ]),
     );
+    // The report is written after the bug, and the button says so where it is
+    // touched: a report from before it leaves nothing in the logs to find.
     y = widgets::footnote(
         &mut c,
         t,
@@ -5419,35 +5425,41 @@ pub fn feedback(cx: &Ctx) -> Frame {
             "Send this after the bug has happened: a report from before it leaves nothing in the logs to look for.",
         ]),
     );
-    match &fb.report {
+    // The button sits above the note rather than under it: a report is sent
+    // without reading to the end, and the note is read while waiting.
+    y += m.dp(20.0);
+    let end = match &fb.report {
         Report::Sending { done, total } => {
             let detail = l.pick([
                 format!("已上传 {done} / {total} 字节"),
                 format!("已上傳 {done} / {total} 位元組"),
                 format!("{done} of {total} bytes sent"),
             ]);
-            widgets::progress_card(&mut c, t, f, y + m.dp(16.0), l.pick(["正在上传", "正在上傳", "Sending"]), &detail, fb.report.share());
+            widgets::progress_card(&mut c, t, f, y, l.pick(["正在上传", "正在上傳", "Sending"]), &detail, fb.report.share())
         }
         Report::Refused { why, again } => {
-            let y = widgets::section(&mut c, t, f, y + m.dp(10.0), l.pick(["上传失败", "上傳失敗", "Not sent"]));
+            let y = widgets::section(&mut c, t, f, y, l.pick(["上传失败", "上傳失敗", "Not sent"]));
             let y = widgets::footnote(&mut c, t, f, y, why);
             if *again {
                 let retry = widgets::button(&mut c, t, f, y + m.dp(16.0), l.pick(["重试", "重試", "Try again"]));
                 out.push(Hit { rect: retry, action: Action::SendReportAgain });
             }
             let edit = widgets::button(&mut c, t, f, y + m.dp(16.0), l.pick(["重新填写", "重新填寫", "Write again"]));
+            let bottom = edit.y + edit.h;
             out.push(Hit { rect: edit, action: Action::WriteReportAgain });
+            bottom
         }
         _ => {
-            let send = widgets::button(&mut c, t, f, y + m.dp(20.0), l.pick(["提交", "提交", "Send"]));
+            let send = widgets::button(&mut c, t, f, y, l.pick(["提交", "提交", "Send"]));
+            let bottom = send.y + send.h;
             out.push(Hit { rect: send, action: Action::SendReport });
+            bottom
         }
-    }
+    };
     // The keyboard is held at the foot of the screen rather than drawn on the
     // page: a page that scrolls would take the keys with it, and the report is
-    // written over more lines than a screen holds.
-    // A report on its way, or one turned down, is read rather than written:
-    // the keys would cover what it has to say.
+    // written over more lines than a screen holds. A report on its way, or one
+    // turned down, is read rather than written: the keys would cover it.
     let dock = if matches!(fb.report, Report::Writing) {
         let keys = widgets::keyboard_height(t);
         let mut key_canvas = Canvas::new(m.w, keys.ceil() as u32);
@@ -5458,9 +5470,9 @@ pub fn feedback(cx: &Ctx) -> Frame {
     };
     // What the page scrolls to is where its content stops: `fit` adds the
     // margin under it, and the keys at the foot are counted in the page's
-    // height rather than taken from it, so the last line stops above them.
-    let c = fit(c, t, y);
-    Frame { caret: Some(caret), dock, content_end: Some(y), ..Frame::new(t, c, out, title, top) }
+    // height rather than taken from it, so the last of it stops above them.
+    let c = fit(c, t, end);
+    Frame { caret: Some(caret), dock, content_end: Some(end), ..Frame::new(t, c, out, title, top) }
 }
 
 /// Skyward's licence, in Chinese, ahead of the words the licence gives for

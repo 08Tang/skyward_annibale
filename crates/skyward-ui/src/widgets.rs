@@ -1292,6 +1292,56 @@ pub fn dock_bar_danger(t: &Theme, f: &Fonts, bg: Rgba, labels: &[&str], danger: 
     (c, rects)
 }
 
+/// A text field several lines tall, for what is written rather than typed:
+/// the words of a bug report run over more lines than one holds. The card is
+/// as tall as the words need, up to `most` lines; past that the first lines
+/// scroll away, so the last is always the one being written. Returns where
+/// the card ends, and the cursor.
+pub fn words_field(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, text: &str, most: usize) -> (f32, Caret) {
+    let m = &t.m;
+    let x0 = m.margin;
+    let w = m.w as f32 - m.margin * 2.0;
+    let (x, room) = (x0 + m.inner, w - m.inner * 2.0 - m.dp(4.0));
+    let px = m.row_title_px;
+    let lines = laid_out(c, f, text, px, room);
+    // As many lines as are held, and never fewer than one: an empty field is
+    // one line tall.
+    let shown = lines.len().min(most).max(1);
+    let h = m.dp(16.0) * 2.0 + m.sub_pitch * shown as f32;
+    c.fill_round_rect(x0, top, w, h, m.card_radius, t.pal.card);
+    // The lines kept are the last ones, so the cursor is where writing goes.
+    let first = lines.len().saturating_sub(shown);
+    let mut y = top + m.dp(16.0);
+    for line in &lines[first..] {
+        c.text_top(&f.heading, line, x, y, px, t.pal.text, None);
+        y += m.sub_pitch;
+    }
+    let last = lines.last().map_or("", |l| l.as_str());
+    let at = cursor(t, f, x + c.text_width(&f.heading, last, px), y - m.sub_pitch / 2.0, px);
+    let caret = caret_over(at, |art, dx, dy| {
+        let mut y = top + m.dp(16.0) - dy;
+        for line in &lines[first..] {
+            art.text_top(&f.heading, line, x - dx, y, px, t.pal.text, None);
+            y += m.sub_pitch;
+        }
+    });
+    (top + h, caret)
+}
+
+/// The lines `text` takes in a field `room` wide, each as far as it fits: the
+/// lines the user broke it into, and those a line too long is broken into.
+fn laid_out(c: &Canvas, f: &Fonts, text: &str, px: f32, room: f32) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in text.split('\n') {
+        let mut wrapped = wrap(c, &f.heading, line, px, room);
+        if wrapped.is_empty() {
+            wrapped.push(String::new());
+        }
+        out.extend(wrapped);
+    }
+    out
+}
+
 /// A card holding text being typed, with the cursor after it; text too long
 /// for the card shows its end, where the cursor is. Returns where the card
 /// ends, and the cursor.
