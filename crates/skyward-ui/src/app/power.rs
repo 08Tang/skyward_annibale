@@ -730,6 +730,7 @@ mod tests {
         assert!(app.locked());
         // A short press on the lock only turns the panel off again: nothing
         // else gets through it.
+        assert!(app.key(Key::Power, 200).is_empty());
         app.key_up(Key::Power, 220);
         assert!(!app.display_on(), "a short press on the lock turns the panel off");
         // The power key with volume up opens nothing either: volume up adds
