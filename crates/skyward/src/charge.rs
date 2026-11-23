@@ -42,6 +42,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 
 use skyward_ui::app::ChargeNow;
 
@@ -142,6 +143,12 @@ fn present(volts: Option<u64>, protocol: Option<&str>, cell_amps: Option<i64>, c
 /// below it the phone is drawing on its battery rather than filling it.
 const CHARGING_UA: i64 = 300_000;
 
+/// How long a processor that reads `offline` is given to finish a start that
+/// is already under way before it is taken to be stuck: the firmware is tens
+/// of megabytes off the partition this recovery mounted, and a load takes a
+/// few hundred milliseconds of it.
+const ADSP_GRACE: Duration = Duration::from_millis(700);
+
 /// Raise the ADSP where the boot left it down.
 ///
 /// The processor is asked for its firmware from several threads as the drivers
@@ -154,12 +161,11 @@ const CHARGING_UA: i64 = 300_000;
 ///
 /// Asking again is worth doing once the recovery's partitions are mounted and
 /// ueventd has built the index the firmware is found through, which is where
-/// this is called from. The asking only queues the start: the page's reading
-/// each second is what finds the processor up, so nothing here waits on it.
-/// Nothing of the firmware or the loader is touched, and a processor that is
-/// already running is left alone.
+/// this is called from. A load that is still running reads `offline` just as a
+/// failed one does, so it is given `ADSP_GRACE` first and left alone if it
+/// comes up by itself; only one still down after that is asked.
 pub fn raise_the_adsp() {
-    let raised = skyward_sys::remoteproc::ask("adsp");
+    let raised = skyward_sys::remoteproc::ask("adsp", ADSP_GRACE);
     // What it came to is worth having in the log either way: a boot that still
     // charges at nothing is then known to be one whose ADSP stayed down.
     let _ = skyward_sys::kmsg(&format!("the ADSP: {}", raised.said()));
