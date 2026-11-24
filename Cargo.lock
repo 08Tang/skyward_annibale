@@ -1031,7 +1031,7 @@ dependencies = [
 
 [[package]]
 name = "ghash"
-version = "0.3.1-annibale.3"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
@@ -2791,6 +2791,7 @@ dependencies = [
  "libc",
  "png",
  "proc-macro2",
+ "qrcodegen",
  "quote",
  "serde",
  "serde_json",
@@ -3165,7 +3166,7 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "universal-hash"
-version = "0.3.1-annibale.3"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
@@ -3482,7 +3483,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "wyz"
-version = "0.3.1-annibale.3"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [

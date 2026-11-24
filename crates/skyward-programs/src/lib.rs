@@ -2,7 +2,6 @@
 //! init scripts say each is started, and which services each registers.
 
 pub mod description;
-pub mod firmware;
 pub mod loaded;
 pub mod naming;
 pub mod phone;
