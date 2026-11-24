@@ -1,0 +1,28 @@
+﻿True True True True
+### 512-518
+512         f,
+513         y,
+514         &[
+515             Row::new(l.pick(LANGUAGE)).icon(BLUE, Icon::Globe).trail(Trail::Value(l.name())),
+516             Row::new(l.pick(TIME_ZONE)).icon(ORANGE, Icon::Clock).trail(Trail::Value(l.pick(TIME_ZONES[s.time_zone].0))),
+517         ],
+518     );
+519     out.extend(hits(&general.rows, &[Action::Open(Screen::Language), Action::Open(Screen::TimeZone)]));
+### 2465-2480
+2465             if held.device != i.codename {
+2466                 widgets::footnote(&mut c, t, f, y, &texts::backup::refused::other_phone(l, &held.device))
+2467             } else {
+2468                 let y = widgets::section(&mut c, t, f, y, l.pick(texts::restore::CONTENTS));
+2469                 let kept: Vec<usize> = (0..BACKUP_PARTS.len()).filter(|&k| held.parts[k]).collect();
+2470                 let rows: Vec<Row> = kept.iter().map(|&k| Row::new(l.pick(BACKUP_PARTS[k])).trail(Trail::Check(chosen[k]))).collect();
+2471                 let list = widgets::list(&mut c, t, f, y, &rows);
+2472                 out.extend(list.rows.iter().zip(&kept).map(|(&rect, &k)| Hit { rect, action: Action::RestorePart(k) }));
+2473                 let mut y = widgets::footnote(&mut c, t, f, list.bottom, l.pick(texts::restore::OVERWRITES));
+2474                 if chosen[DATA_PART] {
+2475                     y = widgets::footnote(&mut c, t, f, y, l.pick(texts::restore::DATA_NOTE));
+2476                 }
+2477                 if chosen[MEDIA_PART] {
+2478                     y = widgets::footnote(&mut c, t, f, y, l.pick(texts::restore::MEDIA_NOTE));
+2479                 }
+2480                 // The boot partitions' vbmeta checks the system's: one of
+2481                 // another version without the other may not start.

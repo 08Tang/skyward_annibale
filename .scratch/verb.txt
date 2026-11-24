@@ -1,0 +1,29 @@
+﻿### 4935-4950
+4935     use texts::files::clash as said;
+4936     let skip = l.pick(match clip.op {
+4937         FileOp::Copy => said::SKIP_COPY,
+4938         FileOp::Move => said::SKIP_MOVE,
+4939     });
+4940     let mut c = page(cx);
+4941     let top = t.m.content_top;
+4942     let there = tr!(l, "\"{into}\"中已有同名的\"{name}\"。", "「{into}」中已有同名的「{name}」。", "“{into}” already holds an entry named “{name}”.");
+4943     let y = widgets::paragraph(&mut c, t, f, top, &there);
+4944     let skip = tr!(l, "保留已有的同名项，不{verb}该项", "保留已有的同名項目，不{verb}這個項目", "Keeps the entry there, and doesn't {verb} this one");
+4945     let choices = widgets::list(
+4946         &mut c,
+4947         t,
+4948         f,
+4949         y + t.m.dp(12.0),
+4950         &[
+### 2025-2035
+2025             out.extend(hits(&next.rows, &[Action::RebootTo(Target::System), another]));
+2026             let y = reflashed(c, cx, next.bottom);
+2027             let y = afterwards_of(c, cx, y, true);
+2028             script_output(c, cx, y, rows)
+2029         }
+2030         Outcome::SystemInstalled { name } => {
+2031             let detail =
+2032                 tr!(l, "{name} 已安装为第二系统，可在「双系统」中切换。", "{name} 已安裝為第二系統，可在「雙系統」中切換。", "{name} is installed as the second system. Switch to it from Dual
+2033             let y = widgets::list(c, t, f, top, &[standing(installed, GREEN, Icon::Systems, &detail)]).bottom;
+2034             let next = widgets::list(c, t, f, y + gap, &[Row::new(l.pick(DUAL_BOOT)).icon(PURPLE, Icon::Systems)]);
+2035             out.extend(hits(&next.rows, &[Action::Open(Screen::Systems)]));

@@ -938,9 +938,9 @@ pub fn parts(l: Lang, held: &[bool; 5]) -> String {
 /// What an image is, and what it holds.
 pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
     use texts::image::{self, holds};
-    let (name, holds) = match kind {
     const RECOVERY: Text = ["恢复模式镜像", "復原模式映像檔", "Recovery image"];
     const BOOT: Text = ["启动镜像", "啟動映像檔", "Boot image"];
+    let (name, holds) = match kind {
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Holds a kernel and a recovery ramdisk"]),
         ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds a recovery ramdisk alone"]),
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (BOOT, ["包含内核和通用 ramdisk", "包含核心和通用 ramdisk", "Holds a kernel and a generic ramdisk"]),

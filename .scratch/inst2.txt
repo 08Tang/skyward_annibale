@@ -1,0 +1,12 @@
+﻿135     let (label, danger) = match which {
+136         // 锁屏自己画它，这张只给按住电源键时的滑块用。
+137         Confirm::Unlock => (["滑动解锁", "滑動解鎖", "Slide to unlock"], false),
+138         Confirm::Filesystem => match s.fs_action {
+139             FsAction::Repair => (confirm::REPAIR, true),
+140             FsAction::Remake(_) => (confirm::CHANGE, true),
+141         },
+142         Confirm::Reboot => (["滑动以重启", "滑動以重新啟動", "Slide to reboot"], false),
+143         Confirm::PowerOff => (["滑动以关机", "滑動以關機", "Slide to power off"], true),
+144         Confirm::Wipe => (["滑动以清除", "滑動以清除", "Slide to wipe"], true),
+145         Confirm::Flash => (["滑动以刷入", "滑動以刷入", "Slide to flash"], true),
+146         Confirm::Backup => (["滑动以备份", "滑動以備份", "Slide to back up"], false),

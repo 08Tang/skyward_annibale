@@ -1,0 +1,25 @@
+﻿926                 _ => texts::files::line::SOCKET,
+927             });
+928             format!("{}{DIVIDER}{what}", file_time(f.modified, false, now, zone))
+929         }
+930     }
+931 }
+932 
+933 /// The parts a backup holds: `启动分区、系统分区`.
+934 pub fn parts(l: Lang, held: &[bool; 5]) -> String {
+935     list(l, BACKUP_PARTS.iter().zip(held).filter(|&(_, &on)| on).map(|(name, _)| l.pick(*name)))
+936 }
+937 
+938 /// What an image is, and what it holds.
+939 pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
+940     use texts::image::{self, holds};
+941     let (name, holds) = match kind {
+942     const RECOVERY: Text = ["恢复模式镜像", "復原模式映像檔", "Recovery image"];
+943     const BOOT: Text = ["启动镜像", "啟動映像檔", "Boot image"];
+944         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Hol
+945         ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds 
+946         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (BOOT, ["包含内核和通用 ramdisk", "包含核心和通用 ramdisk", "Holds a kern
+947         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::None } => (BOOT, ["仅包含内核", "僅包含核心", "Holds a kernel alone"]),
+948         ImageKind::Boot { kernel: false, .. } => (BOOT, ["仅包含通用 ramdisk", "僅包含通用 ramdisk", "Holds a generic ramdisk alone"]),
+949         ImageKind::VendorBoot => {
+950             (["vendor_boot 镜像", "vendor_boot 映像檔", "vendor_boot image"], ["包含厂商 ramdisk 和设备树", "包含廠商 ramdisk 和裝置樹", "Holds the ven

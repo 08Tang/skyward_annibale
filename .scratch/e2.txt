@@ -1,0 +1,79 @@
+﻿381     use skyward_install::Failure;
+382 
+383     #[test]
+384     fn a_package_of_another_kind_is_refused_where_a_second_system_was_asked_for() {
+385         for (ev, kind) in [
+386             (Event::Ready { version: Some("OS3.0".into()), wipe: false }, PackageKind::Update),
+387             (Event::Script, PackageKind::Script),
+388             (Event::Image { kind: skyward_install::ImageKind::VendorBoot, size: 4096, partitions: vec!["vendor_boot"] }, PackageKind::Image),
+389         ] {
+390             let (f, i) = (fonts(), info());
+391             let mut app = opened(Screen::Installing, &f, &i);
+392             app.state.second_system_asked = true;
+393             app.state.install = Install::Checking { size: 4096, stage: None };
+394             app.install(ev, 0);
+395             assert_eq!(app.state.install, Install::NotSecondSystem(kind), "the package is named rather than started");
+### pages 1530-1560
+1530 }
+1531 
+1532 fn percent(share: f32) -> u32 {
+1533     (share * 100.0).floor() as u32
+1534 }
+1535 
+1536 /// Where an update stands, and the share of its step done when known.
+1537 fn update_stage(l: Lang, stage: Option<&Stage>) -> (String, Option<f32>) {
+1538     match stage {
+1539         Some(Stage::Writing { done, total }) => {
+1540             let s = share(*done, *total);
+1541             (texts::installing::update_writing(l, percent(s)), Some(s))
+1542         }
+1543         Some(Stage::Verifying { index, count, partition }) => {
+1544             (texts::installing::update_verifying(l, partition, index + 1, count), Some(*index as f32 / *count as f32))
+1545         }
+1546         Some(Stage::Finishing) => (l.pick(["第 3 步，共 3 步：完成安装", "第 3 步，共 3 步：完成安裝", "Step 3 of 3: finishing"]).into(), None),
+1547         Some(Stage::Reflashing { done, total }) => (l.pick(REFLASHING).into(), Some(*done as f32 / *total as f32)),
+1548         Some(Stage::Flashing { .. } | Stage::Script { .. } | Stage::Signature { .. } | Stage::Allocating { .. } | Stage::Root { .. } | Stage::Storing) | None =>
+1549     }
+1550 }
+1551 
+1552 /// Where installing a system beside the installed one stands, and the share
+1553 /// of its step done when known.
+1554 fn system_stage(l: Lang, stage: Option<&Stage>) -> (String, Option<f32>) {
+1555     match stage {
+1556         Some(Stage::Allocating { done, total }) => {
+1557             let s = share(*done, *total);
+1558             (texts::installing::system_allocating(l, percent(s)), Some(s))
+1559         }
+1560         Some(Stage::Root { done, total }) => {
+### pages 5290-5320
+5290     );
+5291     // The report is written after the bug, and the button says so where it is
+5292     // touched: a report from before it leaves nothing in the logs to find.
+5293     y = widgets::footnote(
+5294         &mut c,
+5295         t,
+5296         f,
+5297         y + m.dp(8.0),
+5298         l.pick([
+5299             "请在 bug 出现之后再反馈：没触发 bug 就反馈，日志里看不到问题，也就无从查起。",
+5300             "請在 bug 出現之後再回報：沒觸發 bug 就回報，記錄裡看不到問題，也就無從查起。",
+5301             "Send this after the bug has happened: a report from before it leaves nothing in the logs to look for.",
+5302         ]),
+5303     );
+5304     // The button sits above the note rather than under it: a report is sent
+5305     // without reading to the end, and the note is read while waiting.
+5306     y += m.dp(20.0);
+5307     let end = match &fb.report {
+5308         Report::Sending { done, total } => {
+5309             let detail = l.pick([
+5310                 format!("已上传 {done} / {total} 字节"),
+5311                 format!("已上傳 {done} / {total} 位元組"),
+5312                 format!("{done} of {total} bytes sent"),
+5313             ]);
+5314             widgets::progress_card(&mut c, t, f, y, l.pick(["正在上传", "正在上傳", "Sending"]), &detail, fb.report.share())
+5315         }
+5316         Report::Refused { why, again } => {
+5317             let y = widgets::section(&mut c, t, f, y, l.pick(["上传失败", "上傳失敗", "Not sent"]));
+5318             let y = widgets::footnote(&mut c, t, f, y, why);
+5319             if *again {
+5320                 let retry = widgets::button(&mut c, t, f, y + m.dp(16.0), l.pick(["重试", "重試", "Try again"]));

@@ -3,7 +3,7 @@ use crate::app::{
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Region, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target, Report,
-    USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting, MEDIA_PART,};
+    USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting, MEDIA_PART, UTC, listed, DATA_PART,};
 use crate::canvas::Canvas;
 use crate::color::Rgba;
 use crate::editor;
@@ -132,6 +132,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
 /// page's as `s` says what it is to do.
 pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
     use texts::confirm;
+    const INSTALL: Text = ["滑动以安装", "滑動以安裝", "Slide to install"];
     let (label, danger) = match which {
         // 锁屏自己画它，这张只给按住电源键时的滑块用。
         Confirm::Unlock => (["滑动解锁", "滑動解鎖", "Slide to unlock"], false),
@@ -198,7 +199,7 @@ const SCREEN_TIMEOUT: Text = ["息屏时间", "螢幕自動關閉", "Screen time
 const UPDATE: Text = ["系统更新", "系統更新", "System update"];
 
 const MODEL: Text = ["设备型号", "裝置型號", "Model"];
-const DATA_PART: Text = ["data 分区", "data 分割區", "data partition"];
+const DATA_PART_NAME: Text = ["data 分区", "data 分割區", "data partition"];
 const UNREADABLE: Text = ["无法读取", "無法讀取", "Unreadable"];
 const REFLASHING: Text = ["正在重新刷入 Skyward", "正在重新刷入 Skyward", "Flashing Skyward again"];
 const READING_FILE: Text = ["正在读取文件", "正在讀取檔案", "Reading the file"];
@@ -512,7 +513,7 @@ pub fn settings(cx: &Ctx) -> Frame {
         y,
         &[
             Row::new(l.pick(LANGUAGE)).icon(BLUE, Icon::Globe).trail(Trail::Value(l.name())),
-            Row::new(l.pick(TIME_ZONE)).icon(ORANGE, Icon::Clock).trail(Trail::Value(l.pick(TIME_ZONES[s.time_zone].0))),
+            Row::new(l.pick(TIME_ZONE)).icon(ORANGE, Icon::Clock).trail(Trail::Value(l.pick(TIME_ZONES[s.time_zone].name))),
         ],
     );
     out.extend(hits(&general.rows, &[Action::Open(Screen::Language), Action::Open(Screen::TimeZone)]));
@@ -1544,7 +1545,7 @@ fn update_stage(l: Lang, stage: Option<&Stage>) -> (String, Option<f32>) {
         }
         Some(Stage::Finishing) => (l.pick(["第 3 步，共 3 步：完成安装", "第 3 步，共 3 步：完成安裝", "Step 3 of 3: finishing"]).into(), None),
         Some(Stage::Reflashing { done, total }) => (l.pick(REFLASHING).into(), Some(*done as f32 / *total as f32)),
-        Some(Stage::Flashing { .. } | Stage::Script { .. } | Stage::Signature { .. } | Stage::Allocating { .. } | Stage::Root { .. } | Stage::Storing) | None => (l.pick(GETTING_READY).into(), None),
+        Some(Stage::Resizing | Stage::Flashing { .. } | Stage::Script { .. } | Stage::Signature { .. } | Stage::Allocating { .. } | Stage::Root { .. } | Stage::Storing) | None => (l.pick(GETTING_READY).into(), None),
     }
 }
 
@@ -1751,7 +1752,7 @@ pub fn installing(cx: &Ctx) -> Frame {
             let y = widgets::list(&mut c, t, f, top, &[standing(name, GREEN, Icon::Install, &detail)]).bottom;
             let y = kind_note(&mut c, cx, y, PackageKind::Image);
             let y = widgets::section(&mut c, t, f, y, l.pick(["分区", "分割區", "Partition"]));
-            let rows: Vec<Row> = choice.partitions.iter().enumerate().map(|(k, p)| Row::new(p).subtitle(fmt::partition_role(l, p)).trail(Trail::Check(k == choice.partition))).collect();
+            let rows: Vec<Row> = choice.partitions.iter().enumerate().map(|(k, p)| Row::new(p.name.as_str()).subtitle(fmt::partition_role(l, p)).trail(Trail::Check(k == choice.partition))).collect();
             let parts = widgets::list(&mut c, t, f, y, &rows);
             let choose: Vec<Action> = (0..choice.partitions.len()).map(Action::FlashPartition).collect();
             out.extend(hits(&parts.rows, &choose));
@@ -1945,7 +1946,7 @@ pub fn installing(cx: &Ctx) -> Frame {
             }
             widgets::footnote(&mut c, t, f, y, l.pick(texts::installing::MORE_COMMANDS))
         }
-        Install::Finished { outcome, damage } => finished(&mut c, cx, top, outcome, damage.as_ref(), &mut out, &mut rows),
+        Install::Finished { outcome, damage } => finished(&mut c, cx, top, outcome, damage, &mut out, &mut rows),
     };
     // What the system asked for says why, where it said.
     let bottom = match (s.source, &s.asked.reason) {
@@ -2029,6 +2030,7 @@ fn finished(c: &mut Canvas, cx: &Ctx, top: f32, outcome: &Outcome, damage: Optio
         Outcome::SystemInstalled { name } => {
             let detail =
                 tr!(l, "{name} 已安装为第二系统，可在「双系统」中切换。", "{name} 已安裝為第二系統，可在「雙系統」中切換。", "{name} is installed as the second system. Switch to it from Dual boot.");
+            let installed = l.pick(["安装成功", "安裝成功", "Installed"]);
             let y = widgets::list(c, t, f, top, &[standing(installed, GREEN, Icon::Systems, &detail)]).bottom;
             let next = widgets::list(c, t, f, y + gap, &[Row::new(l.pick(DUAL_BOOT)).icon(PURPLE, Icon::Systems)]);
             out.extend(hits(&next.rows, &[Action::Open(Screen::Systems)]));
@@ -2100,7 +2102,7 @@ fn afterwards_of(c: &mut Canvas, cx: &Ctx, y: f32, installed: bool) -> f32 {
 /// What the wipe page lists of [`WIPES`] beyond everything, under the
 /// partition each is in.
 const WIPE_GROUPS: [(Text, &[Wipe]); 2] =
-    [(DATA_PART, &[Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates]), (["cache 分区", "cache 分割區", "cache partition"], &[Wipe::Cache])];
+    [(DATA_PART_NAME, &[Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates]), (["cache 分区", "cache 分割區", "cache partition"], &[Wipe::Cache])];
 
 /// What a factory reset erases, as the wipe page tells it of its first
 /// choice, and the page that carries one out for the system tells it.
@@ -2702,7 +2704,7 @@ pub fn backup_job(cx: &Ctx) -> Frame {
                 (true, Some(a)) if !a.checking => tr!(l, "恢复完成前，{keep}", "還原完成前，{keep}", "{keep} until the restore is done."),
                 (true, _) => l.pick(["校验备份完成前，不会写入任何内容。", "驗證備份完成前，不會寫入任何內容。", "Nothing is written until the backup is verified."]).to_string(),
             };
-            y = widgets::footnote(&mut c, t, f, y, l.pick(note));
+            y = widgets::footnote(&mut c, t, f, y, &note);
             // A restore that has begun writing goes on to its end.
             if !(job.restore && writing) {
                 let label = l.pick(if job.stopping { texts::common::STOPPING } else { texts::common::STOP });
@@ -4936,6 +4938,10 @@ pub fn clash(cx: &Ctx) -> Frame {
         FileOp::Copy => said::SKIP_COPY,
         FileOp::Move => said::SKIP_MOVE,
     });
+    let verb = l.pick(match clip.op {
+        FileOp::Copy => ["复制", "複製", "copy"],
+        FileOp::Move => ["移动", "移動", "move"],
+    });
     let mut c = page(cx);
     let top = t.m.content_top;
     let there = tr!(l, "\"{into}\"中已有同名的\"{name}\"。", "「{into}」中已有同名的「{name}」。", "“{into}” already holds an entry named “{name}”.");
@@ -5300,11 +5306,7 @@ pub fn feedback(cx: &Ctx) -> Frame {
     y += m.dp(20.0);
     let end = match &fb.report {
         Report::Sending { done, total } => {
-            let detail = l.pick([
-                format!("已上传 {done} / {total} 字节"),
-                format!("已上傳 {done} / {total} 位元組"),
-                format!("{done} of {total} bytes sent"),
-            ]);
+            let detail = tr!(l, "已上传 {done} / {total} 字节", "已上傳 {done} / {total} 位元組", "{done} of {total} bytes sent");
             widgets::progress_card(&mut c, t, f, y, l.pick(["正在上传", "正在上傳", "Sending"]), &detail, fb.report.share())
         }
         Report::Refused { why, again } => {

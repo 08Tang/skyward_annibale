@@ -385,7 +385,7 @@ mod tests {
         for (ev, kind) in [
             (Event::Ready { version: Some("OS3.0".into()), wipe: false }, PackageKind::Update),
             (Event::Script, PackageKind::Script),
-            (Event::Image { kind: skyward_install::ImageKind::VendorBoot, size: 4096, partitions: vec!["vendor_boot"] }, PackageKind::Image),
+            (Event::Image { kind: skyward_install::ImageKind::VendorBoot, size: 4096, partitions: vec![FlashTarget { name: "vendor_boot".into(), place: FlashPlace::Logical }] }, PackageKind::Image),
         ] {
             let (f, i) = (fonts(), info());
             let mut app = opened(Screen::Installing, &f, &i);
