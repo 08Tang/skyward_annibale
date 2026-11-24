@@ -1,0 +1,23 @@
+﻿### 2685-2705
+2685                     (title, ORANGE, fmt::backup_refusal(l, r, job.restore))
+2686                 }
+2687                 BackupEnd::Failed(_) if job.restore && writing => (failed, RED, l.pick(said::PARTLY_WRITTEN).to_string()),
+2688                 BackupEnd::Failed(_) => (failed, RED, gone.to_string()),
+2689             };
+2690             widgets::list(&mut c, t, f, top, &[standing(title, color, icon, &detail)]).bottom
+2691         }
+2692     };
+2693     match &job.outcome {
+2694         None => {
+2695             let note = match (job.restore, job.at) {
+2696                 (false, _) => {
+2697                     tr!(l, "备份完成前，{keep}停止后将删除未完成的备份。", "備份完成前，{keep}停止後將刪除未完成的備份。", "{keep} until the backup is done. Stopping deletes the unfinished backup.")
+2698                 }
+2699                 (true, Some(a)) if !a.checking => tr!(l, "恢复完成前，{keep}", "還原完成前，{keep}", "{keep} until the restore is done."),
+2700                 (true, _) => l.pick(["校验备份完成前，不会写入任何内容。", "驗證備份完成前，不會寫入任何內容。", "Nothing is written until the backup is verified."]).to_string(),
+2701             };
+2702             y = widgets::footnote(&mut c, t, f, y, l.pick(note));
+2703             // A restore that has begun writing goes on to its end.
+2704             if !(job.restore && writing) {
+2705                 let label = l.pick(if job.stopping { texts::common::STOPPING } else { texts::common::STOP });
+2706                 let stop = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(label).trail(Trail::None)]);

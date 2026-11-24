@@ -3,8 +3,7 @@ use crate::app::{
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Region, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target, Report,
-    USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
-};
+    USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting, MEDIA_PART,};
 use crate::canvas::Canvas;
 use crate::color::Rgba;
 use crate::editor;
@@ -265,7 +264,8 @@ fn long_page_of(cx: &Ctx, screens: u32) -> Canvas {
 fn screens_for(t: &Theme, top: f32, room: f32, rows: usize, row_h: f32) -> u32 {
     let h = top + room + row_h * rows as f32;
     (h / t.m.h as f32).ceil() as u32 + 1
-}/// How tall a long page whose content ends at `bottom` is: to the bottom
+}
+/// How tall a long page whose content ends at `bottom` is: to the bottom
 /// margin after it, and never shorter than one screen.
 fn fitted(t: &Theme, bottom: f32) -> u32 {
     ((bottom + t.m.margin * 2.0).ceil() as u32).max(t.m.h)
@@ -874,7 +874,7 @@ fn data_status(cx: &Ctx, mut c: Canvas, icon: Icon, title: &str, note: Option<&s
     // that is known.
     let mut out = Vec::new();
     if let Some(why) = why {
-        widgets::paragraph(&mut c, t, f, sign_cy + m.dp(88.0) + more, why);
+        widgets::paragraph(&mut c, t, f, sign_cy + m.dp(88.0), why);
         let again = widgets::button(&mut c, t, f, m.h as f32 * 0.62, l.pick(texts::common::TRY_AGAIN));
         out.push(Hit { rect: again, action: Action::OpenData });
     }
@@ -1761,7 +1761,7 @@ pub fn installing(cx: &Ctx) -> Frame {
             let picks = widgets::list(&mut c, t, f, y, &rows);
             out.extend(hits(&picks.rows, &Pick::ALL.map(Action::FlashSlots)));
             let (label, danger) = confirm_label(Confirm::Flash, cx.state);
-            let track = widgets::confirm(&mut c, t, f, bottom + t.m.dp(28.0), label, danger, s.confirm);
+            let track = widgets::confirm(&mut c, t, f, picks.bottom + t.m.dp(28.0), label, danger, s.confirm);
             out.push(Hit { rect: track, action: Action::Confirm(Confirm::Flash) });
             let note = l.pick(match s.source {
                 Source::Computer => [
@@ -2588,10 +2588,21 @@ impl Pass {
     }
 }
 
+/// What a backup, or a restore, has done to a part, and does to it, in
+/// each language.
+fn job_words(restore: bool) -> (Text, Text) {
+    match restore {
+        true => (["已恢复", "已還原", "Restored"], ["正在恢复", "正在還原", "Restoring"]),
+        false => (["已备份", "已備份", "Backed up"], ["正在备份", "正在備份", "Backing up"]),
+    }
+}
+const DONE: Text = ["完成", "完成", "Done"];
+
 /// Where part `k` of a backup or restore stands, as its row says it.
 fn part_state(l: Lang, job: &BackupJob, k: usize) -> String {
     use std::cmp::Ordering;
     use texts::backup::job as said;
+    let (did, doing) = job_words(job.restore);
     let wrote = Pass::writing(job.restore).done();
     let ended = job.outcome.is_some();
     let a = match (&job.outcome, job.at) {
@@ -2678,6 +2689,10 @@ pub fn backup_job(cx: &Ctx) -> Frame {
             widgets::list(&mut c, t, f, top, &[standing(title, color, icon, &detail)]).bottom
         }
     };
+    let keep = l.pick(match job.place {
+        Place::Storage => ["请不要关机。", "請不要關機。", "Don't power off"],
+        Place::UsbDrive => ["请不要拔出 U 盘或关机。", "請不要拔出 USB 隨身碟或關機。", "Keep the USB drive in and don't power off"],
+    });
     match &job.outcome {
         None => {
             let note = match (job.restore, job.at) {
@@ -5096,10 +5111,33 @@ pub fn time_zone(cx: &Ctx) -> Frame {
     let mut c = long_page(cx);
     let mut out = Vec::new();
     let top = t.m.content_top;
-    let rows: Vec<Row> = TIME_ZONES.iter().enumerate().map(|(k, z)| Row::new(l.pick(z.name)).subtitle(l.pick(z.cities)).trail(Trail::Check(k == s.time_zone))).collect();
-    let list = widgets::list(&mut c, t, f, top, &rows);
-    let picks: Vec<Action> = zones.iter().map(|&at| Action::TimeZone(at)).collect();
-    Frame::new(t, fit(c, t, list.bottom), hits(&list.rows, &picks), l.pick(region.name()), top)
+    let y = match &s.system_zone {
+        Some(zone) => {
+            let name = listed(&zone.name).map_or(zone.name.as_str(), |at| l.pick(TIME_ZONES[at].name));
+            let system = format!("{} · {name}", fmt::utc_offset(s.now, &zone.rules));
+            let follow = Row::new(l.pick(texts::time_zone::FOLLOW_SYSTEM)).subtitle(&system).trail(Trail::Switch(s.follow_system_zone));
+            let follow = widgets::list(&mut c, t, f, top, &[follow]);
+            out.extend(hits(&follow.rows, &[Action::Toggle(Switch::SystemTimeZone)]));
+            widgets::section(&mut c, t, f, follow.bottom, l.pick(texts::time_zone::CHOOSE))
+        }
+        None => top,
+    };
+    let kept = s.zone_listed();
+    let rows = Region::ALL.map(|region| {
+        let row = Row::new(l.pick(region.name()));
+        match kept.filter(|&at| TIME_ZONES[at].region == Some(region)) {
+            Some(at) => row.trail(Trail::Value(l.pick(TIME_ZONES[at].name))),
+            None => row,
+        }
+    });
+    let regions = widgets::list(&mut c, t, f, y, &rows);
+    out.extend(hits(&regions.rows, &Region::ALL.map(|region| Action::Open(Screen::TimeZones(region)))));
+    let utc = listed(UTC).expect("UTC is a zone listed");
+    let offset = fmt::utc_offset(s.now, fmt::rules(utc));
+    let universal = Row::new(l.pick(TIME_ZONES[utc].name)).subtitle(&offset).trail(Trail::Check(kept == Some(utc)));
+    let universal = widgets::list(&mut c, t, f, regions.bottom + t.m.card_gap, &[universal]);
+    out.extend(hits(&universal.rows, &[Action::TimeZone(utc)]));
+    Frame::new(t, fit(c, t, universal.bottom), out, l.pick(TIME_ZONE), top)
 }
 
 /// The zones of one part of the world, as its row on the time zone page opens

@@ -1,0 +1,31 @@
+﻿### 870-882
+870         c.text_center(&f.body, note, x, sign_cy + m.dp(118.0), m.sub_px, t.pal.subtitle);
+871     }
+872     // No bar: the opening says nothing of how far along it is, and one drawn to
+873     // a guess of its length only ever disagreed with the work (2026-11-16).
+874     // The turning ring over the sign says the page is waiting, and that is all
+875     // that is known.
+876     let mut out = Vec::new();
+877     if let Some(why) = why {
+878         widgets::paragraph(&mut c, t, f, sign_cy + m.dp(88.0) + more, why);
+879         let again = widgets::button(&mut c, t, f, m.h as f32 * 0.62, l.pick(texts::common::TRY_AGAIN));
+880         out.push(Hit { rect: again, action: Action::OpenData });
+881     }
+882     let leave_cy = m.h as f32 - m.dp(64.0);
+### 1755-1770
+1755             let rows: Vec<Row> = choice.partitions.iter().enumerate().map(|(k, p)| Row::new(p).subtitle(fmt::partition_role(l, p)).trail(Tra
+1756             let parts = widgets::list(&mut c, t, f, y, &rows);
+1757             let choose: Vec<Action> = (0..choice.partitions.len()).map(Action::FlashPartition).collect();
+1758             out.extend(hits(&parts.rows, &choose));
+1759             let y = widgets::section(&mut c, t, f, parts.bottom, l.pick(["槽位", "槽位", "Slot"]));
+1760             let titles = Pick::ALL.map(|p| pick_title(l, p, i.slot));
+1761             let rows: Vec<Row> = Pick::ALL.iter().zip(&titles).map(|(p, title)| Row::new(title).trail(Trail::Check(*p == choice.pick))).coll
+1762             let picks = widgets::list(&mut c, t, f, y, &rows);
+1763             out.extend(hits(&picks.rows, &Pick::ALL.map(Action::FlashSlots)));
+1764             let (label, danger) = confirm_label(Confirm::Flash, cx.state);
+1765             let track = widgets::confirm(&mut c, t, f, bottom + t.m.dp(28.0), label, danger, s.confirm);
+1766             out.push(Hit { rect: track, action: Action::Confirm(Confirm::Flash) });
+1767             let note = l.pick(match s.source {
+1768                 Source::Computer => [
+1769                     "刷入将覆盖分区中的原有内容。返回将取消刷入，并结束电脑上的 adb sideload。",
+1770                     "刷入將覆寫分割區中的原有內容。返回將取消刷入，並結束電腦上的 adb sideload。",

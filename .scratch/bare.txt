@@ -1,0 +1,36 @@
+﻿## keep 9
+    1185 "Turning the phone off cuts these short, and what is left half done may keep it from starting. Go ba
+    1843 let keep = l.pick(match s.source {
+    1850 widgets::footnote(&mut c, t, f, y, keep)
+## did 10
+    845 /// did not open and a way to try again; then the way off the page.
+    1586 /// over, where it did.
+    2046 // What the system asked for and did not go in leaves the phone
+## verb 16
+    3893 let verb = Verb::of(&work.kind);
+    3904 (None, _, _) => verb.going(l),
+    3905 (Some(_), false, _) => verb.complete(l),
+## more 15
+    228 /// How many lines of a bug report the field shows at once: more than a
+    256 /// [`long_page`] for a page that may hold more rows than three screens: the
+    698 // This page leaves more room under the title than the settings pages.
+## bottom 211
+    268 }/// How tall a long page whose content ends at `bottom` is: to the bottom
+    270 fn fitted(t: &Theme, bottom: f32) -> u32 {
+    271 ((bottom + t.m.margin * 2.0).ceil() as u32).max(t.m.h)
+## doing 9
+    1196 /// What the charger is doing: the power it delivers, the protocol it
+    1376 // charge is doing to it. The warmth matters more here than anywhere else
+    2546 fn doing(self) -> Text {
+## zones 5
+    5101 let picks: Vec<Action> = zones.iter().map(|&at| Action::TimeZone(at)).collect();
+    5105 /// The zones of one part of the world, as its row on the time zone page opens
+    5111 let zones: Vec<usize> = (0..TIME_ZONES.len()).filter(|&at| TIME_ZONES[at].region == Some(region)).co
+## region 5
+    105 Screen::TimeZones(region) => time_zones(cx, region),
+    5102 Frame::new(t, fit(c, t, list.bottom), hits(&list.rows, &picks), l.pick(region.name()), top)
+    5107 pub fn time_zones(cx: &Ctx, region: Region) -> Frame {
+## installed 56
+    457 /// starts, where a second system is installed, once they are read.
+    463 (Some(_), Who::Installed) => systems.installed.name.clone(),
+    471 /// under way, a newer system found, or where an update the system installed
