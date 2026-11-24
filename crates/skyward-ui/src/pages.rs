@@ -2115,7 +2115,7 @@ fn factory_reset(s: &State) -> &'static str {
 fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
     let l = s.lang;
     let (title, what): (Text, String) = match w {
-        Wipe::All => (["全部数据", "全部資料", "All data"], capitalized(l, &factory_reset(s))),
+        Wipe::All => (["全部数据", "全部資料", "All data"], capitalized(l, factory_reset(s))),
         Wipe::AppData => (
             ["应用数据", "應用程式資料", "App data"],
             l.pick([
@@ -4915,7 +4915,6 @@ pub fn clash(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let (clip, into, _) = s.clash.as_ref().expect("the clash page shows a clash");
     let name = Path::new(&clip.path).file_name().map_or_else(|| clip.path.clone(), |n| n.to_string_lossy().into_owned());
-    use texts::files::clash as said;
     let verb = l.pick(match clip.op {
         FileOp::Copy => ["复制", "複製", "copy"],
         FileOp::Move => ["移动", "移動", "move"],
@@ -5387,7 +5386,7 @@ pub fn slot(cx: &Ctx) -> Frame {
             (false, true, true) => texts::slot::OTHER,
         })
     });
-    let rows: Vec<Row> = [Slot::A, Slot::B].iter().enumerate().map(|(k, &slot)| Row::new(&titles[k]).subtitle(&subs[k]).trail(Trail::Check(slot == chosen))).collect();
+    let rows: Vec<Row> = [Slot::A, Slot::B].iter().enumerate().map(|(k, &slot)| Row::new(&titles[k]).subtitle(subs[k].as_str()).trail(Trail::Check(slot == chosen))).collect();
     let list = widgets::list(&mut c, t, f, y, &rows);
     out.extend(hits(&list.rows, &[Slot::A, Slot::B].map(Action::PickSlot)));
     if let Some(note) = fmt::snapshot_slot_note(l, &i.snapshot) {
