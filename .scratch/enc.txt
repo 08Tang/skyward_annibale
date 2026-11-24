@@ -1,0 +1,60 @@
+﻿116     }
+117 
+118     #[test]
+119     fn an_entry_that_names_no_whole_encryption_says_nothing_of_it() {
+120         assert_eq!(Encryption::of(&entry("quota")).unwrap(), None);
+121         assert_eq!(Encryption::of(&entry("fileencryption=aes-256-xts:aes-256-cts:v2")).unwrap(), None);
+122     }
+123 
+124     #[test]
+125     fn a_cipher_or_a_key_the_phone_does_not_name_is_an_error() {
+126         assert!(Encryption::of(&entry("metadata_encryption=rot13")).is_err());
+127         assert!(whole(&[entry("quota"), entry("metadata_encryption=rot13")]).is_err());
+128         assert!(key_dir(&entry("quota")).is_err());
+129     }
+130 
+131     /// What a phone's table says of its data partition, as the phone's
+132     /// maker wrote it: encrypted whole and file by file, and named a
+133     /// second time for another filesystem with neither said again.
+134     const STOCK: [&str; 2] = [
+135         "latemount,wait,check,formattable,fileencryption=aes-256-xts:aes-256-cts:v2,keydirectory=/metadata/vold/metadata_encryption,metadata_encryption=aes-256-xts:wrappe
+136         "latemount,wait,keydirectory=/metadata/vold/metadata_encryption",
+137     ];
+138     /// The same with what encrypts the partition whole taken out, and with
+139     /// all that encrypts it taken out.
+140     const FILES_ONLY: &str = "latemount,wait,check,formattable,fileencryption=aes-256-xts:aes-256-cts:v2,quota";
+141     const PLAIN: &str = "latemount,wait,check,formattable,quota";
+142 
+143     #[test]
+144     fn a_table_is_read_for_both_ways_a_partition_is_encrypted() {
+145         let stock = STOCK.map(entry);
+146         let (said_in, encryption) = whole(&stock).unwrap().expect("encrypted whole");
+147         assert_eq!(said_in, &stock[0]);
+148         assert_eq!(encryption, Encryption { cipher: "aes-xts-plain64".into(), wrapped: true });
+149         assert!(files(&stock));
+150 
+151         let turned = [entry(STOCK[1]), entry(STOCK[0])];
+152         assert_eq!(whole(&turned).unwrap().expect("encrypted whole").0, &turned[1], "whichever entry says so");
+153         assert!(files(&turned));
+154 
+155         let files_only = [entry(FILES_ONLY)];
+156         assert_eq!(whole(&files_only).unwrap(), None);
+157         assert!(files(&files_only), "its files still open only under their keys");
+158 
+159         let plain = [entry(PLAIN), entry("latemount,wait")];
+160         assert_eq!(whole(&plain).unwrap(), None);
+161         assert!(!files(&plain));
+162     }
+163 
+164     #[test]
+165     fn an_emptied_partition_is_made_afresh_where_the_table_lets_the_system() {
+166         assert!(made_afresh(&entry(STOCK[0])));
+167         assert!(made_afresh(&entry(FILES_ONLY)), "its keys are in the partition, and go and come with it");
+168         assert!(made_afresh(&entry(PLAIN)));
+169         assert!(!made_afresh(&entry("latemount,wait,quota")), "not formattable");
+170         assert!(
+171             !made_afresh(&entry("latemount,wait,formattable,metadata_encryption=aes-256-xts:wrappedkey_v0")),
+172             "encrypted whole with nowhere said for the key"
+173         );
+174     }
+175 

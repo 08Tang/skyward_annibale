@@ -55,7 +55,13 @@ impl Encryption {
 /// Nothing where none says so, and the filesystem is then read and written
 /// on the partition itself.
 pub fn whole(entries: &[Entry]) -> Result<Option<(&Entry, Encryption)>> {
-    for entry in entries {
+    // An entry that names how the partition is encrypted says more than one
+    // that only says where the key is kept, and is the one to read it from:
+    // a phone's table names the partition once per filesystem, and only one
+    // of those need say it.
+    let says_how = entries.iter().find(|e| e.extra("metadata_encryption").is_some());
+    let says_where = entries.iter().find(|e| e.extra("keydirectory").is_some());
+    for entry in says_how.into_iter().chain(says_where) {
         if let Some(encryption) = Encryption::of(entry)? {
             return Ok(Some((entry, encryption)));
         }

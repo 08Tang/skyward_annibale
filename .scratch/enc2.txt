@@ -1,0 +1,80 @@
+﻿1 //! What a phone's own table says of how its data partition is encrypted,
+2 //! whole and file by file, and the device-mapper target that reads a
+3 //! partition encrypted whole through the storage hardware's decryption. A
+4 //! table that says neither keeps the partition as the plain filesystem it
+5 //! is, which opens with no key at all.
+6 
+7 use anyhow::{Context, Result};
+8 use skyward_block::dm::Target;
+9 use skyward_block::fstab::Entry;
+10 use std::path::{Path, PathBuf};
+11 
+12 /// The key is in a directory of this name under the one the phone names.
+13 const KEY_DIR: &str = "key";
+14 
+15 /// How the kernel knows the cipher a phone names.
+16 const CIPHERS: [(&str, &str); 2] = [("aes-256-xts", "aes-xts-plain64"), ("adiantum", "xchacha12,aes-adiantum-plain64")];
+17 
+18 /// The hardware reads and writes in 4096-byte units, so the partition is
+19 /// mapped in whole multiples of eight 512-byte sectors.
+20 const SECTORS_PER_UNIT: u64 = 8;
+21 
+22 /// How a phone says its data partition is encrypted whole: the cipher, and
+23 /// whether the key is one only the storage hardware can unwrap.
+24 #[derive(Debug, Clone, PartialEq, Eq)]
+25 pub struct Encryption {
+26     pub cipher: String,
+27     pub wrapped: bool,
+28 }
+29 
+30 impl Encryption {
+31     /// Read what an entry of the phone's own table says, which is nothing
+32     /// where the entry does not have the partition encrypted whole.
+33     ///
+34     /// A table may name only where the key is kept: Android then takes the
+35     /// cipher it uses where nothing is said, and the key in the form the key
+36     /// service gives it back. This phone's own table names it that way, so
+37     /// that is still an encrypted partition rather than an absent one.
+38     pub fn of(entry: &Entry) -> Result<Option<Encryption>> {
+39         if entry.extra("metadata_encryption").is_none() && entry.extra("keydirectory").is_some() {
+40             return Ok(Some(Encryption { cipher: "aes-xts-plain64".to_string(), wrapped: false }));
+41         }
+42         let Some(said) = entry.extra("metadata_encryption") else { return Ok(None) };
+43         let (name, rest) = said.split_once(':').unwrap_or((said, ""));
+44         let cipher = CIPHERS
+45             .iter()
+46             .find_map(|(theirs, kernels)| (*theirs == name).then_some(*kernels))
+47             .with_context(|| format!("no cipher here is the {name} the phone names"))?;
+48         Ok(Some(Encryption { cipher: cipher.to_string(), wrapped: rest == "wrappedkey_v0" }))
+49     }
+50 }
+51 
+52 /// The entry that has the partition encrypted whole, and how, among those
+53 /// the phone's table has for it: a phone may name the partition once per
+54 /// filesystem it might hold, and say how it is encrypted in one of them.
+55 /// Nothing where none says so, and the filesystem is then read and written
+56 /// on the partition itself.
+57 pub fn whole(entries: &[Entry]) -> Result<Option<(&Entry, Encryption)>> {
+58     for entry in entries {
+59         if let Some(encryption) = Encryption::of(entry)? {
+60             return Ok(Some((entry, encryption)));
+61         }
+62     }
+63     Ok(None)
+64 }
+65 
+66 /// Whether the phone's table has the partition's files encrypted one by
+67 /// one, each user's under keys of their own. Where it has not, every name
+68 /// and every file reads as it is once the filesystem is mounted.
+69 pub fn files(entries: &[Entry]) -> bool {
+70     entries.iter().any(|e| e.extra("fileencryption").is_some())
+71 }
+72 
+73 /// Whether the system makes the partition an entry names afresh as it
+74 /// starts, once the partition has been emptied: the phone's table has to
+75 /// call it formattable, and where the table has it encrypted whole, to say
+76 /// where its key is kept as well, for the system makes the key anew with
+77 /// the filesystem.
+78 pub fn made_afresh(entry: &Entry) -> bool {
+79     let formattable = entry.extras.iter().any(|e| e == "formattable");
+80     let key_kept = entry.extra("metadata_encryption").is_none() || entry.extra("keydirectory").is_some();
