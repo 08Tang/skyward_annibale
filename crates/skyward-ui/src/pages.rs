@@ -5387,7 +5387,7 @@ pub fn slot(cx: &Ctx) -> Frame {
             (false, true, true) => texts::slot::OTHER,
         })
     });
-    let rows: Vec<Row> = [Slot::A, Slot::B].iter().enumerate().map(|(k, &slot)| Row::new(titles[k]).subtitle(&subs[k]).trail(Trail::Check(slot == chosen))).collect();
+    let rows: Vec<Row> = [Slot::A, Slot::B].iter().enumerate().map(|(k, &slot)| Row::new(&titles[k]).subtitle(&subs[k]).trail(Trail::Check(slot == chosen))).collect();
     let list = widgets::list(&mut c, t, f, y, &rows);
     out.extend(hits(&list.rows, &[Slot::A, Slot::B].map(Action::PickSlot)));
     if let Some(note) = fmt::snapshot_slot_note(l, &i.snapshot) {
