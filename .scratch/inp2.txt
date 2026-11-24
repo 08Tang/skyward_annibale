@@ -1,0 +1,42 @@
+﻿334                     let travel = (track.w - track.h).max(1.0);
+335                     self.state.confirm = ((x - grab - track.x) / travel).clamp(0.0, 1.0);
+336                     self.repaint_confirm(&t, f, which, track);
+337                     self.drag = Drag::Confirm { which, track, grab };
+338                 }
+339                 Drag::Pattern => {
+340                     self.trace(&t, x, y + scroll);
+341                     self.drag = Drag::Pattern;
+342                 }
+343                 Drag::History { last, carry, pitch } => {
+344                     self.tracker.add(now, y);
+345                     self.drag = self.scroll_history(last, y, carry, pitch);
+346                 }
+347                 // The sheet is pulled by its own handler, which sees every
+348                 // finger while it is out.
+349                 Drag::Shade { start, from } => self.drag = Drag::Shade { start, from },
+350                 Drag::Waking => self.drag = Drag::Waking,
+351                 Drag::Held => self.drag = Drag::Held,
+352                 Drag::Idle => {}
+353             },
+354             Touch::Up => match std::mem::replace(&mut self.drag, Drag::Idle) {
+355                 Drag::Press { action: Some(a), .. } => {
+356                     if let Some(p) = &mut self.row_press {
+357                         p.lift(now);
+358                     }
+359                     fx.extend(self.act(a, now));
+360                 }
+361                 Drag::Press { x, y, action: None, .. } if self.screen() == Screen::Editor => self.place_caret(f, x, y + scroll),
+362                 Drag::History { pitch, .. } => {
+363                     // A finger lifted while still moving sends the rows
+364                     // gliding on.
+365                     let speed = self.tracker.velocity(now);
+366                     if speed.abs() >= m.dp(MIN_FLING_DP) {
+367                         let speed = speed.clamp(-m.dp(MAX_FLING_DP), m.dp(MAX_FLING_DP));
+368                         self.glide = Some((Fling::new(now, 0.0, speed, self.px_per_dp * 160.0), pitch, 0));
+369                     }
+370                 }
+371                 Drag::Scroll { .. } if self.pull != 0.0 => {
+372                     // A page let go past its end springs back.
+373                     self.bounce = Some(Spring::new(now, motion::rubber(self.pull, self.h as f32), 0.0, 0.4));
+374                     self.pull = 0.0;
+375                     self.dirty = true;

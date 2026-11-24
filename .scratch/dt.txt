@@ -1,0 +1,15 @@
+﻿pub fn date(l: Lang, unix: i64, zone: &TimeZone) -> String {
+    let d = local(unix, zone);
+    day(l, d.year().into(), d.month().into(), d.day().into())
+}
+
+/// When a list entry last changed, as the stock file manager tells it
+/// against `now`, when the folder was read: the time for today, month and
+/// day for a file from this year, and the whole date for a folder from this
+/// year or anything older; all in `zone`.
+pub fn file_time(unix: i64, folder: bool, now: i64, zone: &TimeZone) -> String {
+    let (day, today) = (local(unix, zone).date(), local(now, zone).date());
+    if day == today {
+        clock(unix, zone)
+    } else if day.year() == today.year() && !folder {
+        format!("{

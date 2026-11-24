@@ -1,0 +1,8 @@
+﻿302         BackupRefusal::OlderAndroid { was, now } => refused::older_android(l, was, now),
+303     }
+304 }
+305 
+306 /// What the update page says of an update standing so, and the line under
+307 /// it on what comes next; `next` is the slot the bootloader starts next,
+308 /// where the boot control could tell.
+309 pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Option<String>) {

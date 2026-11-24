@@ -317,6 +317,7 @@ pub fn snapshot_backup_note(l: Lang, s: &SnapshotState) -> Option<&'static str> 
 
 /// Why backing up, or restoring, did not start.
 pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
+    use texts::backup::refused;
     match r {
         BackupRefusal::Room { needed, free } => {
             let (needed, free) = (gb(*needed), gb(*free));
@@ -371,12 +372,7 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
                 "Nothing that was chosen is on this phone to take, so nothing was backed up.",
             ])
             .into(),
-        BackupRefusal::OlderAndroid { was, now } => tr!(
-            l,
-            "该备份在 Android {was} 上创建，本机系统为 Android {now}，无法读取其中的 data 分区。",
-            "該備份在 Android {was} 上建立，本機系統為 Android {now}，無法讀取其中的 data 分割區。",
-            "The backup was made on Android {was}, and this phone runs Android {now}, which can't read its data partition."
-        ),
+        BackupRefusal::OlderAndroid { was, now } => refused::older_android(l, was, now),
     }
 }
 
@@ -1869,7 +1865,7 @@ mod tests {
         // The Xiaomi 13 Ultra's installed system, by its ro.build.date.utc.
         let built = 1_778_243_655;
         assert_eq!(date(Lang::Hant, built, china()), "2026年5月8日");
-        assert_eq!(date(Lang::En, built, china()), "8 May 2026");
+        assert_eq!(date(Lang::En, built, china()), "May 8, 2026");
         for l in Lang::ALL {
             let written = date(l, built, china());
             assert!(written.contains("2026") && written.contains('8'), "{l:?} writes the year and the day: {written}");
@@ -1887,6 +1883,6 @@ mod tests {
 
     #[test]
     fn a_row_of_names_is_set_and_ended_as_its_language_does() {
-        assert_eq!(list(Lang::En, ["ART cache", "App data"]), "ART cache, App data");
+        assert_eq!(list(Lang::En, ["ART cache", "App data"]), "ART cache, app data", "only the first keeps its capital");
     }
 }

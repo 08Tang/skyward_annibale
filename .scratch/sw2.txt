@@ -1,0 +1,20 @@
+﻿556     /// guard, and give what the page asks for.
+557     fn swipe_to_flash(app: &mut App, f: &Fonts, i: &DeviceInfo) -> Vec<Effect> {
+558         let track = app.frame(f, i).hits.iter().find(|h| h.action == Action::Confirm(Confirm::Flash)).unwrap().rect;
+559         let y = track.centre().1 - app.top().1;
+560         app.touch(Touch::Down(track.x + track.h / 2.0, y), f, 1000);
+561         app.touch(Touch::Move(track.x + track.w, y), f, 1000);
+562         app.touch(Touch::Up, f, 1000)
+563     }
+564 
+565     #[test]
+566     fn a_filesystem_image_goes_to_a_logical_partition_of_the_slot_the_phone_runs_from() {
+567         let (f, i) = (fonts(), info());
+568         let mut app = sideloading(&f, &i);
+569         let logical = |name: &str| FlashTarget { name: name.into(), place: FlashPlace::Logical };
+570         let mut partitions = slotted(&["modem"]);
+571         partitions.extend([logical("odm"), logical("vendor")]);
+572         let kind = ImageKind::Filesystem(skyward_install::Filesystem::Erofs);
+573         app.install(Event::Image { kind, size: 1 << 30, partitions }, 0);
+574         // The partition its file is named for comes first, and the phone
+575         // has it in both slots, which are there to pick.

@@ -1,0 +1,57 @@
+﻿350     fn an_image_goes_where_it_is_sent_once_swiped() {
+351         let (f, i) = (fonts(), info());
+352         let mut app = sideloading(&f, &i);
+353         app.install(Event::Checking { size: 201_326_592 }, 0);
+354         let kind = ImageKind::Boot { kernel: true, ramdisk: skyward_install::Ramdisk::Recovery };
+355         app.install(Event::Image { kind, size: 201_326_592, partitions: slotted(&["recovery", "boot"]) }, 0);
+356         // The image lit the panel, so the user looks and taps past the wake
+357         // guard.
+358         tap_at(&mut app, &f, &i, Action::FlashPartition(1), 1000);
+359         tap_at(&mut app, &f, &i, Action::FlashSlots(Pick::Both), 1000);
+360         assert_eq!(swipe_to_flash(&mut app, &f, &i), vec![Effect::Flash { partition: "boot".into(), place: FlashPlace::Slotted, pick: Pick::Both }]);
+361         assert_eq!(app.state.install, Install::Flashing { partition: "boot".into(), stage: None });
+362         app.install(Event::Progress(Stage::Flashing { done: 10, total: 40 }), 1000);
+363         assert_eq!(app.state.install, Install::Flashing { partition: "boot".into(), stage: Some(Stage::Flashing { done: 10, total: 40 }) });
+364         app.key(Key::Back, 1000);
+365         assert_eq!(app.screen(), Screen::Installing, "a partition being written keeps the page");
+366         app.install(Event::Finished(Outcome::Flashed { partition: "boot".into(), slots: vec![Slot::A, Slot::B] }), 1000);
+367         assert!(matches!(app.state.install, Install::Finished { damage: None, .. }), "a flash that worked broke nothing");
+---
+421     fn a_filesystem_image_goes_to_a_logical_partition_of_the_slot_the_phone_runs_from() {
+422         let (f, i) = (fonts(), info());
+423         let mut app = sideloading(&f, &i);
+424         let logical = |name: &str| FlashTarget { name: name.into(), place: FlashPlace::Logical };
+425         let mut partitions = slotted(&["modem"]);
+426         partitions.extend([logical("odm"), logical("vendor")]);
+427         let kind = ImageKind::Filesystem(skyward_install::Filesystem::Erofs);
+428         app.install(Event::Image { kind, size: 1 << 30, partitions }, 0);
+429         // The partition its file is named for comes first, and the phone
+430         // has it in both slots, which are there to pick.
+431         let picks = |app: &mut App| app.frame(&f, &i).hits.iter().filter(|h| matches!(h.action, Action::FlashSlots(_))).count();
+432         assert_eq!(picks(&mut app), 3);
+433         tap_at(&mut app, &f, &i, Action::FlashSlots(Pick::Both), 1000);
+434         tap_at(&mut app, &f, &i, Action::FlashPartition(2), 1000);
+435         assert_eq!(picks(&mut app), 0, "a logical partition is the running slot's, with nothing to pick");
+436         assert_eq!(swipe_to_flash(&mut app, &f, &i), vec![Effect::Flash { partition: "vendor".into(), place: FlashPlace::Logical, pick: Pick::Both }]);
+437         assert_eq!(Pick::Both.slots(FlashPlace::Logical, Slot::B), [Slot::B], "whatever was picked for another partition");
+438         assert_eq!(Pick::Other.slots(FlashPlace::Slotted, Slot::B), [Slot::A]);
+---
+451     fn a_whole_super_is_flashed_to_no_slot() {
+452         let (f, i) = (fonts(), info());
+453         let mut app = sideloading(&f, &i);
+454         let partitions = vec![FlashTarget { name: "super".into(), place: FlashPlace::Single }];
+455         app.install(Event::Image { kind: ImageKind::Super, size: 9_663_676_416, partitions }, 0);
+456         assert!(!app.frame(&f, &i).hits.iter().any(|h| matches!(h.action, Action::FlashSlots(_))));
+457         assert_eq!(swipe_to_flash(&mut app, &f, &i), vec![Effect::Flash { partition: "super".into(), place: FlashPlace::Single, pick: Pick::Current }]);
+458         app.install(Event::Finished(Outcome::Flashed { partition: "super".into(), slots: Vec::new() }), 1000);
+459         assert!(matches!(app.state.install, Install::Finished { damage: None, .. }));
+460         app.frame(&f, &i);
+461     }
+462 
+463     #[test]
+464     fn an_image_that_failed_part_way_names_its_partition() {
+465         let (f, i) = (fonts(), info());
+466         let mut app = sideloading(&f, &i);
+467         app.install(Event::Image { kind: ImageKind::Dtbo, size: 1 << 20, partitions: slotted(&["dtbo"]) }, 0);
+468         app.state.install = Install::Flashing { partition: "dtbo".into(), stage: None };
+---

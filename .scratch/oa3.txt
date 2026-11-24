@@ -1,0 +1,8 @@
+﻿ can't be restored to this phone."
+resized = "{name} isn't the size it was at the backup, so the system may have been updated. The backup's system partitions can't be restored to the current system."
+older_android = "This backup's data partition is from Android {was}, and this phone runs Android {now}. An older Android can't read it, so it can't be restored."
+
+# What the update page says of where an update stands, and the line under
+# it on what comes next.
+[update.standing]
+records_unread = "Couldn't read the upda

@@ -1,0 +1,30 @@
+﻿661     #[test]
+662     fn a_part_of_the_world_lists_its_zones_by_how_far_they_are_from_utc_now() {
+663         let (f, i) = (fonts(), info());
+664         for now in [WINTER, SUMMER] {
+665             for region in Region::ALL {
+666                 let mut app = App::new(Screen::TimeZones(region), W, H, PPD);
+667                 app.set_now(now);
+668                 let zones: Vec<usize> = app.frame(&f, &i).hits.iter().map(|h| match h.action {
+669                     Action::TimeZone(at) => at,
+670                     other => panic!("{region:?} lists only zones, not {other:?}"),
+671                 }).collect();
+672                 let of_region = TIME_ZONES.iter().filter(|zone| zone.region == Some(region)).count();
+673                 assert_eq!(zones.len(), of_region, "{region:?} lists each of its zones");
+674                 let offsets: Vec<i32> = zones.iter().map(|&at| fmt::utc_offset_seconds(now, fmt::rules(at))).collect();
+675                 assert!(offsets.is_sorted(), "{region:?} at {now}: {offsets:?}");
+676             }
+677         }
+678     }
+679 
+680     #[test]
+681     fn the_time_zone_pages_are_drawn_again_when_a_zone_s_clocks_change() {
+682         let (f, i) = (fonts(), info());
+683         let mut app = App::new(Screen::TimeZones(Region::EuropeAfrica), W, H, PPD);
+684         // 2026-03-29 00:59 UTC, a minute before Europe's clocks go forward.
+685         let before = 1_774_745_940;
+686         app.set_now(before);
+687         app.frame(&f, &i);
+688         app.set_now(before + 30);
+689         assert!(app.frame.is_some(), "the same minute");
+690         app.set_now(before + 60);

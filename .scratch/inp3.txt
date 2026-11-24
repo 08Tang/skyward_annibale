@@ -1,0 +1,37 @@
+﻿376                 }
+377                 Drag::Scroll { .. } => {
+378                     // A finger lifted while still moving sends the page
+379                     // gliding on. One lifted slower leaves it where it is,
+380                     // but for a search bar part folded, which settles
+381                     // folded or unfolded; so does one lifted in the fold
+382                     // whose glide would end in it too.
+383                     let speed = -self.tracker.velocity(now);
+384                     let folding = |s: f32| self.frame.as_ref().is_some_and(|fr| fr.settle(s) != s);
+385                     let glide = (speed.abs() >= m.dp(MIN_FLING_DP)).then(|| {
+386                         let speed = speed.clamp(-m.dp(MAX_FLING_DP), m.dp(MAX_FLING_DP));
+387                         Fling::new(now, scroll, speed, self.px_per_dp * 160.0)
+388                     });
+389                     match glide {
+390                         Some(glide) if !(folding(scroll) && folding(glide.at(u64::MAX).0)) => self.fling = Some(glide),
+391                         _ => self.settle_fold(now),
+392                     }
+393                 }
+394                 Drag::Edge { armed: true, .. } => fx.extend(self.back(now)),
+395                 Drag::Edge { start, from_left, x, cy, .. } => {
+396                     // Short of going back, the cue sinks back into the edge.
+397                     let travel = if from_left { x - start } else { start - x };
+398                     let depth = widgets::back_cue_depth(&t, travel);
+399                     self.cue = Some((from_left, cy, Spring::new(now, depth, 0.0, 0.15)));
+400                     self.dirty = true;
+401                 }
+402                 Drag::Confirm { which, track, .. } => {
+403                     let done = self.state.confirm > SLID;
+404                     self.state.confirm = 0.0;
+405                     self.repaint_confirm(&t, f, which, track);
+406                     if done {
+407                         fx.extend(self.confirmed(which, now));
+408                     }
+409                 }
+410                 Drag::Pattern => fx.extend(self.drawn(now)),
+411                 // Let go, the strength slider taps the motor as strongly as
+412                 // it was left at.

@@ -1,0 +1,60 @@
+﻿1741                 Source::Computer | Source::Rescue => widgets::footnote(&mut c, t, f, y, l.pick(texts::installing::KEEP_CABLE)),
+1742                 Source::File(Place::Storage) | Source::Opened { drive: false } | Source::Asked { .. } => y,
+1743                 Source::File(Place::UsbDrive) | Source::Opened { drive: true } => widgets::footnote(&mut c, t, f, y, l.pick(texts::installing::KEEP_USB_DRIVE)),
+1744             }
+1745         }
+1746         Install::Choosing(choice) => {
+1747             let (name, holds) = fmt::image_kind(l, choice.kind);
+1748             let detail = texts::installing::size_and_holds(l, fmt::bytes(choice.size), &holds);
+1749             let y = widgets::list(&mut c, t, f, top, &[standing(name, GREEN, Icon::Install, &detail)]).bottom;
+1750             let y = kind_note(&mut c, cx, y, PackageKind::Image);
+1751             let y = widgets::section(&mut c, t, f, y, l.pick(["分区", "分割區", "Partition"]));
+1752             let rows: Vec<Row> = choice.partitions.iter().enumerate().map(|(k, p)| Row::new(p.name.as_str()).subtitle(fmt::partition_role(l, p)).trail(Trail::Check(k == choice.partition))).c
+1753             let parts = widgets::list(&mut c, t, f, y, &rows);
+1754             let choose: Vec<Action> = (0..choice.partitions.len()).map(Action::FlashPartition).collect();
+1755             out.extend(hits(&parts.rows, &choose));
+1756             let y = widgets::section(&mut c, t, f, parts.bottom, l.pick(["槽位", "槽位", "Slot"]));
+1757             let titles = Pick::ALL.map(|p| pick_title(l, p, i.slot));
+1758             let rows: Vec<Row> = Pick::ALL.iter().zip(&titles).map(|(p, title)| Row::new(title).trail(Trail::Check(*p == choice.pick))).collect();
+1759             let picks = widgets::list(&mut c, t, f, y, &rows);
+1760             out.extend(hits(&picks.rows, &Pick::ALL.map(Action::FlashSlots)));
+1761             let (label, danger) = confirm_label(Confirm::Flash, cx.state);
+1762             let track = widgets::confirm(&mut c, t, f, picks.bottom + t.m.dp(28.0), label, danger, s.confirm);
+1763             out.push(Hit { rect: track, action: Action::Confirm(Confirm::Flash) });
+1764             let note = l.pick(match s.source {
+1765                 Source::Computer => [
+1766                     "刷入将覆盖分区中的原有内容。返回将取消刷入，并结束电脑上的 adb sideload。",
+1767                     "刷入將覆寫分割區中的原有內容。返回將取消刷入，並結束電腦上的 adb sideload。",
+1768                     "Flashing writes over what the partition holds. Going back cancels it and ends adb sideload on the computer.",
+1769                 ],
+1770                 Source::Rescue => [
+1771                     "刷入将覆盖分区中的原有内容。返回将取消刷入，并退出救援模式。",
+1772                     "刷入將覆寫分割區中的原有內容。返回將取消刷入，並結束救援模式。",
+1773                     "Flashing writes over what the partition holds. Going back cancels it and leaves rescue mode.",
+1774                 ],
+1775                 Source::File(_) | Source::Opened { .. } | Source::Asked { .. } => {
+1776                     ["刷入将覆盖分区中的原有内容。返回将取消刷入。", "刷入將覆寫分割區中的原有內容。返回將取消刷入。", "Flashing writes over what the partition holds. Going back cancels it."]
+1777                 }
+1778             });
+1779             widgets::footnote(&mut c, t, f, track.y + track.h, note)
+1780         }
+1781         Install::Confirming { version, wipe } => {
+1782             use texts::installing::confirm;
+1783             let (title, color, icon, detail, which) = if *wipe {
+1784                 let detail = match (version, s.cache_partition) {
+1785                     (Some(v), true) => confirm::version_resets_with_cache(l, v),
+1786                     (Some(v), false) => confirm::version_resets(l, v),
+1787                     (None, true) => l.pick(confirm::UPDATE_RESETS_WITH_CACHE).into(),
+1788                     (None, false) => l.pick(confirm::UPDATE_RESETS).into(),
+1789                 };
+1790                 (l.pick(confirm::WIPE_NEEDED).to_string(), ORANGE, Icon::Wipe, detail, Confirm::InstallWipe)
+1791             } else {
+1792                 let title = match version {
+1793                     Some(v) => confirm::version(l, v),
+1794                     None => l.pick(confirm::UPDATE).into(),
+1795                 };
+1796                 let detail = match i.slot.map(|s| s.other().letter()) {
+1797                     Some(slot) => confirm::to_slot(l, slot),
+1798                     None => l.pick(confirm::STARTS_AFTER_REBOOT).into(),
+1799                 };
+1800                 (title, GREEN, Icon::Install, detail, Confirm::Install)

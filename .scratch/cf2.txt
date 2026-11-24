@@ -1,0 +1,37 @@
+﻿494     #[test]
+495     fn an_image_goes_where_it_is_sent_once_swiped() {
+496         let (f, i) = (fonts(), info());
+497         let mut app = sideloading(&f, &i);
+498         app.install(Event::Checking { size: 201_326_592 }, 0);
+499         let kind = ImageKind::Boot { kernel: true, ramdisk: skyward_install::Ramdisk::Recovery };
+500         app.install(Event::Image { kind, size: 201_326_592, partitions: slotted(&["recovery", "boot"]) }, 0);
+501         // The image lit the panel, so the user looks and taps past the wake
+502         // guard.
+503         tap_at(&mut app, &f, &i, Action::FlashPartition(1), 1000);
+504         tap_at(&mut app, &f, &i, Action::FlashSlots(Pick::Both), 1000);
+505         assert_eq!(swipe_to_flash(&mut app, &f, &i), vec![Effect::Flash { partition: "boot".into(), place: FlashPlace::Slotted, pick: Pick::Both }]);
+506         assert_eq!(app.state.install, Install::Flashing { partition: "boot".into(), stage: None });
+507         app.install(Event::Progress(Stage::Flashing { done: 10, total: 40 }), 1000);
+508         assert_eq!(app.state.install, Install::Flashing { partition: "boot".into(), stage: Some(Stage::Flashing { done: 10, total: 40 }) });
+509         app.key(Key::Back, 1000);
+510         assert_eq!(app.screen(), Screen::Installing, "a partition being written keeps the page");
+511         app.install(Event::Finished(Outcome::Flashed { partition: "boot".into(), slots: vec![Slot::A, Slot::B] }), 1000);
+512         assert!(matches!(app.state.install, Install::Finished { damage: None, .. }), "a flash that worked broke nothing");
+513         assert_eq!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::System), 2000), vec![Effect::Reboot(Target::System)]);
+514         app.key(Key::Back, 2000);
+515         assert_eq!(app.screen(), Screen::Install);
+516         assert_eq!(app.state.install, Install::Idle);
+517     }
+518 
+519     #[test]
+520     fn an_update_shows_its_steps_and_cannot_be_left() {
+521         let (f, i) = (fonts(), info());
+522         let mut app = sideloading(&f, &i);
+523         app.install(Event::Checking { size: 7_103_043_868 }, 0);
+524         app.install(Event::Installing { version: Some("OS3.0.306.0.WMACNXM".into()) }, 0);
+525         app.install(Event::Overwriting, 0);
+526         app.install(Event::Progress(Stage::Writing { done: 1 << 30, total: 7 << 30 }), 0);
+527         assert!(matches!(app.state.install, Install::Updating { overwriting: true, stage: Some(_), .. }));
+528         let shown = app.frame(&f, &i).hits.len();
+529         assert_eq!(shown, 0, "nothing on the page to tap while installing");
+530         app.key(Key::Back, 0);

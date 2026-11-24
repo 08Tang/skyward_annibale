@@ -1,0 +1,43 @@
+﻿### 495-512
+495     fn an_image_goes_where_it_is_sent_once_swiped() {
+496         let (f, i) = (fonts(), info());
+497         let mut app = sideloading(&f, &i);
+498         app.install(Event::Checking { size: 201_326_592 }, 0);
+499         let kind = ImageKind::Boot { kernel: true, ramdisk: skyward_install::Ramdisk::Recovery };
+500         app.install(Event::Image { kind, size: 201_326_592, partitions: slotted(&["recovery", "boot"]) }, 0);
+501         // The image lit the panel, so the user looks and taps past the wake
+502         // guard.
+503         tap_at(&mut app, &f, &i, Action::FlashPartition(1), 1000);
+504         tap_at(&mut app, &f, &i, Action::FlashSlots(Pick::Both), 1000);
+505         assert_eq!(swipe_to_flash(&mut app, &f, &i), vec![Effect::Flash { partition: "boot".into(), place: FlashPlace::Slotted, pick: Pick::Both }]);
+506         assert_eq!(app.state.install, Install::Flashing { partition: "boot".into(), stage: None });
+507         app.install(Event::Progress(Stage::Flashing { done: 10, total: 40 }), 1000);
+508         assert_eq!(app.state.install, Install::Flashing { partition: "boot".into(), stage: Some(Stage::Flashing { done: 10, total: 40 }) });
+509         app.key(Key::Back, 1000);
+510         assert_eq!(app.screen(), Screen::Installing, "a partition being written keeps the page");
+511         app.install(Event::Finished(Outcome::Flashed { partition: "boot".into(), slots: vec![Slot::A, Slot::B] }), 1000);
+512         assert!(matches!(app.state.install, Install::Finished { damage: None, .. }), "a flash that worked broke nothing");
+513         assert_eq!(tap_at(&mut app, &f, &i, Action::RebootTo(Target::System), 2000), vec![Effect::Reboot(Target::System)]);
+### 590-610
+590             app.state.install,
+591             Install::Finished { outcome: Outcome::Failed(Failure::Error("map vendor_b".into())), damage: Some(Damage::Partition("vendor".into())) }
+592         );
+593     }
+594 
+595     #[test]
+596     fn a_whole_super_is_flashed_to_no_slot() {
+597         let (f, i) = (fonts(), info());
+598         let mut app = sideloading(&f, &i);
+599         let partitions = vec![FlashTarget { name: "super".into(), place: FlashPlace::Single }];
+600         app.install(Event::Image { kind: ImageKind::Super, size: 9_663_676_416, partitions }, 0);
+601         assert!(!app.frame(&f, &i).hits.iter().any(|h| matches!(h.action, Action::FlashSlots(_))));
+602         assert_eq!(swipe_to_flash(&mut app, &f, &i), vec![Effect::Flash { partition: "super".into(), place: FlashPlace::Single, pick: Pick::Current }]);
+603         app.install(Event::Finished(Outcome::Flashed { partition: "super".into(), slots: Vec::new() }), 1000);
+604         assert!(matches!(app.state.install, Install::Finished { damage: None, .. }));
+605         app.frame(&f, &i);
+606     }
+607 
+608     #[test]
+609     fn an_image_that_failed_part_way_names_its_partition() {
+610         let (f, i) = (fonts(), info());
+611         let mut app = sideloading(&f, &i);
