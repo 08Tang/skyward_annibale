@@ -96,7 +96,7 @@ fn statvfs(path: &Path) -> io::Result<libc::statvfs> {
 
 #[cfg(target_os = "android")]
 mod sys {
-    use super::{FILESYSTEMS, Visible};
+    use super::{FILESYSTEMS, Visible, deepest_first};
     use anyhow::{Context, Result, bail};
     use procfs::process::{MMapPath, MountInfo, MountOptFields, Process, all_processes};
     use procfs::{ProcError, ProcResult};
