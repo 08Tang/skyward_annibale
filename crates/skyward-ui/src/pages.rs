@@ -20,7 +20,7 @@ use crate::theme::Theme;
 use crate::tr;
 use crate::widgets::{self, Caption, Detail, Fact, Outline, Row, Spec, SystemCard, SystemMark, Tone, Trail};
 use skyward_info::{DeviceInfo, RUNNING};
-use skyward_install::{Outcome, Reflash, Refusal, Stage};
+use skyward_install::{Outcome, Place as FlashPlace, Reflash, Refusal, Stage};
 use skyward_net::download::Progress;
 use skyward_net::supplicant::Security;
 use skyward_net::wlan::{Bands, Network, Power, Stage as Joining};
