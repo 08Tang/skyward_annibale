@@ -1,7 +1,7 @@
 use crate::app::{
     ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ChargeMode, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
-    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Rows,
+    EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Region, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target, Report,
     USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting,
 };
@@ -13,7 +13,7 @@ use crate::fmt::{self, Verb};
 use crate::font::Fonts;
 use crate::geom::Rect;
 use crate::icons::{self, Icon};
-use crate::lang::{Lang, Text};
+use crate::lang::{Lang, Text, same};
 use crate::search;
 use crate::term::{self, Term};
 use crate::texts;
@@ -168,6 +168,7 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
 
 /// The home page's large title.
 pub const HOME_TITLE: &str = "Skyward";
+pub const SEARCH_HINT: Text = ["搜索功能与分区", "搜尋功能與分割區", "Search features and partitions"];
 
 /// Where the phone can restart to, and what is said under the name of one
 /// that wants it.
@@ -196,6 +197,30 @@ const SPECS: Text = ["全部参数与信息", "全部規格與資訊", "All spec
 const LOGS: Text = ["导出日志", "匯出記錄", "Export logs"];
 const SCREEN_TIMEOUT: Text = ["息屏时间", "螢幕自動關閉", "Screen timeout"];
 const UPDATE: Text = ["系统更新", "系統更新", "System update"];
+
+const MODEL: Text = ["设备型号", "裝置型號", "Model"];
+const DATA_PART: Text = ["data 分区", "data 分割區", "data partition"];
+const UNREADABLE: Text = ["无法读取", "無法讀取", "Unreadable"];
+const REFLASHING: Text = ["正在重新刷入 Skyward", "正在重新刷入 Skyward", "Flashing Skyward again"];
+const READING_FILE: Text = ["正在读取文件", "正在讀取檔案", "Reading the file"];
+const RUN_ON_COMPUTER: Text = ["在电脑上运行", "在電腦上執行", "Run on the computer"];
+const GETTING_READY: Text = ["正在准备", "正在準備", "Getting ready"];
+const WIPING: Text = ["正在清除", "正在清除", "Wiping"];
+const KEEP_POWER: Text = ["清除完成前，请不要关机。", "清除完成前，請不要關機。", "Don't power off until it's wiped."];
+const VERIFIED: Text = ["已校验", "已驗證", "Verified"];
+const VERIFYING: Text = ["正在校验", "正在驗證", "Verifying"];
+const WAITING_TURN: Text = ["等待中", "等待中", "Waiting"];
+const RESTORE_FAILED: Text = ["恢复失败", "還原失敗", "Restore failed"];
+const ACTIONS: Text = ["操作", "操作", "Actions"];
+const CHECKING: Text = ["正在检查更新", "正在檢查更新", "Checking for updates"];
+const DOWNLOADING: Text = ["正在下载", "正在下載", "Downloading"];
+const CHECKING_PART: Text = ["正在校验已下载的部分", "正在驗證已下載的部分", "Verifying what was downloaded"];
+const NOTES: Text = ["注意事项", "注意事項", "Notes"];
+const CANCEL: Text = ["取消", "取消", "Cancel"];
+const RENAME: Text = ["重命名", "重新命名", "Rename"];
+const LICENSE_TERMS: Text = ["许可证", "授權條款", "License"];
+const POWERS_OFF_WHEN_DONE: Text = ["完成后将自动关机。", "完成後將自動關機。", "Powers off on its own once done."];
+const REBOOTS_WHEN_DONE: Text = ["完成后将自动重启。", "完成後將自動重新啟動。", "Reboots on its own once done."];
 const SKYWARD_UPDATE: Text = ["版本更新", "版本更新", "Version update"];
 /// Reporting a bug to the author, with the logs that show it.
 const FEEDBACK: Text = ["问题反馈", "問題回報", "Report a bug"];
@@ -5071,10 +5096,36 @@ pub fn time_zone(cx: &Ctx) -> Frame {
     let mut c = long_page(cx);
     let mut out = Vec::new();
     let top = t.m.content_top;
-    let rows: Vec<Row> = TIME_ZONES.iter().enumerate().map(|(k, &(name, cities, _))| Row::new(l.pick(name)).subtitle(l.pick(cities)).trail(Trail::Check(k == s.time_zone))).collect();
+    let rows: Vec<Row> = TIME_ZONES.iter().enumerate().map(|(k, z)| Row::new(l.pick(z.name)).subtitle(l.pick(z.cities)).trail(Trail::Check(k == s.time_zone))).collect();
     let list = widgets::list(&mut c, t, f, top, &rows);
     let picks: Vec<Action> = zones.iter().map(|&at| Action::TimeZone(at)).collect();
     Frame::new(t, fit(c, t, list.bottom), hits(&list.rows, &picks), l.pick(region.name()), top)
+}
+
+/// The zones of one part of the world, as its row on the time zone page opens
+/// them.
+pub fn time_zones(cx: &Ctx, region: Region) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let top = t.m.content_top;
+    let zones: Vec<usize> = (0..TIME_ZONES.len()).filter(|&at| TIME_ZONES[at].region == Some(region)).collect();
+    let rows: Vec<Row> = zones
+        .iter()
+        .map(|&at| Row::new(l.pick(TIME_ZONES[at].name)).subtitle(l.pick(TIME_ZONES[at].cities)).trail(Trail::Check(at == s.time_zone)))
+        .collect();
+    let list = widgets::list(&mut c, t, f, top, &rows);
+    let picks: Vec<Action> = zones.iter().map(|&at| Action::TimeZone(at)).collect();
+    Frame::new(t, fit(c, t, list.bottom), hits(&list.rows, &picks), l.pick(region.name()), top)
+}
+
+/// A phrase that opens a line on its own: in English with its first letter
+/// a capital.
+fn capitalized(l: Lang, phrase: &str) -> String {
+    let mut chars = phrase.chars();
+    match (l, chars.next()) {
+        (Lang::En, Some(first)) => first.to_uppercase().chain(chars).collect(),
+        _ => phrase.to_string(),
+    }
 }
 
 /// Saving the logs, as a bug report asks for them.

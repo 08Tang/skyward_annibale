@@ -1,0 +1,19 @@
+﻿267         assert_eq!(traditional.first().map(|e| Lang::Hant.pick(e.title)), Some("設定"));
+268         assert!(find("设置", Lang::Hant).is_empty(), "the simplified title belongs to the other script");
+269     }
+270 
+271     #[test]
+272     fn a_language_answers_to_its_own_keys_and_the_english_ones() {
+273         assert!(find("beifen", Lang::En).is_empty(), "pinyin is Chinese's own");
+274         for l in Lang::ALL {
+275             let found: Vec<Screen> = find("sideload", l).iter().map(|e| e.screen).collect();
+276             assert_eq!(found, [Screen::Install], "{l:?} finds installing from a computer by the name every language borrows");
+277         }
+278     }
+279 
+280     #[test]
+281     fn a_title_is_found_as_the_keyboard_types_it() {
+282         assert_eq!(typed("Güncelle"), "guncelle");
+283         assert_eq!(typed("İptal Işık"), "iptal isik", "Turkish's two letters I");
+284         assert_eq!(typed("Tiếng Việt"), "tieng viet");
+285         assert_eq!(typed("Straße"), "strasse");

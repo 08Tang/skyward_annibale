@@ -741,6 +741,36 @@ pub fn patch(l: Lang, p: &PatchLevel) -> String {
     day(l, p.year.into(), p.month.into(), p.day.into())
 }
 
+/// `before`, `inner` and `after` joined, with a space between Chinese and
+/// the Latin letters or digits at either end of `inner`, as the pages write
+/// them: 清除 ART 缓存失败.
+pub(crate) fn spaced(before: &str, inner: &str, after: &str) -> String {
+    let open = if inner.starts_with(|c: char| c.is_ascii()) && !before.ends_with(|c: char| c.is_ascii()) { " " } else { "" };
+    let close = if inner.ends_with(|c: char| c.is_ascii()) && !after.starts_with(|c: char| c.is_ascii()) { " " } else { "" };
+    format!("{before}{open}{inner}{close}{after}")
+}
+
+/// How another package is given to the installer from where this one came
+/// from: the computer sends it, or another file is chosen, as one is in
+/// place of a package the system named. English starts its sentence with it.
+fn give(l: Lang, source: Source) -> &'static str {
+    l.pick(match source {
+        Source::Computer | Source::Rescue => ["发送", "傳送", "Send"],
+        Source::File(_) | Source::Opened { .. } | Source::Asked { .. } => ["选择", "選擇", "Choose"],
+    })
+}
+
+/// `槽位 B`, `槽位 A 和 B`, `slot B`, `slots A and B`
+pub fn slots(l: Lang, slots: &[Slot]) -> String {
+    let letters: Vec<&str> = slots.iter().map(|s| s.letter()).collect();
+    let joined = letters.join(l.pick([" 和 ", " 和 ", " and "]));
+    match (l, slots.len()) {
+        (Lang::En, 1) => format!("slot {joined}"),
+        (Lang::En, _) => format!("slots {joined}"),
+        _ => format!("槽位 {joined}"),
+    }
+}
+
 /// The rules of each of [`TIME_ZONES`], read once from the ones the
 /// recovery carries.
 pub fn rules(zone: usize) -> &'static TimeZone {
@@ -958,7 +988,7 @@ fn sent(source: Source) -> bool {
 
 /// Why a package from `source` was not installed, for a phone with this
 /// codename, its dates in the zone at `zone` in [`TIME_ZONES`].
-pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: usize) -> String {
+pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: &TimeZone) -> String {
     let give = give(l, source);
     match r {
         Refusal::Unknown => tr!(

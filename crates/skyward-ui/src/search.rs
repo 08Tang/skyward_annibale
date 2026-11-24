@@ -14,10 +14,10 @@ pub struct Entry {
     /// Chinese gives pinyin in full and by initials, a language written in
     /// other letters how it writes its words in Latin ones, and English
     /// the names every language borrows.
-    pub keys: Text,
+    pub keys: &'static [&'static str],
 }
 
-const fn entry(title: Text, place: Text, screen: Screen, keys: Text) -> Entry {
+const fn entry(title: Text, place: Text, screen: Screen, keys: &'static [&'static str]) -> Entry {
     Entry { title, place, screen, keys }
 }
 
@@ -36,7 +36,7 @@ fn typed(title: &str) -> String {
 
 /// A partition, named the same in every language.
 const fn partition(name: &'static str, place: Text, screen: Screen) -> Entry {
-    Entry { title: same(name), place, screen, keys: same("") }
+    Entry { title: same(name), place, screen, keys: &[] }
 }
 
 const HOME: Text = page::HOME;
@@ -176,7 +176,7 @@ pub fn find(query: &str, l: Lang) -> Vec<&'static Entry> {
         return Vec::new();
     }
     let rank = |e: &Entry| {
-        let keys = || l.pick(e.keys).split(' ').chain(Lang::En.pick(e.keys).split(' '));
+        let keys = || e.keys.iter().copied();
         if typed(l.pick(e.title)).contains(&q) {
             Some(0)
         } else if keys().any(|k| k.starts_with(&q)) {
@@ -269,11 +269,14 @@ mod tests {
     }
 
     #[test]
-    fn a_language_answers_to_its_own_keys_and_the_english_ones() {
-        assert!(find("beifen", Lang::En).is_empty(), "pinyin is Chinese's own");
+    fn a_key_finds_its_page_in_every_language() {
+        // The keys are one list the three languages share, so a pinyin and an
+        // English word find the same page whichever language is spoken.
         for l in Lang::ALL {
             let found: Vec<Screen> = find("sideload", l).iter().map(|e| e.screen).collect();
             assert_eq!(found, [Screen::Install], "{l:?} finds installing from a computer by the name every language borrows");
+            let pinyin: Vec<Screen> = find("beifen", l).iter().map(|e| e.screen).collect();
+            assert_eq!(pinyin, [Screen::Backup], "{l:?} finds the backup page by its pinyin");
         }
     }
 
@@ -296,11 +299,15 @@ mod tests {
 
     #[test]
     fn every_key_is_one_the_keyboard_types() {
-        for l in Lang::ALL {
-            for e in ENTRIES {
-                let keys = l.pick(e.keys);
-                assert!(keys.chars().all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == ' '), "{l:?} gives {keys:?}");
-                assert!(!keys.starts_with(' ') && !keys.ends_with(' ') && !keys.contains("  "), "{l:?} gives {keys:?}");
+        // The keys are one list the three languages share, so they are
+        // checked once rather than per language.
+        for e in ENTRIES {
+            for key in e.keys {
+                assert!(!key.is_empty(), "{key:?} is a key");
+                assert!(
+                    key.chars().all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == ' '),
+                    "{key:?} is typed by the keyboard"
+                );
             }
         }
     }

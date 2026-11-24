@@ -1,0 +1,18 @@
+﻿279             assert_eq!(pinyin, [Screen::Backup], "{l:?} finds the backup page by its pinyin");
+280         }
+281     }
+282 
+283     #[test]
+284     fn a_title_is_found_as_the_keyboard_types_it() {
+285         assert_eq!(typed("Güncelle"), "guncelle");
+286         assert_eq!(typed("İptal Işık"), "iptal isik", "Turkish's two letters I");
+287         assert_eq!(typed("Tiếng Việt"), "tieng viet");
+288         assert_eq!(typed("Straße"), "strasse");
+289         assert_eq!(typed("Настройки"), "настройки", "letters the keyboard lacks stay themselves");
+290         assert_eq!(typed("設定"), "設定");
+291         for l in Lang::ALL {
+292             for e in ENTRIES {
+293                 let title = typed(l.pick(e.title));
+294                 let found = find(&title, l);
+295                 assert!(found.iter().any(|f| f.screen == e.screen && l.pick(f.title) == l.pick(e.title)), "{l:?} finds {title:?} by its own title");
+296             }

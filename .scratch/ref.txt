@@ -1,0 +1,45 @@
+﻿956     }
+957 }
+958 
+959 /// Why a package from `source` was not installed, for a phone with this
+960 /// codename, its dates in the zone at `zone` in [`TIME_ZONES`].
+961 pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: usize) -> String {
+962     let give = give(l, source);
+963     match r {
+964         Refusal::Unknown => tr!(
+965             l,
+966             "无法识别该文件，请{give} A/B 完整更新包、刷机包或分区镜像。",
+967             "無法辨識這個檔案，請{give} A/B 完整更新檔、刷機包或分割區映像檔。",
+968             "This file isn't recognized. {give} an A/B full OTA package, a flashable zip or a partition image."
+969         ),
+970         Refusal::Image => tr!(
+971             l,
+972             "无法安装分区镜像，请{give} A/B 完整更新包或刷机包。",
+973             "無法安裝分割區映像檔，請{give} A/B 完整更新檔或刷機包。",
+974             "A partition image can't be installed this way. {give} an A/B full OTA package or a flashable zip."
+975         ),
+976         Refusal::NotAb(kind) if kind.is_empty() => {
+977             tr!(l, "该更新包未注明类型，请{give} A/B 完整更新包。", "這個更新檔未註明類型，請{give} A/B 完整更新檔。", "This package doesn't say its type. {give} an A/B full OTA package.")
+978         }
+979         Refusal::NotAb(kind) => {
+980             tr!(l, "该更新包的类型为 {kind}，请{give} A/B 完整更新包。", "這個更新檔的類型為 {kind}，請{give} A/B 完整更新檔。", "This package's type is {kind}. {give} an A/B full OTA package.")
+981         }
+982         Refusal::OtherDevice(devices) => {
+983             tr!(l, "该更新包适用于 {devices}，本机为 {codename}。", "這個更新檔適用於 {devices}，本機為 {codename}。", "This package is for {devices}, and this phone is {codename}.")
+984         }
+985         Refusal::OtherSerial => l
+986             .pick([
+987                 "该更新包仅适用于指定序列号的设备，不包括本机。",
+988                 "這個更新檔僅適用於指定序號的裝置，不包括本機。",
+989                 "This package is only for devices with certain serial numbers, and this phone isn't one of them.",
+990             ])
+991             .into(),
+992         Refusal::Incremental => {
+993             tr!(l, "无法安装增量更新包，请{give}完整更新包。", "無法安裝增量更新檔，請{give}完整更新檔。", "An incremental OTA package can't be installed. {give} a full OTA package.")
+994         }
+995         Refusal::Older { package, installed } => {
+996             let (package, installed) = (date(l, *package, zone), date(l, *installed, zone));
+997             tr!(
+998                 l,
+999                 "该更新包的构建日期为 {package}，早于当前系统的 {installed}。",
+1000                 "這個更新檔的建置日期為 {package}，早於目前系統的 {installed}。",
