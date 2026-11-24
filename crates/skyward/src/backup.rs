@@ -180,8 +180,6 @@ pub enum Refusal {
     OtherPhone(String),
     /// This partition in super is not the size it was backed up at.
     Resized(String),
-    /// The data partition has been made afresh since the backup.
-    DataReset,
     /// Nothing that was chosen to be taken is there to take: the parts asked
     /// for hold nothing this phone names, as the baseband's does where the
     /// configuration names no partition of it.
@@ -199,7 +197,6 @@ impl std::fmt::Display for Refusal {
             Refusal::Update(state) => write!(f, "an update is in flight ({state:?})"),
             Refusal::OtherPhone(device) => write!(f, "the backup was made on {device}"),
             Refusal::Resized(name) => write!(f, "{name} is not the size it was backed up at"),
-            Refusal::DataReset => write!(f, "the data partition has been made afresh since the backup"),
             Refusal::Nothing => write!(f, "nothing that was chosen to be taken is on this phone to take"),
             Refusal::OlderAndroid { was, now } => write!(f, "the data partition was backed up on Android {was}, and the phone runs Android {now}"),
         }

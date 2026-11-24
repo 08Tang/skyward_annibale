@@ -358,13 +358,6 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
             "{name} 的大小與備份時不同，系統可能已更新。這份備份中的系統分割區無法還原到目前的系統。",
             "{name} isn't the size it was at the backup, so the system may have been updated. The backup's system partitions can't be restored to the current system."
         ),
-        BackupRefusal::DataReset => l
-            .pick([
-                "备份后 data 分区已重新创建，例如恢复过出厂设置，该备份中的 data 分区无法恢复。",
-                "備份後 data 分割區已重新建立，例如曾恢復原廠設定，這份備份中的 data 分割區無法還原。",
-                "The data partition was made anew after the backup, as a factory reset does, so the backup's data partition can't be restored.",
-            ])
-            .into(),
         BackupRefusal::Nothing => l
             .pick([
                 "所选内容在这台手机上没有可取的部分，没有备份任何东西。",

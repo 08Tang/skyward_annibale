@@ -525,7 +525,6 @@ fn backup_end(end: backup::End) -> BackupEnd {
             backup::Refusal::Update(state) => BackupRefusal::Update(state),
             backup::Refusal::OtherPhone(device) => BackupRefusal::OtherPhone(device),
             backup::Refusal::Resized(name) => BackupRefusal::Resized(name),
-            backup::Refusal::DataReset => BackupRefusal::DataReset,
             backup::Refusal::Nothing => BackupRefusal::Nothing,
             backup::Refusal::OlderAndroid { was, now } => BackupRefusal::OlderAndroid { was, now },
         }),
