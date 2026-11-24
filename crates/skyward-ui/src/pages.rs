@@ -1946,7 +1946,7 @@ pub fn installing(cx: &Ctx) -> Frame {
             }
             widgets::footnote(&mut c, t, f, y, l.pick(texts::installing::MORE_COMMANDS))
         }
-        Install::Finished { outcome, damage } => finished(&mut c, cx, top, outcome, damage, &mut out, &mut rows),
+        Install::Finished { outcome, damage } => finished(&mut c, cx, top, outcome, damage.clone(), &mut out, &mut rows),
     };
     // What the system asked for says why, where it said.
     let bottom = match (s.source, &s.asked.reason) {

@@ -1,0 +1,19 @@
+﻿144     System,
+145 }
+146 
+147 /// What a failed install may have left broken.
+148 #[derive(Clone, Debug, PartialEq, Eq)]
+149 pub enum Damage {
+150     /// The update had begun writing over the running system.
+151     System,
+152     /// The image had begun going into this partition.
+153     Partition(String),
+154     /// The install script had begun to run, and may have written to any
+155     /// partition.
+156     Script,
+157 }
+158 
+159 /// An image, and where it goes so far.
+160 #[derive(Clone, Debug, PartialEq)]
+161 pub struct Choice {
+162     pub kind: ImageKind,

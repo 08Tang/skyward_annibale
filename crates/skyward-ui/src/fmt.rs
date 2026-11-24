@@ -951,9 +951,16 @@ pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
         }
         ImageKind::Dtbo => (["dtbo 镜像", "dtbo 映像檔", "dtbo image"], ["包含设备树叠加层", "包含裝置樹疊加層", "Holds device tree overlays"]),
         ImageKind::Vbmeta => (["vbmeta 镜像", "vbmeta 映像檔", "vbmeta image"], ["包含启动验证数据", "包含啟動驗證資料", "Holds verified boot data"]),
+        ImageKind::Super => (["super 镜像", "super 映像檔", "super image"], ["包含全部逻辑分区", "包含全部邏輯分割區", "Holds every logical partition"]),
+        ImageKind::Filesystem(filesystem) => {
+            return (l.pick(PARTITION), texts::image::holds::filesystem(l, filesystem.name()));
+        }
+        ImageKind::Other => (PARTITION, ["内容不明", "內容不明", "Holds what couldn't be identified"]),
     };
     (l.pick(name), l.pick(holds).into())
 }
+
+const PARTITION: Text = ["分区镜像", "分割區映像檔", "Partition image"];
 
 /// What a partition an image can go to is for.
 pub fn partition_role(l: Lang, partition: &FlashTarget) -> &'static str {

@@ -1,0 +1,52 @@
+﻿59 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+60 pub enum ImageKind {
+61     /// A boot image; what it carries decides where it can go.
+62     Boot { kernel: bool, ramdisk: Ramdisk },
+63     VendorBoot,
+64     Dtbo,
+65     Vbmeta,
+66     /// All of super, with every logical partition in it.
+67     Super,
+68     /// A filesystem, as a logical partition holds one.
+69     Filesystem(Filesystem),
+70     /// Anything else, which tells nothing of where it goes: only its
+71     /// file's name does.
+72     Other,
+73 }
+74 
+75 /// The ramdisk a boot image carries.
+76 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+77 pub enum Ramdisk {
+78     None,
+79     /// The one that starts Android.
+80     Generic,
+81     /// A recovery's, which holds the recovery program.
+82     Recovery,
+83 }
+84 
+85 /// The filesystem an image holds.
+86 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+87 pub enum Filesystem {
+88     Erofs,
+89     Ext4,
+90     F2fs,
+91 }
+92 
+93 impl Filesystem {
+94     /// Its name, as the kernel has it.
+95     pub fn name(self) -> &'static str {
+96         match self {
+97             Filesystem::Erofs => "erofs",
+98             Filesystem::Ext4 => "ext4",
+99             Filesystem::F2fs => "f2fs",
+100         }
+101     }
+102 }
+103 
+104 impl ImageKind {
+105     /// The partitions what an image of this kind holds shows it can go
+106     /// to, the likeliest first. A recovery that brings its own kernel can
+107     /// also be the boot image of a phone whose recovery lives in boot;
+108     /// without one it needs boot's.
+109     fn partitions(self) -> &'static [&'static str] {
+110         match self {

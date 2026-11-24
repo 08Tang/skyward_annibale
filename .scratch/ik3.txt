@@ -1,0 +1,35 @@
+﻿941     const RECOVERY: Text = ["恢复模式镜像", "復原模式映像檔", "Recovery image"];
+942     const BOOT: Text = ["启动镜像", "啟動映像檔", "Boot image"];
+943     let (name, holds) = match kind {
+944         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Holds a kernel and a recovery ramdisk"]),
+945         ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds a recovery ramdisk alone"]),
+946         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (BOOT, ["包含内核和通用 ramdisk", "包含核心和通用 ramdisk", "Holds a kernel and a generic ramdisk"]),
+947         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::None } => (BOOT, ["仅包含内核", "僅包含核心", "Holds a kernel alone"]),
+948         ImageKind::Boot { kernel: false, .. } => (BOOT, ["仅包含通用 ramdisk", "僅包含通用 ramdisk", "Holds a generic ramdisk alone"]),
+949         ImageKind::VendorBoot => {
+950             (["vendor_boot 镜像", "vendor_boot 映像檔", "vendor_boot image"], ["包含厂商 ramdisk 和设备树", "包含廠商 ramdisk 和裝置樹", "Holds the vendor ramdisk and device tree"])
+951         }
+952         ImageKind::Dtbo => (["dtbo 镜像", "dtbo 映像檔", "dtbo image"], ["包含设备树叠加层", "包含裝置樹疊加層", "Holds device tree overlays"]),
+953         ImageKind::Vbmeta => (["vbmeta 镜像", "vbmeta 映像檔", "vbmeta image"], ["包含启动验证数据", "包含啟動驗證資料", "Holds verified boot data"]),
+954     };
+955     (l.pick(name), l.pick(holds).into())
+956 }
+957 
+958 /// What a partition an image can go to is for.
+959 pub fn partition_role(l: Lang, partition: &FlashTarget) -> &'static str {
+960     use texts::image::role;
+961     l.pick(match (partition.place, partition.name.as_str()) {
+962         (FlashPlace::Logical, _) => role::LOGICAL,
+963         (FlashPlace::Single, _) => role::WHOLE_SUPER,
+964         (FlashPlace::Slotted, "boot") => role::BOOT,
+965         (FlashPlace::Slotted, "init_boot") => role::INIT_BOOT,
+966         (FlashPlace::Slotted, "recovery") => role::RECOVERY,
+967         (FlashPlace::Slotted, "vendor_boot") => role::VENDOR_BOOT,
+968         (FlashPlace::Slotted, "dtbo") => role::DTBO,
+969         (FlashPlace::Slotted, "vbmeta") => role::VBMETA,
+970         (FlashPlace::Slotted, "vbmeta_system") => role::VBMETA_SYSTEM,
+971         (FlashPlace::Slotted, "vbmeta_vendor") => role::VBMETA_VENDOR,
+972         (FlashPlace::Slotted, _) => role::PARTITION,
+973     })
+974 }
+975 

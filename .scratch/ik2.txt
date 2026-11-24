@@ -1,0 +1,45 @@
+﻿767 pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
+768     use texts::image::{self, holds};
+769     let (name, holds) = match kind {
+770         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (image::RECOVERY, holds::KERNEL_AND_RECOVERY_RAMDISK),
+771         ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (image::RECOVERY, holds::RECOVERY_RAMDISK),
+772         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (image::BOOT, holds::KERNEL_AND_GENERIC_RAMDISK),
+773         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::None } => (image::BOOT, holds::KERNEL),
+774         ImageKind::Boot { kernel: false, .. } => (image::BOOT, holds::GENERIC_RAMDISK),
+775         ImageKind::VendorBoot => (image::VENDOR_BOOT, holds::VENDOR_RAMDISK),
+776         ImageKind::Dtbo => (image::DTBO, holds::OVERLAYS),
+777         ImageKind::Vbmeta => (image::VBMETA, holds::VERIFIED_BOOT_DATA),
+778         ImageKind::Super => (image::WHOLE_SUPER, holds::LOGICAL_PARTITIONS),
+779         ImageKind::Filesystem(filesystem) => return (l.pick(image::PARTITION), holds::filesystem(l, filesystem.name())),
+780         ImageKind::Other => (image::PARTITION, holds::UNIDENTIFIED),
+781     };
+782     (l.pick(name), l.pick(holds).into())
+783 }
+784 
+785 /// What a partition an image can go to is for.
+786 pub fn partition_role(l: Lang, partition: &FlashTarget) -> &'static str {
+787     use texts::image::role;
+788     l.pick(match (partition.place, partition.name.as_str()) {
+789         (FlashPlace::Logical, _) => role::LOGICAL,
+790         (FlashPlace::Single, _) => role::WHOLE_SUPER,
+791         (FlashPlace::Slotted, "boot") => role::BOOT,
+792         (FlashPlace::Slotted, "init_boot") => role::INIT_BOOT,
+793         (FlashPlace::Slotted, "recovery") => role::RECOVERY,
+794         (FlashPlace::Slotted, "vendor_boot") => role::VENDOR_BOOT,
+795         (FlashPlace::Slotted, "dtbo") => role::DTBO,
+796         (FlashPlace::Slotted, "vbmeta") => role::VBMETA,
+797         (FlashPlace::Slotted, "vbmeta_system") => role::VBMETA_SYSTEM,
+798         (FlashPlace::Slotted, "vbmeta_vendor") => role::VBMETA_VENDOR,
+799         (FlashPlace::Slotted, _) => role::PARTITION,
+800     })
+801 }
+802 
+803 /// How long the screen stays on with nothing touched: `30 秒`, `2 分钟`,
+804 /// or `永不`.
+805 pub fn screen_off(l: Lang, after_ms: Option<u64>) -> String {
+806     match after_ms {
+807         None => l.pick(texts::screen_off::NEVER).into(),
+808         Some(ms) if ms < 60_000 => texts::screen_off::seconds(l, ms / 1000),
+809         Some(ms) => texts::screen_off::minutes(l, ms / 60_000),
+810     }
+811 }
