@@ -1,4 +1,0 @@
-﻿fixed: capitalized(l, &factory_reset(s))
-fixed: Row::new(&titles[k]).subtitle(&subs[k])
-fixed:     use texts::files::clash as said;
-

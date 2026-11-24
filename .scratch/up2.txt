@@ -1,9 +1,0 @@
-﻿5436     let end = match &fb.report {
-5437         Report::Sending { done, total } => {
-5438             let detail = l.pick([
-5439                 format!("已上传 {done} / {total} 字节"),
-5440                 format!("已上傳 {done} / {total} 位元組"),
-5441                 format!("{done} of {total} bytes sent"),
-5442             ]);
-5443             widgets::progress_card(&mut c, t, f, y, l.pick(["正在上传", "正在上傳", "Sending"]), &detail, fb.report.share())
-5444         }

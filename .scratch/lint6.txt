@@ -1,8 +1,0 @@
-﻿--- 2118
-2117     let (title, what): (Text, String) = match w {
-2118         Wipe::All => (["全部数据", "全部資料", "All data"], capitalized(l, &factory_reset(s))),
-2119         Wipe::AppData => (
---- 5390
-5389     });
-5390     let rows: Vec<Row> = [Slot::A, Slot::B].iter().enumerate().map(|(k, &slot)| Row::new(&titles[k]).subtitle(&subs[k]).trail(Trail::Check(slot == chosen))).collect();
-5391     let list = widgets::list(&mut c, t, f, y, &rows);

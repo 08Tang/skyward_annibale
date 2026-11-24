@@ -1,4 +1,0 @@
-﻿crates/skyward-ui/src/fmt.rs braces 0 parens 0
-crates/skyward-ui/src/pages.rs braces 0 parens 0
-crates/skyward-ui/src/search.rs braces 0 parens 0
-crates/skyward-ui/src/widgets.rs braces 0 parens 0
