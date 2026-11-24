@@ -1837,12 +1837,7 @@ mod tests {
         // The Xiaomi 13 Ultra's installed system, by its ro.build.date.utc.
         let built = 1_778_243_655;
         assert_eq!(date(Lang::Hant, built, china()), "2026年5月8日");
-        assert_eq!(date(Lang::Tr, built, china()), "8 Mayıs 2026");
-        assert_eq!(date(Lang::Ru, built, china()), "8 мая 2026 г.");
-        assert_eq!(date(Lang::De, built, china()), "8. Mai 2026");
-        assert_eq!(date(Lang::Fr, built, china()), "8 mai 2026");
-        assert_eq!(date(Lang::Pl, built, china()), "8 maja 2026");
-        assert_eq!(date(Lang::Ja, built, china()), "2026年5月8日");
+        assert_eq!(date(Lang::En, built, china()), "8 May 2026");
         for l in Lang::ALL {
             let written = date(l, built, china());
             assert!(written.contains("2026") && written.contains('8'), "{l:?} writes the year and the day: {written}");
@@ -1855,23 +1850,11 @@ mod tests {
     fn a_count_takes_the_form_its_language_gives_the_number() {
         let items = |l, n| texts::files::line::items(l, n);
         assert_eq!([items(Lang::En, 1), items(Lang::En, 2)], ["1 item", "2 items"]);
-        assert_eq!([items(Lang::Fr, 0), items(Lang::Fr, 1), items(Lang::Fr, 2)], ["0 élément", "1 élément", "2 éléments"], "none is one in French");
-        let russian = [1, 2, 5, 11, 21, 22, 25, 111].map(|n| items(Lang::Ru, n));
-        assert_eq!(russian, ["1 объект", "2 объекта", "5 объектов", "11 объектов", "21 объект", "22 объекта", "25 объектов", "111 объектов"]);
-        let polish = [1, 2, 5, 12, 21, 22].map(|n| items(Lang::Pl, n));
-        assert_eq!(polish, ["1 element", "2 elementy", "5 elementów", "12 elementów", "21 elementów", "22 elementy"]);
-        assert_eq!([items(Lang::Ja, 1), items(Lang::Ja, 68)], ["1 項目", "68 項目"], "one form where the language has one");
         assert_eq!([items(HANS, 1), items(HANS, 68)], ["1 项", "68 项"]);
     }
 
     #[test]
     fn a_row_of_names_is_set_and_ended_as_its_language_does() {
-        assert_eq!(list(Lang::De, ["ART-Cache", "App-Daten"]), "ART-Cache, App-Daten", "German keeps its nouns' capitals");
-        assert_eq!(list(Lang::Ru, ["Кэш ART", "Данные приложений"]), "Кэш ART, данные приложений");
-        assert_eq!(list(Lang::Tr, ["ART önbelleği", "İndirilenler", "Isı kayıtları"]), "ART önbelleği, indirilenler, ısı kayıtları", "by Turkish's own small letters");
-        assert_eq!(list(Lang::Ja, ["ART キャッシュ", "アプリのデータ"]), "ART キャッシュ、アプリのデータ");
-        assert_eq!(users(Lang::Tr, &[0, 10]), "cihaz sahibi ve kullanıcı 10");
-        assert_eq!(users(Lang::Ru, &[0, 10, 999]), "владелец, пользователь 10 и пользователь 999");
-        assert_eq!(users(Lang::Fr, &[10]), texts::users::user(Lang::Fr, 10));
+        assert_eq!(list(Lang::En, ["ART cache", "App data"]), "ART cache, App data");
     }
 }

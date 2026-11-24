@@ -206,20 +206,10 @@ mod tests {
         assert_eq!(of("zh-Hant-TW"), Lang::Hant);
         assert_eq!(of("zh-Hans-HK"), Lang::Hans, "a script named wins over the region");
         assert_eq!(of("en-US"), Lang::En);
-        assert_eq!(of("tr-TR"), Lang::Tr);
-        assert_eq!(of("ru_RU"), Lang::Ru);
-        assert_eq!(of("uk-UA"), Lang::Uk);
-        assert_eq!([of("es-ES"), of("es-MX"), of("es-419")], [Lang::Es; 3], "Spanish wherever it is spoken");
-        assert_eq!([of("pt-BR"), of("pt-PT")], [Lang::PtBr; 2], "Brazil's Portuguese is read in Portugal too");
-        assert_eq!([of("id-ID"), of("in-ID"), of("in_ID")], [Lang::Id; 3], "by the code Android wrote Indonesian with, too");
-        assert_eq!(of("vi-VN"), Lang::Vi);
-        assert_eq!([of("de-DE"), of("de-AT")], [Lang::De; 2]);
-        assert_eq!([of("fr-FR"), of("fr-CA")], [Lang::Fr; 2]);
-        assert_eq!(of("it-IT"), Lang::It);
-        assert_eq!(of("pl-PL"), Lang::Pl);
-        assert_eq!(of("ja-JP"), Lang::Ja);
+        assert_eq!(of("en-GB"), Lang::En);
         assert_eq!(of("ko-KR"), Lang::En, "a language the pages do not speak");
         assert_eq!(of("ar-EG"), Lang::En);
+        assert_eq!(of("tr-TR"), Lang::En, "and so is one this project used to speak");
         assert!(Lang::for_locale("not a locale").is_err());
     }
 
@@ -234,8 +224,7 @@ mod tests {
     fn each_language_names_itself_and_no_other() {
         let names: BTreeSet<&str> = Lang::ALL.map(Lang::name).into_iter().collect();
         assert_eq!(names.len(), Lang::COUNT);
-        assert_eq!(Lang::ALL.map(Lang::name)[..4], ["简体中文", "繁體中文", "English", "Türkçe"]);
-        assert_eq!(Lang::Ja.name(), "日本語");
+        assert_eq!(Lang::ALL.map(Lang::name), ["简体中文", "繁體中文", "English"]);
     }
 
     #[test]
@@ -246,26 +235,20 @@ mod tests {
         assert_eq!(texts::mount::failed(Lang::Hans, "vendor", "busy"), "挂载 vendor 失败：busy");
         assert_eq!(same("EDL"), [Lang::En; Lang::COUNT].map(|_| "EDL"));
         assert_eq!(Lang::En.among("骁龙", "驍龍", "Snapdragon"), "Snapdragon");
-        assert_eq!(Lang::Tr.among("骁龙", "驍龍", "Snapdragon"), "Snapdragon", "a phone describes itself in Chinese and English alone");
         assert_eq!(Lang::Hant.among("骁龙", "驍龍", "Snapdragon"), "驍龍");
     }
 
     #[test]
     fn a_count_takes_the_form_the_language_gives_it() {
-        use PluralCategory::{Few, Many, One, Other};
+        use PluralCategory::{One, Other};
         assert_eq!([1, 2, 21].map(|n| Lang::En.plural(n)), [One, Other, Other]);
-        assert_eq!([1, 2, 5, 11, 21, 22, 25].map(|n| Lang::Ru.plural(n)), [One, Few, Many, Many, One, Few, Many]);
-        assert_eq!([1, 2, 5, 22].map(|n| Lang::Pl.plural(n)), [One, Few, Many, Few]);
-        assert_eq!([0, 1, 2].map(|n| Lang::Fr.plural(n)), [One, One, Other], "French counts none as one");
         assert_eq!([1, 2].map(|n| Lang::Hans.plural(n)), [Other, Other], "Chinese has one form");
-        assert_eq!([1, 2].map(|n| Lang::Ja.plural(n)), [Other, Other]);
+        assert_eq!([1, 2].map(|n| Lang::Hant.plural(n)), [Other, Other], "and so does its traditional form");
     }
 
     #[test]
     fn letters_are_made_small_as_the_language_makes_them() {
         assert_eq!(Lang::En.lowercase("I"), "i");
-        assert_eq!(Lang::Tr.lowercase("I"), "ı", "the dotless i of Turkish");
-        assert_eq!(Lang::Tr.lowercase("İ"), "i");
-        assert_eq!(Lang::Ru.lowercase("Н"), "н");
+        assert_eq!(Lang::En.lowercase("HeLLo"), "hello");
     }
 }

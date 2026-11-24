@@ -1,0 +1,24 @@
+﻿python : Traceback (most recent call last):
+所在位置 行:1 字符: 212
++ ... ts\skyward\mine-annibale; $env:PYTHONIOENCODING='utf-8'; python -c @"
++                                                              ~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "<string>", line 3, in <module>
+    for i in range(244,266): print(i+1, lines[i])
+                                        ~~~~~^^^
+IndexError: list index out of range
+245         assert_eq!([1, 2].map(|n| Lang::Hans.plural(n)), [Other, Other], "Chinese has one form");
+246         assert_eq!([1, 2].map(|n| Lang::Hant.plural(n)), [Other, Other], "and so does its traditional form");
+247     }
+248 
+249     #[test]
+250     fn letters_are_made_small_as_the_language_makes_them() {
+251         assert_eq!(Lang::En.lowercase("I"), "i");
+252         assert_eq!(Lang::Tr.lowercase("I"), "ı", "the dotless i of Turkish");
+253         assert_eq!(Lang::Tr.lowercase("İ"), "i");
+254         assert_eq!(Lang::Ru.lowercase("Н"), "н");
+255     }
+256 }
+257 

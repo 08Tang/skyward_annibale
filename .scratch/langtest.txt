@@ -1,0 +1,55 @@
+﻿196 
+197     #[test]
+198     fn a_locale_picks_the_language_and_its_characters() {
+199         let of = |tag| Lang::for_locale(tag).unwrap();
+200         assert_eq!(of("zh-CN"), Lang::Hans, "a China system, as the 17 Ultra's");
+201         assert_eq!(of("zh_CN"), Lang::Hans, "as older systems write it");
+202         assert_eq!(of("zh-SG"), Lang::Hans);
+203         assert_eq!(of("zh"), Lang::Hans);
+204         assert_eq!(of("zh-TW"), Lang::Hant);
+205         assert_eq!(of("zh-HK"), Lang::Hant);
+206         assert_eq!(of("zh-Hant-TW"), Lang::Hant);
+207         assert_eq!(of("zh-Hans-HK"), Lang::Hans, "a script named wins over the region");
+208         assert_eq!(of("en-US"), Lang::En);
+209         assert_eq!(of("tr-TR"), Lang::Tr);
+210         assert_eq!(of("ru_RU"), Lang::Ru);
+211         assert_eq!(of("uk-UA"), Lang::Uk);
+212         assert_eq!([of("es-ES"), of("es-MX"), of("es-419")], [Lang::Es; 3], "Spanish wherever it is spoken");
+213         assert_eq!([of("pt-BR"), of("pt-PT")], [Lang::PtBr; 2], "Brazil's Portuguese is read in Portugal too");
+214         assert_eq!([of("id-ID"), of("in-ID"), of("in_ID")], [Lang::Id; 3], "by the code Android wrote Indonesian with, too");
+215         assert_eq!(of("vi-VN"), Lang::Vi);
+216         assert_eq!([of("de-DE"), of("de-AT")], [Lang::De; 2]);
+217         assert_eq!([of("fr-FR"), of("fr-CA")], [Lang::Fr; 2]);
+218         assert_eq!(of("it-IT"), Lang::It);
+219         assert_eq!(of("pl-PL"), Lang::Pl);
+220         assert_eq!(of("ja-JP"), Lang::Ja);
+221         assert_eq!(of("ko-KR"), Lang::En, "a language the pages do not speak");
+222         assert_eq!(of("ar-EG"), Lang::En);
+223         assert!(Lang::for_locale("not a locale").is_err());
+224     }
+225 
+226     #[test]
+227     fn each_language_s_locale_reads_back_as_it() {
+228         for lang in Lang::ALL {
+229             assert_eq!(Lang::for_locale(lang.tag()).unwrap(), lang);
+230         }
+231     }
+232 
+233     #[test]
+234     fn each_language_names_itself_and_no_other() {
+235         let names: BTreeSet<&str> = Lang::ALL.map(Lang::name).into_iter().collect();
+236         assert_eq!(names.len(), Lang::COUNT);
+237         assert_eq!(Lang::ALL.map(Lang::name)[..4], ["简体中文", "繁體中文", "English", "Türkçe"]);
+238         assert_eq!(Lang::Ja.name(), "日本語");
+239     }
+240 
+241     #[test]
+242     fn a_text_is_picked_and_made_in_the_language() {
+243         use crate::texts;
+244         assert_eq!(Lang::Hant.pick(texts::page::SETTINGS), "設定");
+245         assert_eq!(texts::mount::failed(Lang::En, "vendor", "busy"), "Couldn't mount vendor: busy");
+246         assert_eq!(texts::mount::failed(Lang::Hans, "vendor", "busy"), "挂载 vendor 失败：busy");
+247         assert_eq!(same("EDL"), [Lang::En; Lang::COUNT].map(|_| "EDL"));
+248         assert_eq!(Lang::En.among("骁龙", "驍龍", "Snapdragon"), "Snapdragon");
+249         assert_eq!(Lang::Tr.among("骁龙", "驍龍", "Snapdragon"), "Snapdragon", "a phone describes itself in Chinese and English alone");
+250         assert_eq!(Lang::Hant.among("骁龙", "驍龍", "Snapdragon"), "驍龍");
