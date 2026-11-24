@@ -1,0 +1,27 @@
+﻿359             "{name} isn't the size it was at the backup, so the system may have been updated. The backup's system partitions can't be restored to the 
+360         ),
+361         BackupRefusal::DataReset => l
+362             .pick([
+363                 "备份后 data 分区已重新创建，例如恢复过出厂设置，该备份中的 data 分区无法恢复。",
+364                 "備份後 data 分割區已重新建立，例如曾恢復原廠設定，這份備份中的 data 分割區無法還原。",
+365                 "The data partition was made anew after the backup, as a factory reset does, so the backup's data partition can't be restored.",
+366             ])
+367             .into(),
+368         BackupRefusal::Nothing => l
+369             .pick([
+370                 "所选内容在这台手机上没有可取的部分，没有备份任何东西。",
+371                 "所選內容在這台手機上沒有可取的部分，沒有備份任何東西。",
+372                 "Nothing that was chosen is on this phone to take, so nothing was backed up.",
+373             ])
+374             .into(),
+375     }
+376 }
+377 
+378 /// What the update page says of an update standing so, and the line under
+379 /// it on what comes next; `next` is the slot the bootloader starts next,
+380 /// where the boot control could tell.
+381 pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Option<String>) {
+382     use texts::update::standing;
+383     let line = |text: Text| Some(l.pick(text).to_string());
+384     match s {
+385         Standing::None => (l.pick(["暂无待合并的更新", "沒有待合併的更新", "No update waiting to merge"]), None),

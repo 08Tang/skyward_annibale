@@ -1,0 +1,7 @@
+﻿703         PartStop::Failed(why) => (l.pick(UNEXPECTED).into(), Some(why.clone())),
+929         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Holds a kernel and a recovery ram
+930         ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds a recovery ramdisk alone"]),
+931         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (BOOT, ["包含内核和通用 ramdisk", "包含核心和通用 ramdisk", "Holds a kernel and a generic ramdisk"]),
+932         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::None } => (BOOT, ["仅包含内核", "僅包含核心", "Holds a kernel alone"]),
+933         ImageKind::Boot { kernel: false, .. } => (BOOT, ["仅包含通用 ramdisk", "僅包含通用 ramdisk", "Holds a generic ramdisk alone"]),
+1284         Unanswered::Login => tr!(l, "检查更新失败，当前 WLAN {login}", "檢查更新失敗，目前連線的 Wi-Fi 網路{login}", "Couldn't check for updates. The Wi-Fi network joined {login}"),

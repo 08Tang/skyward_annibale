@@ -3309,8 +3309,8 @@ pub fn data_app_info(cx: &Ctx) -> Frame {
         (l.pick(["名称", "名稱", "Name"]), a.label.clone()),
         (l.pick(["位置", "位置", "Where"]), a.dir.clone()),
         (l.pick(["占用", "佔用", "Size"]), fmt::file_size(a.size)),
-        (l.pick(["安装", "安裝", "Installed"]), fmt::datetime(l, a.installed, s.time_zone)),
-        (l.pick(["更新", "更新", "Updated"]), fmt::datetime(l, a.updated, s.time_zone)),
+        (l.pick(["安装", "安裝", "Installed"]), fmt::datetime(l, a.installed, s.zone())),
+        (l.pick(["更新", "更新", "Updated"]), fmt::datetime(l, a.updated, s.zone())),
     ];
     let y = widgets::info_card(&mut c, t, f, top, &facts);
     // An app in the system's own partitions is not taken off from here: the
@@ -3714,7 +3714,7 @@ fn image_files_list(cx: &Ctx, c: &mut Canvas, out: &mut Vec<Hit>, y: f32) -> f32
         Ok(files) => {
             let subs: Vec<String> = files
                 .iter()
-                .map(|file| format!("{} · {} · {}", file.partition, fmt::bytes(file.size), fmt::date(l, file.made, s.time_zone)))
+                .map(|file| format!("{} · {} · {}", file.partition, fmt::bytes(file.size), fmt::date(l, file.made, s.zone())))
                 .collect();
             let shown: Vec<Row> = files.iter().zip(&subs).map(|(file, sub)| Row::new(&file.name).subtitle(sub).trail(Trail::Arrow)).collect();
             let list = widgets::list(c, t, f, y, &shown);
@@ -4698,7 +4698,7 @@ pub fn row(screen: Screen, cx: &Ctx, i: usize, c: &mut Canvas) {
             let folder = cx.state.folder(screen);
             let entries = folder.entries.as_ref().expect("a folder listed draws its rows");
             let chosen = cx.state.choosing && cx.state.chosen.contains(&entries[i].name);
-            files::row_marked(c, cx.t, cx.f, cx.state.lang, &entries[i], folder.listed, cx.state.time_zone, chosen);
+            files::row_marked(c, cx.t, cx.f, cx.state.lang, &entries[i], folder.listed, cx.state.zone(), chosen);
         }
         Screen::Installing => widgets::output_row(c, cx.t, cx.f, &cx.state.script_output, i),
         Screen::PartWork => {
@@ -4830,7 +4830,7 @@ pub fn file_info(cx: &Ctx) -> Frame {
         FileKind::Link { .. } => l.pick(["链接", "連結", "A link"]).to_string(),
         _ => fmt::file_size(e.size),
     };
-    let when = fmt::datetime(l, e.modified, s.time_zone);
+    let when = fmt::datetime(l, e.modified, s.zone());
     c.text(&f.value, &format!("{holds} · {when}"), text_x, ay + m.dp(38.0), m.dp(13.0), note_ink, None);
 
     // 下面：一句标题，再一层等宽的药丸。

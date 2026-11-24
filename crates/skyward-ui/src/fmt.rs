@@ -372,6 +372,12 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
                 "Nothing that was chosen is on this phone to take, so nothing was backed up.",
             ])
             .into(),
+        BackupRefusal::OlderAndroid { was, now } => tr!(
+            l,
+            "该备份在 Android {was} 上创建，本机系统为 Android {now}，无法读取其中的 data 分区。",
+            "該備份在 Android {was} 上建立，本機系統為 Android {now}，無法讀取其中的 data 分割區。",
+            "The backup was made on Android {was}, and this phone runs Android {now}, which can't read its data partition."
+        ),
     }
 }
 
@@ -771,6 +777,9 @@ pub fn slots(l: Lang, slots: &[Slot]) -> String {
     }
 }
 
+const UNEXPECTED: Text = ["发生意外错误。", "發生未預期的錯誤。", "Something went wrong."];
+const LOGIN: Text = [
+
 /// The rules of each of [`TIME_ZONES`], read once from the ones the
 /// recovery carries.
 pub fn rules(zone: usize) -> &'static TimeZone {
@@ -926,6 +935,8 @@ pub fn parts(l: Lang, held: &[bool; 5]) -> String {
 pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
     use texts::image::{self, holds};
     let (name, holds) = match kind {
+    const RECOVERY: Text = ["恢复模式镜像", "復原模式映像檔", "Recovery image"];
+    const BOOT: Text = ["启动镜像", "啟動映像檔", "Boot image"];
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Holds a kernel and a recovery ramdisk"]),
         ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds a recovery ramdisk alone"]),
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (BOOT, ["包含内核和通用 ramdisk", "包含核心和通用 ramdisk", "Holds a kernel and a generic ramdisk"]),
@@ -1280,6 +1291,7 @@ pub fn reach(l: Lang, reach: &Reach) -> Option<String> {
 
 /// Why the update server gave no answer, as the update page says it.
 pub fn unanswered(l: Lang, why: &Unanswered) -> String {
+    let login = l.pick(LOGIN);
     match why {
         Unanswered::Login => tr!(l, "检查更新失败，当前 WLAN {login}", "檢查更新失敗，目前連線的 Wi-Fi 網路{login}", "Couldn't check for updates. The Wi-Fi network joined {login}"),
         Unanswered::Offline(why) => tr!(
@@ -1728,14 +1740,14 @@ mod tests {
     #[test]
     fn reasons_read_as_sentences() {
         let pc = Source::Computer;
-        assert_eq!(refusal(HANS, &Refusal::OtherDevice("nezha".into()), "ishtar", pc, 0), "该更新包适用于 nezha，本机为 ishtar。");
-        assert_eq!(refusal(HANS, &Refusal::Older { package: 1_770_000_000, installed: 1_778_243_655 }, "ishtar", pc, 0), "该更新包的构建日期为 2026年2月2日，早于当前系统的 2026年5月8日。");
+        assert_eq!(refusal(HANS, &Refusal::OtherDevice("nezha".into()), "ishtar", pc, china()), "该更新包适用于 nezha，本机为 ishtar。");
+        assert_eq!(refusal(HANS, &Refusal::Older { package: 1_770_000_000, installed: 1_778_243_655 }, "ishtar", pc, china()), "该更新包的构建日期为 2026年2月2日，早于当前系统的 2026年5月8日。");
         assert_eq!(
             refusal(Lang::En, &Refusal::Older { package: 1_770_000_000, installed: 1_778_243_655 }, "ishtar", pc, china()),
             "This package was built on February 2, 2026, before the current system, built on May 8, 2026."
         );
-        assert_eq!(refusal(HANS, &Refusal::Battery { level: 12, charging: true }, "ishtar", pc, 0), "电量仅剩 12%，请充电至 15% 以上后重试。");
-        assert_eq!(refusal(HANS, &Refusal::Pending(SnapshotState::Snapshotted), "ishtar", pc, 0), "更新已写入，等待合并。请重启到系统，完成上一次更新后重试。");
+        assert_eq!(refusal(HANS, &Refusal::Battery { level: 12, charging: true }, "ishtar", pc, china()), "电量仅剩 12%，请充电至 15% 以上后重试。");
+        assert_eq!(refusal(HANS, &Refusal::Pending(SnapshotState::Snapshotted), "ishtar", pc, china()), "更新已写入，等待合并。请重启到系统，完成上一次更新后重试。");
         assert_eq!(
             refusal(Lang::En, &Refusal::Pending(SnapshotState::Snapshotted), "ishtar", pc, china()),
             "Update written, waiting to merge. Reboot to the system to finish the last update, then try again."
@@ -1751,9 +1763,9 @@ mod tests {
     #[test]
     fn a_file_chosen_is_answered_with_choosing_another() {
         let file = Source::File(Place::Storage);
-        assert_eq!(refusal(HANS, &Refusal::Unknown, "ishtar", file, 0), "无法识别该文件，请选择 A/B 完整更新包、刷机包或分区镜像。");
-        assert_eq!(refusal(Lang::En, &Refusal::Unknown, "ishtar", file, 0), "This file isn't recognized. Choose an A/B full OTA package, a flashable zip or a partition image.");
-        assert_eq!(refusal(HANS, &Refusal::Incremental, "ishtar", file, 0), "无法安装增量更新包，请选择完整更新包。");
+        assert_eq!(refusal(HANS, &Refusal::Unknown, "ishtar", file, china()), "无法识别该文件，请选择 A/B 完整更新包、刷机包或分区镜像。");
+        assert_eq!(refusal(Lang::En, &Refusal::Unknown, "ishtar", file, china()), "This file isn't recognized. Choose an A/B full OTA package, a flashable zip or a partition image.");
+        assert_eq!(refusal(HANS, &Refusal::Incremental, "ishtar", file, china()), "无法安装增量更新包，请选择完整更新包。");
         assert_eq!(failure(HANS, &Failure::Engine(26), file).0, "更新包签名验证失败，请选择官方更新包。");
         assert_eq!(failure(HANS, &Failure::Changed, file).0, "文件在读取过程中被修改，请重新选择。");
         let gone = "read /sdcard/Download/ota.zip: Input/output error (os error 5)";
