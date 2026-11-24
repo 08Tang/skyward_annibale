@@ -395,18 +395,22 @@ pub fn mounted_partitions(slot: Slot) -> Result<Vec<Mounted>> {
 /// the tree, and those files and its device stay until let go. /metadata
 /// stays mounted for the update.
 ///
-/// A partition not named in `busy` that still has files in use leaves the
-/// tree the same way: the programs holding them keep working from what they
-/// have open, and the partition is written over behind them. Whatever holds
-/// it was missed, and an install that stops for that leaves the phone as it
-/// was rather than updated (2026-11-21: an install stopped at /vendor, and
-/// none of the phone's own programs had been recognised as running from it).
+/// A partition not named in `busy` that still has files in use, or that has
+/// a mount below it, leaves the tree the same way: the programs holding them
+/// keep working from what they have open, and the partition is written over
+/// behind them. Whatever holds it was missed, and an install that stops for
+/// that leaves the phone as it was rather than updated (2026-11-21: an
+/// install stopped at /vendor, and none of the phone's own programs had been
+/// recognised as running from it. 2026-11-24: it stopped there again, at
+/// /vendor/firmware_mnt, the modem's own partition, mounted below /vendor).
 pub fn release_partitions(slot: Slot, busy: &[PathBuf]) -> Result<()> {
     for m in mounted_partitions(slot)?.into_iter().rev() {
-        // A partition named in `busy` keeps its files in use, and one whose
-        // unmount is refused keeps them too, whoever holds them.
+        // A partition named in `busy` keeps its files in use, and one that
+        // does not unmount cleanly keeps them too, whoever holds them.
         let in_use = busy.contains(&m.mount_point) || mount::umount_over(&m.mount_point).is_err();
         if in_use {
+            // This detaches rather than unmounting cleanly, which is the only
+            // thing that works for a partition with a mount below it.
             mount::umount_detach_over(&m.mount_point)?;
         } else {
             snapshots::unmap_snapshot(&m.partition)?;

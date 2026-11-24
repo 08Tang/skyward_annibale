@@ -62,6 +62,19 @@ pub struct Space {
     pub available: u64,
 }
 
+/// Those of `points` at or below `base`, the deepest first, so that taking
+/// each one away leaves nothing on it to refuse the next. A mount below
+/// another cannot be taken away after the one above it has.
+///
+/// Only the phone unmounts anything; on the computer this is reached by the
+/// tests alone, which is what they hold.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn deepest_first(points: impl IntoIterator<Item = std::path::PathBuf>, base: &Path) -> Vec<std::path::PathBuf> {
+    let mut found: Vec<std::path::PathBuf> = points.into_iter().filter(|p| p.starts_with(base)).collect();
+    found.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
+    found
+}
+
 /// The room in the filesystem that holds `path`.
 pub fn space(path: &Path) -> io::Result<Space> {
     let s = statvfs(path)?;
@@ -318,10 +331,42 @@ mod sys {
         under_parked(target, umount)
     }
 
-    /// [`umount_detach`] `target` and keep the mounts below it on their
-    /// paths.
+    /// Take `target` out of the tree, whatever is below it and whatever holds
+    /// it, and keep the mounts below it on their paths.
+    ///
+    /// A clean unmount is tried first, since it is what leaves the mounts
+    /// below `target` on their paths. Where it is refused -- a mount below
+    /// `target` that could not be moved aside, or files still open on it --
+    /// `target` is detached instead and whatever is below it is detached with
+    /// it: it leaves the tree at once, and what still has files open keeps
+    /// them until it closes them.
+    ///
+    /// Detaching is what an install needs rather than a clean unmount: a
+    /// partition the installed system's own programs run from stays in use,
+    /// and a partition with a mount below it cannot be unmounted cleanly at
+    /// all (2026-11-24: /vendor carries /vendor/firmware_mnt, the modem's
+    /// own partition, and an install stopped there because of it).
     pub fn umount_detach_over(target: &Path) -> Result<()> {
-        under_parked(target, umount_detach)
+        match under_parked(target, umount) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                // Why the clean unmount was refused is worth keeping: it is
+                // what says whether the partition was held by a program or by
+                // a mount below it.
+                let why = format!("{e:#}");
+                detach_with_below(target).with_context(|| format!("detach {} after it did not unmount cleanly: {why}", target.display()))
+            }
+        }
+    }
+
+    /// Detach `target` and every mount below it, the deepest first, so that
+    /// nothing is left on it to refuse the detach. Nothing here counts as a
+    /// failure: what is not mounted is no work at all.
+    fn detach_with_below(target: &Path) -> Result<()> {
+        for point in deepest_first(mounts()?.into_iter().map(|m| m.mount_point), target) {
+            let _ = umount_detach(&point);
+        }
+        Ok(())
     }
 
     /// Take away every mount at or under `base`, the deepest first. Nothing
@@ -329,15 +374,13 @@ mod sys {
     /// its mounts go with it, and a folder that was never a mount point is no
     /// work at all.
     ///
-    /// `umount_detach_over` is not this: it unmounts `target` itself first and
-    /// gives up with EINVAL where `target` is only a folder holding the mounts
-    /// -- which is what the OTG drive's folder is, once each of its divisions
-    /// is shown under it (2026-11-16: pulling the drive ended the recovery,
-    /// and with it the partition was locked again).
+    /// `umount_detach_over` is not this: it takes `target` itself away as well
+    /// as what is below it, where `umount_under` leaves `target` as a folder.
+    /// A folder holding the OTG drive's divisions is what that difference is
+    /// for: it is no mount point itself (2026-11-16: pulling the drive ended
+    /// the recovery, and with it the partition was locked again).
     pub fn umount_under(base: &Path) -> Result<()> {
-        let mut points: Vec<std::path::PathBuf> = mounts()?.into_iter().map(|m| m.mount_point).filter(|p| p.starts_with(base)).collect();
-        points.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
-        for point in points {
+        for point in deepest_first(mounts()?.into_iter().map(|m| m.mount_point), base) {
             let _ = umount_detach(&point);
         }
         Ok(())
@@ -539,5 +582,36 @@ mod tests {
         assert!(room.total >= room.free && room.free >= room.available, "{room:?}");
         assert_eq!(space(Path::new("/no/such/folder")).unwrap_err().kind(), io::ErrorKind::NotFound);
         assert_eq!(space(Path::new("/tmp/a\0b")).unwrap_err().kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn a_mount_below_another_goes_before_the_one_above_it() {
+        // What /vendor carries on this phone: the modem's own partition is
+        // mounted at /vendor/firmware_mnt, and /vendor cannot be taken away
+        // while it is there.
+        let points: Vec<std::path::PathBuf> = ["/vendor", "/vendor/firmware_mnt", "/odm"].map(Into::into).into();
+        assert_eq!(deepest_first(points, Path::new("/vendor")), [Path::new("/vendor/firmware_mnt"), Path::new("/vendor")]);
+    }
+
+    #[test]
+    fn the_mount_point_itself_goes_after_everything_below_it() {
+        let points: Vec<std::path::PathBuf> = ["/a/b/c", "/a", "/a/b"].map(Into::into).into();
+        assert_eq!(deepest_first(points, Path::new("/a")), [Path::new("/a/b/c"), Path::new("/a/b"), Path::new("/a")]);
+    }
+
+    #[test]
+    fn what_is_not_at_or_below_the_mount_point_is_left_out() {
+        let points: Vec<std::path::PathBuf> = ["/vendor", "/vendorx", "/odm", "/vendor/sub"].map(Into::into).into();
+        assert_eq!(
+            deepest_first(points, Path::new("/vendor")),
+            [Path::new("/vendor/sub"), Path::new("/vendor")],
+            "/vendorx is another folder"
+        );
+    }
+
+    #[test]
+    fn nothing_below_a_point_that_has_no_mounts_is_nothing_to_take_away() {
+        let points: Vec<std::path::PathBuf> = ["/a", "/b"].map(Into::into).into();
+        assert!(deepest_first(points, Path::new("/c")).is_empty());
     }
 }
