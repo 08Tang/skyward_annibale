@@ -317,7 +317,6 @@ pub fn snapshot_backup_note(l: Lang, s: &SnapshotState) -> Option<&'static str> 
 
 /// Why backing up, or restoring, did not start.
 pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
-    use texts::backup::refused;
     match r {
         BackupRefusal::Room { needed, free } => {
             let (needed, free) = (gb(*needed), gb(*free));
@@ -462,18 +461,10 @@ pub fn part(l: Lang, p: Part) -> &'static str {
     })
 }
 
-/// `name` as a sentence written in Chinese characters carries it ahead of
-/// them: with a space after the Latin letters or digits it ends in, as the
-/// pages write 用户 999 的数据. Every other language writes its own spaces.
-fn before_characters(l: Lang, name: &str) -> String {
-    let apart = matches!(l, Lang::Hans | Lang::Hant) && name.ends_with(|c: char| c.is_ascii());
-    format!("{name}{}", if apart { " " } else { "" })
-}
-
 /// A name that opens a title, as it reads within a sentence of the
 /// language: its first letter small, unless the word is written all in
 /// capitals.
-fn in_sentence(l: Lang, name: &str) -> String {
+fn in_sentence(name: &str) -> String {
     let mut chars = name.chars();
     match (chars.next(), chars.next()) {
         (Some(first), Some(second)) if first.is_uppercase() && !second.is_uppercase() => first.to_lowercase().chain(name[first.len_utf8()..].chars()).collect(),
@@ -486,7 +477,7 @@ fn in_sentence(l: Lang, name: &str) -> String {
 /// a row so.
 pub fn list<'a>(l: Lang, names: impl IntoIterator<Item = &'a str>) -> String {
     let small = l.pick(texts::list::LOWERCASE_AFTER_FIRST);
-    let names: Vec<String> = names.into_iter().enumerate().map(|(k, n)| if small && k > 0 { in_sentence(l, n) } else { n.to_string() }).collect();
+    let names: Vec<String> = names.into_iter().enumerate().map(|(k, n)| if small && k > 0 { in_sentence(n) } else { n.to_string() }).collect();
     names.join(l.pick(texts::list::SEPARATOR))
 }
 
@@ -512,7 +503,7 @@ pub fn users(l: Lang, users: &[u32]) -> String {
 /// Why erasing did not start or stopped short, and what the system said of
 /// it when there is that.
 pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
-    use texts::wipe::{failed, stopped};
+    use texts::wipe::failed;
     let said = |text: Text| l.pick(text).to_string();
     match s {
         EraseStop::Update(Hold::Unconfirmed) => (
@@ -937,7 +928,6 @@ pub fn parts(l: Lang, held: &[bool; 5]) -> String {
 
 /// What an image is, and what it holds.
 pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
-    use texts::image::{self, holds};
     const RECOVERY: Text = ["恢复模式镜像", "復原模式映像檔", "Recovery image"];
     const BOOT: Text = ["启动镜像", "啟動映像檔", "Boot image"];
     let (name, holds) = match kind {
@@ -995,16 +985,6 @@ pub fn mount_failure(l: Lang, m: &MountFailure) -> String {
     match m.mounting {
         true => texts::mount::failed(l, &m.base, &m.detail),
         false => texts::mount::unmount_failed(l, &m.base, &m.detail),
-    }
-}
-
-/// Whether another package from where this one came from is sent, as the
-/// computer sends one, and not chosen, as a file is in place of one chosen
-/// before or of a package the system named.
-fn sent(source: Source) -> bool {
-    match source {
-        Source::Computer | Source::Rescue => true,
-        Source::File(_) | Source::Opened { .. } | Source::Asked { .. } => false,
     }
 }
 
@@ -1142,7 +1122,6 @@ pub fn erase_request_refusal(l: Lang, r: &Refusal, codename: &str) -> String {
 /// What went wrong installing a package from `source`, and the details
 /// behind it when there are any.
 pub fn failure(l: Lang, f: &Failure, source: Source) -> (String, Option<String>) {
-    use texts::install::failed;
     let said = |text: Text| l.pick(text).to_string();
     match f {
         Failure::Engine(code) => {

@@ -5,4 +5,9 @@
 //! from, and one that names values in braces is a function that writes it
 //! with them.
 
+// The file holds every text the languages carry, and the pages of this
+// project read the ones they say: the rest are there for the pages to come,
+// and are no dead weight to warn of.
+#![allow(dead_code)]
+
 include!(concat!(env!("OUT_DIR"), "/texts.rs"));

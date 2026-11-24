@@ -1,6 +1,6 @@
 use crate::app::Screen;
 use crate::lang::{same, Lang, Text};
-use crate::texts::{self, page, search::keys};
+use crate::texts::page;
 use unicode_script::{Script, UnicodeScript};
 
 /// A feature or partition the search finds, and the page it opens.

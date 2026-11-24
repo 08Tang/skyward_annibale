@@ -3,7 +3,7 @@ use crate::app::{
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Region, Rows,
     SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target, Report,
-    USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UsbDrive, UsbLink, WIPES, Wipe, installs, starting, MEDIA_PART, UTC, listed, DATA_PART,};
+    UsbDrive, UsbLink, WIPES, Wipe, installs, starting, MEDIA_PART, UTC, listed, DATA_PART,};
 use crate::canvas::Canvas;
 use crate::color::Rgba;
 use crate::editor;
@@ -192,10 +192,7 @@ const DECRYPT: Text = ["解密", "解密", "Decrypt"];
 const ADVANCED: Text = ["高级工具", "進階工具", "Advanced"];
 const SETTINGS: Text = ["选项设置", "選項設定", "Options"];
 const REBOOT: Text = ["重启系统", "重新啟動", "Reboot"];
-const ABOUT: Text = ["关于本机", "關於手機", "About phone"];
-const SPECS: Text = ["全部参数与信息", "全部規格與資訊", "All specs"];
 const LOGS: Text = ["导出日志", "匯出記錄", "Export logs"];
-const SCREEN_TIMEOUT: Text = ["息屏时间", "螢幕自動關閉", "Screen timeout"];
 const UPDATE: Text = ["系统更新", "系統更新", "System update"];
 
 const MODEL: Text = ["设备型号", "裝置型號", "Model"];
@@ -2116,7 +2113,6 @@ fn factory_reset(s: &State) -> &'static str {
 /// A choice of the wipe page as it lists it: its title, and exactly what it
 /// erases.
 fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
-    use texts::wipe::{part, what};
     let l = s.lang;
     let (title, what): (Text, String) = match w {
         Wipe::All => (["全部数据", "全部資料", "All data"], capitalized(l, &factory_reset(s))),
@@ -2571,15 +2567,6 @@ impl Pass {
         }
     }
 
-    /// Under way on a part, `p` hundredths of it done: 正在备份 37%.
-    fn doing_share(self, l: Lang, p: u32) -> String {
-        match self {
-            Pass::BackUp => texts::backup::job::backing_up_share(l, p),
-            Pass::Restore => texts::backup::job::restoring_share(l, p),
-            Pass::Verify => texts::backup::job::verifying_share(l, p),
-        }
-    }
-
     /// How much of the whole is done: 已备份 1.2GB，共 5.0GB.
     fn done_of(self, l: Lang, passed: &str, total: &str) -> String {
         match self {
@@ -2598,8 +2585,6 @@ fn job_words(restore: bool) -> (Text, Text) {
         false => (["已备份", "已備份", "Backed up"], ["正在备份", "正在備份", "Backing up"]),
     }
 }
-const DONE: Text = ["完成", "完成", "Done"];
-
 /// Where part `k` of a backup or restore stands, as its row says it.
 fn part_state(l: Lang, job: &BackupJob, k: usize) -> String {
     use std::cmp::Ordering;
@@ -3076,9 +3061,6 @@ const POWER_OFF: Text = ["关机", "關機", "Power off"];
 const TASKS: Text = ["任务", "任務", "Tasks"];
 const CHARGE: Text = ["充电设置", "充電設定", "Charging"];
 const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
-const STOPPED: Text = ["已停止", "已停止", "Stopped"];
-const STOPPING: Text = ["正在停止", "正在停止", "Stopping"];
-
 /// A pill's tap target: the pill and a little about it, so that a finger that
 /// lands beside it still finds it.
 fn pill_hit(t: &Theme, x: f32, y: f32, w: f32, h: f32, action: Action) -> Hit {
@@ -4934,10 +4916,6 @@ pub fn clash(cx: &Ctx) -> Frame {
     let (clip, into, _) = s.clash.as_ref().expect("the clash page shows a clash");
     let name = Path::new(&clip.path).file_name().map_or_else(|| clip.path.clone(), |n| n.to_string_lossy().into_owned());
     use texts::files::clash as said;
-    let skip = l.pick(match clip.op {
-        FileOp::Copy => said::SKIP_COPY,
-        FileOp::Move => said::SKIP_MOVE,
-    });
     let verb = l.pick(match clip.op {
         FileOp::Copy => ["复制", "複製", "copy"],
         FileOp::Move => ["移动", "移動", "move"],
@@ -4960,44 +4938,6 @@ pub fn clash(cx: &Ctx) -> Frame {
     );
     let out = hits(&choices.rows, &[Action::Resolve(ClashChoice::Replace), Action::Resolve(ClashChoice::Skip), Action::Resolve(ClashChoice::KeepBoth)]);
     Frame::new(t, c, out, l.pick(["名称已存在", "名稱已存在", "Name taken"]), top)
-}
-
-/// How work on files is told of: the Chinese verb its sentences build on,
-/// in simplified and in traditional characters, then English's own words
-/// for what is done and for doing it; the page's titles while it goes on
-/// and once it ended short; and what stopping it may have left.
-struct FileWords {
-    verb: [&'static str; 2],
-    done: &'static str,
-    base: &'static str,
-    titles: (Text, Text),
-    stopped: Text,
-}
-
-fn file_words(task: &FileTask) -> FileWords {
-    match task {
-        FileTask::Copy { .. } => FileWords {
-            verb: ["复制", "複製"],
-            done: "copied",
-            base: "copy",
-            titles: (["正在复制", "正在複製", "Copying"], ["复制未完成", "複製未完成", "Copy incomplete"]),
-            stopped: ["已停止，部分内容可能已复制到目标文件夹。", "已停止，部分內容可能已複製到目標資料夾。", "Stopped. Part of it may have been copied into the folder."],
-        },
-        FileTask::Move { .. } => FileWords {
-            verb: ["移动", "移動"],
-            done: "moved",
-            base: "move",
-            titles: (["正在移动", "正在移動", "Moving"], ["移动未完成", "移動未完成", "Move incomplete"]),
-            stopped: ["已停止，部分内容可能已移动到目标文件夹。", "已停止，部分內容可能已移動到目標資料夾。", "Stopped. Part of it may have been moved into the folder."],
-        },
-        FileTask::Delete { .. } => FileWords {
-            verb: ["删除", "刪除"],
-            done: "deleted",
-            base: "delete",
-            titles: (["正在删除", "正在刪除", "Deleting"], ["删除未完成", "刪除未完成", "Delete incomplete"]),
-            stopped: ["已停止，部分内容可能已删除。", "已停止，部分內容可能已刪除。", "Stopped. Part of it may have been deleted."],
-        },
-    }
 }
 
 /// Copying, moving or deleting: how far it has come and a way to stop it,
@@ -5347,10 +5287,6 @@ pub fn feedback(cx: &Ctx) -> Frame {
     Frame { caret: Some(caret), dock, content_end: Some(end), ..Frame::new(t, c, out, title, top) }
 }
 
-/// Skyward's licence, in Chinese, ahead of the words the licence gives for
-/// a program's notice; English reads those words alone.
-const LICENSE_NOTICE: [&str; 2] = [
-    "Skyward 是自由软件：你可以依据自由软件基金会发布的 GNU 通用公共许可证第 3 版，或（由你选择）任何更新的版本，重新发布和修改它。\n\n\
 发布 Skyward 是希望它有用，但不附带任何担保，也不担保其适销性或适用于特定用途。详见 GNU 通用公共许可证。",
     "Skyward 是自由軟體：你可以依據自由軟體基金會發布的 GNU 通用公眾授權條款第 3 版，或（由你選擇）任何更新的版本，重新發布和修改它。\n\n\
 發布 Skyward 是希望它有用，但不附帶任何擔保，也不擔保其適銷性或適用於特定用途。詳見 GNU 通用公眾授權條款。",
@@ -5456,7 +5392,7 @@ pub fn slot(cx: &Ctx) -> Frame {
             (false, true, true) => texts::slot::OTHER,
         })
     });
-    let rows: Vec<Row> = [Slot::A, Slot::B].iter().enumerate().map(|(k, &slot)| Row::new(&titles[k]).subtitle(&subs[k]).trail(Trail::Check(slot == chosen))).collect();
+    let rows: Vec<Row> = [Slot::A, Slot::B].iter().enumerate().map(|(k, &slot)| Row::new(titles[k]).subtitle(&subs[k]).trail(Trail::Check(slot == chosen))).collect();
     let list = widgets::list(&mut c, t, f, y, &rows);
     out.extend(hits(&list.rows, &[Slot::A, Slot::B].map(Action::PickSlot)));
     if let Some(note) = fmt::snapshot_slot_note(l, &i.snapshot) {

@@ -1,0 +1,9 @@
+﻿1 //! What the pages say, in every language they speak: each language's file
+2 //! in `locales`, as the build script writes it out. A table there is a
+3 //! module here; a text that names no value is a constant holding it in
+4 //! every language, for [`Lang::pick`](crate::lang::Lang::pick) to choose
+5 //! from, and one that names values in braces is a function that writes it
+6 //! with them.
+7 
+8 include!(concat!(env!("OUT_DIR"), "/texts.rs"));
+9 
