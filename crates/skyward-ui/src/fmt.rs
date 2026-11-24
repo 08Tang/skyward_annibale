@@ -779,6 +779,10 @@ pub fn slots(l: Lang, slots: &[Slot]) -> String {
 
 const UNEXPECTED: Text = ["发生意外错误。", "發生未預期的錯誤。", "Something went wrong."];
 const LOGIN: Text = [
+    "需要先在网页上登录才能访问互联网，Skyward 无法打开网页登录。可以改用无需登录的网络，例如手机热点。",
+    "需要先在網頁上登入才能連上網際網路，Skyward 無法開啟網頁登入。可以改用無需登入的網路，例如手機熱點。",
+    "needs a sign-in in a browser before it reaches the internet, and Skyward has no browser to sign in with. Use a network that needs no sign-in instead, such as a phone's hotspot.",
+];
 
 /// The rules of each of [`TIME_ZONES`], read once from the ones the
 /// recovery carries.
