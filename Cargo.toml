@@ -27,7 +27,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.1-annibale.2"
+version = "0.3.1-annibale.3"
 edition = "2024"
 license = "GPL-3.0-or-later"
 
