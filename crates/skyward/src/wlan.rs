@@ -658,31 +658,50 @@ fn bring_up(cfg: &Config, modules: &[PathBuf]) -> Result<()> {
     iface::set_up(&cfg.interface, true)
 }
 
-/// Put a file the driver asks for where the firmware loader looks.
+/// Put a file the driver asks for where the firmware loader looks. One the
+/// phone may be without is passed over where the phone has none, and the
+/// loader then tells the driver so, as it does in the phone's own system.
 fn place(file: &Firmware) -> Result<()> {
     let to = Path::new(FIRMWARE).join(&file.name);
     let dir = to.parent().expect("a firmware file is in a folder");
     fs::create_dir_all(dir).with_context(|| format!("make {}", dir.display()))?;
-    let loaded = match &file.partition {
-        None => skyward_programs::firmware::read(Path::new("/"), file)?,
+    let held = |path: &Path| match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(e) if file.optional && e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    };
+    // Where the first path is absent, the others are tried in its place: a
+    // phone may keep the file under either of the two folders its own
+    // system and the recovery's ueventd look in.
+    let first_held = |base: &Path| -> Result<Option<Vec<u8>>> {
+        let paths = std::iter::once(file.path.as_str()).chain(file.alternatives.iter().map(String::as_str));
+        for path in paths {
+            if let Some(bytes) = held(&base.join(path)).with_context(|| format!("read {}", path))? {
+                return Ok(Some(bytes));
+            }
+        }
+        Ok(None)
+    };
+    let bytes = match &file.partition {
+        None => first_held(Path::new("/"))?,
         Some(partition) => {
             let at = Path::new(PARTITIONS).join(partition);
             fs::create_dir_all(&at).with_context(|| format!("make {}", at.display()))?;
             skyward_block::mount::mount_ro(&Path::new(skyward_block::BY_NAME).join(partition), &at)?;
-            let read = skyward_programs::firmware::read(&at, file).with_context(|| format!("read firmware on {partition}"));
+            let read = first_held(&at).with_context(|| format!("read {} on {partition}", file.path));
             let unmounted = skyward_block::mount::umount(&at);
-            // Always unmount, while retaining the original read error.
-            let loaded = read?;
+            // Always unmount, while keeping the read's own error if it failed.
+            let bytes = read?;
             unmounted?;
-            loaded
+            bytes
         }
     };
-    match loaded {
-        Some((from, bytes)) => {
+    match bytes {
+        Some(bytes) => {
             fs::write(&to, bytes).with_context(|| format!("write {}", to.display()))?;
-            skyward_sys::kmsg(&format!("WLAN firmware {} read from {}", file.name, from.display()))
+            skyward_sys::kmsg(&format!("WLAN firmware {} read from {}", file.name, file.path))
         }
-        None => skyward_sys::kmsg(&format!("optional WLAN firmware {} absent; the driver will choose its address", file.name)),
+        None => skyward_sys::kmsg(&format!("the phone has no {}, and the driver starts without it", file.path)),
     }
 }
 

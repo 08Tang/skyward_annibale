@@ -3,6 +3,7 @@
 
 pub mod description;
 pub mod firmware;
+pub mod loaded;
 pub mod naming;
 pub mod phone;
 pub mod script;

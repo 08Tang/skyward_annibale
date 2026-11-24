@@ -1,12 +1,13 @@
 use crate::app::{BACKUP_PARTS, BackupRefusal, Data, EraseStop, FileKind, FileRow, ItemEnd, MountFailure, Part, PartKind, PartStop, Place, Source, TIME_ZONES, TermEnd};
 use crate::lang::{Lang, Text};
+use crate::texts;
 use crate::tr;
 use jiff::Timestamp;
 use jiff::civil::DateTime;
 use jiff::tz::TimeZone;
 use skyward_info::{Battery, Charge, Cpu, PatchLevel, Storage};
 use skyward_install::ota::Trouble;
-use skyward_install::{Failure, ImageKind, Ramdisk, Refusal};
+use skyward_install::{Failure, ImageKind, Place as FlashPlace, Ramdisk, Refusal, Target as FlashTarget};
 use skyward_net::download::Failure as DownloadFailure;
 use skyward_net::reach::Reach;
 use skyward_net::release::Unanswered;
@@ -55,38 +56,35 @@ pub fn storage_used(s: &Storage) -> Option<String> {
     Some(format!("{used:.1}GB/{}", capacity(s.total)))
 }
 
-/// A count in Chinese numerals, a pair as 双, or 雙 in traditional
-/// characters.
-fn numeral(n: u32, traditional: bool) -> String {
+/// A count as the language counts cores: in Chinese numerals where it is
+/// written in Chinese characters, a pair as 双, or 雙 in traditional ones,
+/// and in figures in every other language.
+fn numeral(l: Lang, n: u32) -> String {
     const D: [&str; 10] = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
-    match n {
-        2 => (if traditional { "雙" } else { "双" }).into(),
-        0..=9 => D[n as usize].into(),
-        10 => "十".into(),
-        11..=19 => format!("十{}", D[(n % 10) as usize]),
-        20..=99 if n.is_multiple_of(10) => format!("{}十", D[(n / 10) as usize]),
-        20..=99 => format!("{}十{}", D[(n / 10) as usize], D[(n % 10) as usize]),
+    match (l, n) {
+        (Lang::Hans, 2) => "双".into(),
+        (Lang::Hant, 2) => "雙".into(),
+        (Lang::Hans | Lang::Hant, 0..=9) => D[n as usize].into(),
+        (Lang::Hans | Lang::Hant, 10) => "十".into(),
+        (Lang::Hans | Lang::Hant, 11..=19) => format!("十{}", D[(n % 10) as usize]),
+        (Lang::Hans | Lang::Hant, 20..=99) if n.is_multiple_of(10) => format!("{}十", D[(n / 10) as usize]),
+        (Lang::Hans | Lang::Hant, 20..=99) => format!("{}十{}", D[(n / 10) as usize], D[(n % 10) as usize]),
         _ => n.to_string(),
     }
 }
 
 /// `八核 最高 3.19GHz`, `Octa-core, up to 3.19GHz`
 pub fn cpu(l: Lang, c: &Cpu) -> String {
-    let cores = match (l, c.cores) {
-        (Lang::Hans, n) => format!("{}核", numeral(n, false)),
-        (Lang::Hant, n) => format!("{}核", numeral(n, true)),
-        (Lang::En, 1) => "Single-core".into(),
-        (Lang::En, 2) => "Dual-core".into(),
-        (Lang::En, 4) => "Quad-core".into(),
-        (Lang::En, 6) => "Hexa-core".into(),
-        (Lang::En, 8) => "Octa-core".into(),
-        (Lang::En, n) => format!("{n}-core"),
+    let cores = match c.cores {
+        1 => l.pick(texts::specs::cpu::CORES_1).to_string(),
+        2 => l.pick(texts::specs::cpu::CORES_2).to_string(),
+        4 => l.pick(texts::specs::cpu::CORES_4).to_string(),
+        6 => l.pick(texts::specs::cpu::CORES_6).to_string(),
+        8 => l.pick(texts::specs::cpu::CORES_8).to_string(),
+        n => texts::specs::cpu::cores(l, numeral(l, n)),
     };
     match c.max_khz {
-        Some(khz) => {
-            let ghz = format!("{:.2}", khz as f64 / 1e6);
-            tr!(l, "{cores} 最高 {ghz}GHz", "{cores} 最高 {ghz}GHz", "{cores}, up to {ghz}GHz")
-        }
+        Some(khz) => texts::specs::cpu::up_to(l, &cores, format!("{:.2}", khz as f64 / 1e6)),
         None => cores,
     }
 }
@@ -111,10 +109,10 @@ pub fn mah(uah: u64) -> String {
 
 pub fn charge(l: Lang, c: Charge) -> &'static str {
     l.pick(match c {
-        Charge::Charging => ["充电中", "充電中", "Charging"],
-        Charge::Discharging | Charge::NotCharging => ["未充电", "未充電", "Not charging"],
-        Charge::Full => ["已充满", "已充滿", "Full"],
-        Charge::Unknown => ["状态未知", "狀態不明", "Unknown"],
+        Charge::Charging => texts::battery::CHARGING,
+        Charge::Discharging | Charge::NotCharging => texts::battery::NOT_CHARGING,
+        Charge::Full => texts::battery::FULL,
+        Charge::Unknown => texts::battery::UNKNOWN,
     })
 }
 
@@ -162,18 +160,18 @@ pub fn watts(tenths: u32) -> String {
 /// shows as reported.
 pub fn health(l: Lang, h: &str) -> String {
     let text = match h {
-        "Good" => ["良好", "良好", "Good"],
-        "Overheat" | "Hot" => ["过热", "過熱", "Overheated"],
-        "Warm" => ["偏热", "偏熱", "Warm"],
-        "Cool" => ["偏冷", "偏冷", "Cool"],
-        "Cold" => ["过冷", "過冷", "Cold"],
-        "Dead" => ["损坏", "損壞", "Dead"],
-        "Over voltage" => ["电压过高", "電壓過高", "Over voltage"],
-        "Over current" => ["电流过大", "電流過大", "Over current"],
-        "Unspecified failure" => ["故障", "故障", "Failure"],
-        "Calibration required" => ["需要校准", "需要校正", "Needs calibration"],
-        "No battery" => ["未检测到电池", "未偵測到電池", "No battery"],
-        "Unknown" => ["未知", "不明", "Unknown"],
+        "Good" => texts::battery::health::GOOD,
+        "Overheat" | "Hot" => texts::battery::health::OVERHEATED,
+        "Warm" => texts::battery::health::WARM,
+        "Cool" => texts::battery::health::COOL,
+        "Cold" => texts::battery::health::COLD,
+        "Dead" => texts::battery::health::DEAD,
+        "Over voltage" => texts::battery::health::OVER_VOLTAGE,
+        "Over current" => texts::battery::health::OVER_CURRENT,
+        "Unspecified failure" => texts::battery::health::FAILURE,
+        "Calibration required" => texts::battery::health::NEEDS_CALIBRATION,
+        "No battery" => texts::battery::health::NO_BATTERY,
+        "Unknown" => texts::battery::health::UNKNOWN,
         other => return other.to_string(),
     };
     l.pick(text).to_string()
@@ -184,8 +182,7 @@ pub fn wear(l: Lang, b: &Battery) -> Option<String> {
     let state = b.health.as_deref().map(|h| health(l, h));
     let left = match (b.full, b.design) {
         (Some(full), Some(design)) if design > 0 => {
-            let share = (full * 100 + design / 2) / design;
-            Some(tr!(l, "剩余容量 {share}%", "剩餘容量 {share}%", "Maximum capacity {share}%"))
+            Some(texts::battery::capacity_left(l, (full * 100 + design / 2) / design))
         }
         _ => None,
     };
@@ -197,20 +194,17 @@ pub fn wear(l: Lang, b: &Battery) -> Option<String> {
 
 pub fn android(l: Lang, release: &str, patch_level: Option<&PatchLevel>) -> String {
     match patch_level {
-        Some(p) => {
-            let date = patch(l, p);
-            tr!(l, "{release} | Android 安全更新：{date}", "{release} | Android 安全性更新：{date}", "{release} | Android security update: {date}")
-        }
+        Some(p) => texts::android::security_update(l, release, patch(l, p)),
         None => release.to_string(),
     }
 }
 
 pub fn verified(l: Lang, state: &str) -> String {
     let text = match state {
-        "green" => ["绿色 · 已通过官方密钥验证", "綠色 · 已通過官方金鑰驗證", "Green · Verified with the official key"],
-        "yellow" => ["黄色 · 已通过自定义密钥验证", "黃色 · 已通過自訂金鑰驗證", "Yellow · Verified with a custom key"],
-        "orange" => ["橙色 · 设备已解锁，不验证系统", "橙色 · 裝置已解鎖，不驗證系統", "Orange · Unlocked, so the system isn't verified"],
-        "red" => ["红色 · 验证失败", "紅色 · 驗證失敗", "Red · Verification failed"],
+        "green" => texts::verified_boot::GREEN,
+        "yellow" => texts::verified_boot::YELLOW,
+        "orange" => texts::verified_boot::ORANGE,
+        "red" => texts::verified_boot::RED,
         other => return other.to_string(),
     };
     l.pick(text).to_string()
@@ -218,11 +212,11 @@ pub fn verified(l: Lang, state: &str) -> String {
 
 pub fn snapshot(l: Lang, s: &SnapshotState) -> &'static str {
     l.pick(match s {
-        SnapshotState::None => ["暂无待合并的更新", "沒有待合併的更新", "No update waiting to merge"],
-        SnapshotState::Snapshotted => ["更新已写入，等待合并", "更新已寫入，等待合併", "Update written, waiting to merge"],
-        SnapshotState::Merging => ["正在合并更新", "正在合併更新", "Merging the update"],
-        SnapshotState::MergeFailed => ["更新合并失败", "更新合併失敗", "The update failed to merge"],
-        SnapshotState::Unknown => ["无法读取更新状态", "無法讀取更新狀態", "Couldn't read the update's status"],
+        SnapshotState::None => texts::snapshot::NONE,
+        SnapshotState::Snapshotted => texts::snapshot::WRITTEN,
+        SnapshotState::Merging => texts::snapshot::MERGING,
+        SnapshotState::MergeFailed => texts::snapshot::FAILED,
+        SnapshotState::Unknown => texts::snapshot::UNREADABLE,
     })
 }
 
@@ -272,11 +266,11 @@ pub fn snapshot_slot_note(l: Lang, s: &SnapshotState) -> Option<&'static str> {
 /// What the recovery says as it starts, of a switch between the systems
 /// that a restart or a loss of power cut off: finished, or why not.
 pub fn switch_resumed(l: Lang) -> &'static str {
-    l.pick(["已完成上次中断的系统切换", "已完成上次中斷的系統切換", "The switch of systems cut off last time is finished"])
+    l.pick(texts::systems::switch::RESUMED)
 }
 
 pub fn switch_unfinished(l: Lang, why: &str) -> String {
-    tr!(l, "上次中断的系统切换未能完成：{why}", "上次中斷的系統切換未能完成：{why}", "The switch of systems cut off last time couldn't be finished: {why}")
+    texts::systems::switch::unfinished(l, why)
 }
 
 /// Why the second system does not start yet while an update is in flight,
@@ -303,16 +297,8 @@ pub fn snapshot_system_note(l: Lang, s: &SnapshotState) -> Option<&'static str> 
 pub fn snapshot_script_note(l: Lang, s: &SnapshotState) -> Option<&'static str> {
     let text = match s {
         SnapshotState::None | SnapshotState::Unknown => return None,
-        SnapshotState::Snapshotted | SnapshotState::Merging => [
-            "系统更新尚未完成合并。刷机包改写 super 中的分区，会导致这次更新无法完成。",
-            "系統更新尚未完成合併。刷機包改寫 super 中的分割區，會導致這次更新無法完成。",
-            "A system update hasn't finished merging. A flashable zip that rewrites partitions in super keeps it from ever finishing.",
-        ],
-        SnapshotState::MergeFailed => [
-            "系统更新合并失败，需在系统中处理。刷机包改写 super 中的分区，会导致这次更新无法完成。",
-            "系統更新合併失敗，需在系統中處理。刷機包改寫 super 中的分割區，會導致這次更新無法完成。",
-            "A system update failed to merge, and the system has to deal with it. A flashable zip that rewrites partitions in super keeps it from ever finishing.",
-        ],
+        SnapshotState::Snapshotted | SnapshotState::Merging => texts::snapshot::script::UNMERGED,
+        SnapshotState::MergeFailed => texts::snapshot::script::FAILED,
     };
     Some(l.pick(text))
 }
@@ -331,6 +317,7 @@ pub fn snapshot_backup_note(l: Lang, s: &SnapshotState) -> Option<&'static str> 
 
 /// Why backing up, or restoring, did not start.
 pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
+    use texts::backup::refused;
     match r {
         BackupRefusal::Room { needed, free } => {
             let (needed, free) = (gb(*needed), gb(*free));
@@ -392,6 +379,7 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
 /// it on what comes next; `next` is the slot the bootloader starts next,
 /// where the boot control could tell.
 pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Option<String>) {
+    use texts::update::standing;
     let line = |text: Text| Some(l.pick(text).to_string());
     match s {
         Standing::None => (l.pick(["暂无待合并的更新", "沒有待合併的更新", "No update waiting to merge"]), None),
@@ -419,96 +407,67 @@ pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Optio
                 ),
                 None => tr!(l, "从槽位 {slot} 启动新系统后将自动合并", "從槽位 {slot} 啟動新系統後將自動合併", "Merges once slot {slot}'s new system starts"),
             };
-            (l.pick(["更新已安装", "更新已安裝", "Update installed"]), Some(detail))
+            (l.pick(standing::INSTALLED), Some(detail))
         }
-        Standing::Waiting => (
-            l.pick(["更新等待合并", "更新等待合併", "Update waiting to merge"]),
-            line(["启动新系统后将自动合并，也可以在此合并", "啟動新系統後將自動合併，也可以在此合併", "Merges once the new system starts, or can be merged here"]),
-        ),
-        Standing::Compressed => (
-            l.pick(["更新等待合并", "更新等待合併", "Update waiting to merge"]),
-            line(["此类更新需在系统中合并，启动系统后将自动合并", "這類更新需在系統中合併，啟動系統後將自動合併", "An update of this kind merges in the system, once it starts"]),
-        ),
-        Standing::Merging(_) => (l.pick(["正在合并更新", "正在合併更新", "Merging the update"]), None),
-        Standing::Failed(code) => (
-            l.pick(["更新合并失败", "更新合併失敗", "The update failed to merge"]),
-            Some(tr!(l, "重启后将继续合并（{code:?}）", "重新啟動後將繼續合併（{code:?}）", "Merging goes on after a reboot ({code:?})")),
-        ),
-        Standing::Merged => (
-            l.pick(["更新已合并", "更新已合併", "Update merged"]),
-            line(["下次启动系统时将清理更新留下的文件", "下次啟動系統時將清除更新留下的檔案", "The files the update left are cleared when the system next starts"]),
-        ),
+        Standing::Waiting => (l.pick(standing::WAITING), line(standing::MERGES_OR_HERE)),
+        Standing::Compressed => (l.pick(standing::WAITING), line(standing::MERGES_IN_SYSTEM)),
+        Standing::Merging(_) => (l.pick(texts::snapshot::MERGING), None),
+        Standing::Failed(code) => (l.pick(texts::snapshot::FAILED), Some(standing::goes_on_after_reboot(l, format!("{code:?}")))),
+        Standing::Merged => (l.pick(standing::MERGED), line(standing::CLEARED_NEXT_START)),
     }
 }
 
 /// Where an update standing so is, beside the entry of its page.
 pub fn update_value(l: Lang, s: &Standing) -> &'static str {
     l.pick(match s {
-        Standing::None => ["暂无", "無", "None"],
-        Standing::Unknown => ["无法读取", "無法讀取", "Unreadable"],
-        Standing::Writing => ["未写入完成", "尚未寫入完成", "Not fully written"],
-        Standing::Installed(_) => ["已安装", "已安裝", "Installed"],
-        Standing::Waiting | Standing::Compressed => ["等待合并", "等待合併", "Waiting to merge"],
-        Standing::Merging(_) => ["正在合并", "正在合併", "Merging"],
-        Standing::Failed(_) => ["合并失败", "合併失敗", "Merge failed"],
-        Standing::Merged => ["已合并", "已合併", "Merged"],
+        Standing::None => texts::update::value::NONE,
+        Standing::Unknown => texts::common::UNREADABLE,
+        Standing::Writing => texts::update::value::NOT_WRITTEN,
+        Standing::Installed(_) => texts::update::value::INSTALLED,
+        Standing::Waiting | Standing::Compressed => texts::update::value::WAITING,
+        Standing::Merging(_) => texts::update::value::MERGING,
+        Standing::Failed(_) => texts::update::value::FAILED,
+        Standing::Merged => texts::update::value::MERGED,
     })
 }
 
 pub fn data(l: Lang, d: &Data) -> &'static str {
     l.pick(match d {
-        Data::Closed | Data::Opening | Data::Failed(_) => ["未挂载", "未掛載", "Not mounted"],
-        Data::Locked { .. } => ["未解密", "未解密", "Locked"],
-        Data::Open => ["已解密", "已解密", "Decrypted"],
-        Data::Erased => ["已清除", "已清除", "Wiped"],
+        Data::Closed | Data::Opening | Data::Failed(_) => texts::data::NOT_MOUNTED,
+        Data::Locked { .. } => texts::data::LOCKED,
+        Data::Open => texts::data::DECRYPTED,
+        Data::Erased => texts::data::WIPED,
     })
 }
 
 /// A part of the phone erasing goes through, as its page names it.
 pub fn part(l: Lang, p: Part) -> &'static str {
     l.pick(match p {
-        Part::Data => ["data 分区", "data 分割區", "data partition"],
-        Part::Cache => ["cache 分区", "cache 分割區", "cache partition"],
-        Part::Metadata => ["metadata 分区", "metadata 分割區", "metadata partition"],
-        Part::AppData => ["应用数据", "應用程式資料", "App data"],
-        Part::Media => ["内部存储", "內部儲存空間", "Internal storage"],
-        Part::AppCaches => ["应用缓存", "應用程式快取", "App caches"],
-        Part::SystemCaches => ["系统缓存", "系統快取", "System caches"],
-        Part::Art => ["ART 缓存", "ART 快取", "ART cache"],
-        Part::Logs => ["日志", "記錄", "Logs"],
-        Part::Updates => ["下载的更新包", "下載的更新檔", "Downloaded updates"],
+        Part::Data => texts::wipe::part::DATA,
+        Part::Cache => texts::wipe::part::CACHE,
+        Part::Metadata => texts::wipe::part::METADATA,
+        Part::AppData => texts::wipe::part::APP_DATA,
+        Part::Media => texts::wipe::part::MEDIA,
+        Part::AppCaches => texts::wipe::part::APP_CACHES,
+        Part::SystemCaches => texts::wipe::part::SYSTEM_CACHES,
+        Part::Art => texts::wipe::part::ART,
+        Part::Logs => texts::wipe::part::LOGS,
+        Part::Updates => texts::wipe::part::UPDATES,
     })
 }
 
-/// A part of the phone erasing goes through, as an English sentence names
-/// it.
-fn part_in_sentence(p: Part) -> &'static str {
-    match p {
-        Part::Data => "the data partition",
-        Part::Cache => "the cache partition",
-        Part::Metadata => "the metadata partition",
-        Part::AppData => "app data",
-        Part::Media => "internal storage",
-        Part::AppCaches => "app caches",
-        Part::SystemCaches => "system caches",
-        Part::Art => "the ART cache",
-        Part::Logs => "the logs",
-        Part::Updates => "the downloaded updates",
-    }
+/// `name` as a sentence written in Chinese characters carries it ahead of
+/// them: with a space after the Latin letters or digits it ends in, as the
+/// pages write 用户 999 的数据. Every other language writes its own spaces.
+fn before_characters(l: Lang, name: &str) -> String {
+    let apart = matches!(l, Lang::Hans | Lang::Hant) && name.ends_with(|c: char| c.is_ascii());
+    format!("{name}{}", if apart { " " } else { "" })
 }
 
-/// `before`, `inner` and `after` joined, with a space between Chinese and
-/// the Latin letters or digits at either end of `inner`, as the pages write
-/// them: 清除 ART 缓存失败.
-pub(crate) fn spaced(before: &str, inner: &str, after: &str) -> String {
-    let open = if inner.starts_with(|c: char| c.is_ascii()) && !before.ends_with(|c: char| c.is_ascii()) { " " } else { "" };
-    let close = if inner.ends_with(|c: char| c.is_ascii()) && !after.starts_with(|c: char| c.is_ascii()) { " " } else { "" };
-    format!("{before}{open}{inner}{close}{after}")
-}
-
-/// A name that opens an English title, as it reads within a sentence: its
-/// first letter small, unless the word is written all in capitals.
-fn in_sentence(name: &str) -> String {
+/// A name that opens a title, as it reads within a sentence of the
+/// language: its first letter small, unless the word is written all in
+/// capitals.
+fn in_sentence(l: Lang, name: &str) -> String {
     let mut chars = name.chars();
     match (chars.next(), chars.next()) {
         (Some(first), Some(second)) if first.is_uppercase() && !second.is_uppercase() => first.to_lowercase().chain(name[first.len_utf8()..].chars()).collect(),
@@ -516,11 +475,13 @@ fn in_sentence(name: &str) -> String {
     }
 }
 
-/// Things named in a row: in Chinese with 、 between them, in English with
-/// commas, each after the first as a sentence names it.
+/// Things named in a row, with what the language sets between them, and
+/// each after the first as a sentence names it where the language writes
+/// a row so.
 pub fn list<'a>(l: Lang, names: impl IntoIterator<Item = &'a str>) -> String {
-    let names: Vec<String> = names.into_iter().enumerate().map(|(k, n)| if l == Lang::En && k > 0 { in_sentence(n) } else { n.to_string() }).collect();
-    names.join(l.pick(["、", "、", ", "]))
+    let small = l.pick(texts::list::LOWERCASE_AFTER_FIRST);
+    let names: Vec<String> = names.into_iter().enumerate().map(|(k, n)| if small && k > 0 { in_sentence(l, n) } else { n.to_string() }).collect();
+    names.join(l.pick(texts::list::SEPARATOR))
 }
 
 /// Users by how the pages call them: the owner, then the others by number,
@@ -530,20 +491,22 @@ pub fn users(l: Lang, users: &[u32]) -> String {
     let names: Vec<String> = users
         .iter()
         .map(|&u| match u {
-            0 => l.pick(["机主", "擁有者", "the owner"]).to_string(),
-            u => tr!(l, "用户 {u}", "使用者 {u}", "user {u}"),
+            0 => l.pick(texts::users::OWNER).to_string(),
+            u => texts::users::user(l, u),
         })
         .collect();
-    match (l, names.as_slice()) {
-        (Lang::En, [.., last]) if names.len() > 1 => format!("{} and {last}", names[..names.len() - 1].join(", ")),
-        (Lang::En, _) => names.join(""),
-        _ => names.join("、"),
+    match names.as_slice() {
+        [] => String::new(),
+        [only] => only.clone(),
+        [a, b] => texts::list::two(l, a, b),
+        [rest @ .., last] => texts::list::end(l, rest.join(l.pick(texts::list::SEPARATOR)), last),
     }
 }
 
 /// Why erasing did not start or stopped short, and what the system said of
 /// it when there is that.
 pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
+    use texts::wipe::{failed, stopped};
     let said = |text: Text| l.pick(text).to_string();
     match s {
         EraseStop::Update(Hold::Unconfirmed) => (
@@ -600,87 +563,117 @@ pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
             (what, None)
         }
         EraseStop::Failed(p, why) => {
-            let what = match l {
-                Lang::Hans => spaced("清除", part(l, *p), "失败。"),
-                Lang::Hant => spaced("清除", part(l, *p), "失敗。"),
-                Lang::En => format!("Couldn't wipe {}.", part_in_sentence(*p)),
-            };
+            let what = said(match p {
+                Part::Data => failed::DATA,
+                Part::Cache => failed::CACHE,
+                Part::Metadata => failed::METADATA,
+                Part::AppData => failed::APP_DATA,
+                Part::Media => failed::MEDIA,
+                Part::AppCaches => failed::APP_CACHES,
+                Part::SystemCaches => failed::SYSTEM_CACHES,
+                Part::Art => failed::ART,
+                Part::Logs => failed::LOGS,
+                Part::Updates => failed::UPDATES,
+            });
             (what, Some(why.clone()))
         }
     }
 }
 
-/// How work on whole partitions of a kind is told of: the Chinese verb its
-/// sentences are built on, in simplified and in traditional characters,
-/// and English's own words for it.
+/// Work on whole partitions of a kind, which each language tells of in
+/// its own words.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Verb {
-    hans: &'static str,
-    hant: &'static str,
-    /// Under way: Repairing.
-    going: &'static str,
-    /// Done to a partition: repaired.
-    done: &'static str,
-    /// The work as a thing: Repair, as in Repair failed.
-    noun: &'static str,
-    /// The verb itself: repair, as in Couldn't repair vendor.
-    base: &'static str,
+pub enum Verb {
+    Wipe,
+    Unshare,
+    Repair,
+    Format,
 }
 
 impl Verb {
     pub fn of(kind: &PartKind) -> Verb {
-        let (hans, hant, going, done, noun, base) = match kind {
-            PartKind::Disable => ("清除", "清除", "Wiping", "wiped", "Wipe", "wipe"),
-            PartKind::Unshare => ("处理", "處理", "Unsharing", "unshared", "Unsharing", "unshare"),
-            PartKind::Repair => ("修复", "修復", "Repairing", "repaired", "Repair", "repair"),
-            PartKind::Remake(_) => ("格式化", "格式化", "Formatting", "formatted", "Format", "format"),
-        };
-        Verb { hans, hant, going, done, noun, base }
+        match kind {
+            PartKind::Disable => Verb::Wipe,
+            PartKind::Unshare => Verb::Unshare,
+            PartKind::Repair => Verb::Repair,
+            PartKind::Remake(_) => Verb::Format,
+        }
     }
 
     /// Under way: 正在修复, Repairing.
     pub fn going(self, l: Lang) -> String {
-        let (hans, hant, going) = (self.hans, self.hant, self.going);
-        tr!(l, "正在{hans}", "正在{hant}", "{going}")
+        l.pick(match self {
+            Verb::Wipe => texts::parts::wipe::GOING,
+            Verb::Unshare => texts::parts::unshare::GOING,
+            Verb::Repair => texts::parts::repair::GOING,
+            Verb::Format => texts::parts::format::GOING,
+        })
+        .into()
     }
 
     /// Ended, with every partition done: 修复完成, Repair complete.
     pub fn complete(self, l: Lang) -> String {
-        let (hans, hant, noun) = (self.hans, self.hant, self.noun);
-        tr!(l, "{hans}完成", "{hant}完成", "{noun} complete")
+        l.pick(match self {
+            Verb::Wipe => texts::parts::wipe::COMPLETE,
+            Verb::Unshare => texts::parts::unshare::COMPLETE,
+            Verb::Repair => texts::parts::repair::COMPLETE,
+            Verb::Format => texts::parts::format::COMPLETE,
+        })
+        .into()
     }
 
     /// Ended partway through the partitions: 清除未完成, Wipe incomplete.
     pub fn incomplete(self, l: Lang) -> String {
-        let (hans, hant, noun) = (self.hans, self.hant, self.noun);
-        tr!(l, "{hans}未完成", "{hant}未完成", "{noun} incomplete")
+        l.pick(match self {
+            Verb::Wipe => texts::parts::wipe::INCOMPLETE,
+            Verb::Unshare => texts::parts::unshare::INCOMPLETE,
+            Verb::Repair => texts::parts::repair::INCOMPLETE,
+            Verb::Format => texts::parts::format::INCOMPLETE,
+        })
+        .into()
     }
 
     /// Gone wrong: 修复失败, Repair failed.
     pub fn failed(self, l: Lang) -> String {
-        let (hans, hant, noun) = (self.hans, self.hant, self.noun);
-        tr!(l, "{hans}失败", "{hant}失敗", "{noun} failed")
+        l.pick(match self {
+            Verb::Wipe => texts::parts::wipe::FAILED,
+            Verb::Unshare => texts::parts::unshare::FAILED,
+            Verb::Repair => texts::parts::repair::FAILED,
+            Verb::Format => texts::parts::format::FAILED,
+        })
+        .into()
     }
 
     /// A partition the work ended before: 未修复, Not repaired.
     pub fn not_done(self, l: Lang) -> String {
-        let (hans, hant, done) = (self.hans, self.hant, self.done);
-        tr!(l, "未{hans}", "未{hant}", "Not {done}")
+        l.pick(match self {
+            Verb::Wipe => texts::parts::wipe::NOT_DONE,
+            Verb::Unshare => texts::parts::unshare::NOT_DONE,
+            Verb::Repair => texts::parts::repair::NOT_DONE,
+            Verb::Format => texts::parts::format::NOT_DONE,
+        })
+        .into()
     }
 
     /// What the page asks while the work goes on: 修复完成前，请不要关机。
     pub fn hold_on(self, l: Lang) -> String {
-        let (hans, hant) = (self.hans, self.hant);
-        tr!(l, "{hans}完成前，请不要关机。", "{hant}完成前，請不要關機。", "Don't power off until it's done.")
+        l.pick(match self {
+            Verb::Wipe => texts::parts::wipe::HOLD_ON,
+            Verb::Unshare => texts::parts::unshare::HOLD_ON,
+            Verb::Repair => texts::parts::repair::HOLD_ON,
+            Verb::Format => texts::parts::format::HOLD_ON,
+        })
+        .into()
     }
 
     /// What could not be done to the partition `name`: 修复 vendor 失败,
     /// Couldn't repair vendor.
     pub fn failed_on(self, l: Lang, name: &str) -> String {
-        match l {
-            Lang::Hans => spaced(self.hans, name, "失败"),
-            Lang::Hant => spaced(self.hant, name, "失敗"),
-            Lang::En => format!("Couldn't {} {name}", self.base),
+        match self {
+            Verb::Wipe => texts::parts::wipe::failed_on(l, name),
+            Verb::Unshare => texts::parts::unshare::failed_on(l, name),
+            Verb::Repair => texts::parts::repair::failed_on(l, name),
+            Verb::Format => texts::parts::format::failed_on(l, name),
         }
     }
 }
@@ -689,12 +682,12 @@ impl Verb {
 /// work: 已修复, 修复失败.
 pub fn item_end(l: Lang, end: &ItemEnd, verb: Verb) -> String {
     let text = match end {
-        ItemEnd::Erased => ["已清除", "已清除", "Wiped"],
-        ItemEnd::Unshared => ["已处理", "已處理", "Unshared"],
-        ItemEnd::NotShared(_) => ["无需处理", "無需處理", "Nothing to do"],
-        ItemEnd::Clean => ["未发现错误", "未發現錯誤", "No errors found"],
-        ItemEnd::Fixed => ["已修复", "已修復", "Repaired"],
-        ItemEnd::Made => ["已格式化", "已格式化", "Formatted"],
+        ItemEnd::Erased => texts::parts::ended::WIPED,
+        ItemEnd::Unshared => texts::parts::ended::UNSHARED,
+        ItemEnd::NotShared(_) => texts::parts::ended::NOTHING_TO_DO,
+        ItemEnd::Clean => texts::parts::ended::CLEAN,
+        ItemEnd::Fixed => texts::parts::ended::REPAIRED,
+        ItemEnd::Made => texts::parts::ended::FORMATTED,
         ItemEnd::Failed(_) => return verb.failed(l),
     };
     l.pick(text).to_string()
@@ -711,10 +704,6 @@ pub fn part_stop(l: Lang, stop: &PartStop, codename: &str) -> (String, Option<St
     }
 }
 
-/// What the pages say of an error they have no words of their own for,
-/// above what went wrong.
-const UNEXPECTED: Text = ["发生意外错误。", "發生未預期的錯誤。", "Something went wrong."];
-
 /// A file size, `7.1GB` or `96.0MB`.
 pub fn bytes(n: u64) -> String {
     match n {
@@ -725,14 +714,26 @@ pub fn bytes(n: u64) -> String {
     }
 }
 
-/// The months, as English names them.
-const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/// The months, as each language names them in a date.
+const MONTHS: [Text; 12] = [
+    texts::date::month::JANUARY,
+    texts::date::month::FEBRUARY,
+    texts::date::month::MARCH,
+    texts::date::month::APRIL,
+    texts::date::month::MAY,
+    texts::date::month::JUNE,
+    texts::date::month::JULY,
+    texts::date::month::AUGUST,
+    texts::date::month::SEPTEMBER,
+    texts::date::month::OCTOBER,
+    texts::date::month::NOVEMBER,
+    texts::date::month::DECEMBER,
+];
 
 /// A day of the calendar as the language writes it: `2026年5月8日`,
 /// `May 8, 2026`.
 fn day(l: Lang, year: i32, month: i32, d: i32) -> String {
-    let name = MONTHS[(month - 1) as usize];
-    tr!(l, "{year}年{month}月{d}日", "{year}年{month}月{d}日", "{name} {d}, {year}")
+    texts::date::day(l, l.pick(MONTHS[(month - 1) as usize]), d, year)
 }
 
 /// `2026年4月1日`
@@ -744,22 +745,40 @@ pub fn patch(l: Lang, p: &PatchLevel) -> String {
 /// recovery carries.
 pub fn rules(zone: usize) -> &'static TimeZone {
     static RULES: OnceLock<Vec<TimeZone>> = OnceLock::new();
-    let all = RULES.get_or_init(|| TIME_ZONES.iter().map(|&(_, _, name)| TimeZone::get(name).expect("the recovery carries the rules of every zone listed")).collect());
+    let all = RULES.get_or_init(|| {
+        TIME_ZONES.iter().map(|zone| TimeZone::get(zone.tz).expect("the recovery carries the rules of every zone listed")).collect()
+    });
     &all[zone]
 }
 
-/// A Unix time on the calendar and clock of the zone at `zone` in
-/// [`TIME_ZONES`]. A time past either end of the calendar, as a damaged
-/// file's can be, is taken as that end.
-fn local(unix: i64, zone: usize) -> DateTime {
+/// A Unix time as the calendar keeps it. A time past either end of the
+/// calendar, as a damaged file's can be, is taken as that end.
+fn instant(unix: i64) -> Timestamp {
     let unix = unix.clamp(Timestamp::MIN.as_second(), Timestamp::MAX.as_second());
-    let at = Timestamp::from_second(unix).expect("a time within the calendar");
-    at.to_zoned(rules(zone).clone()).datetime()
+    Timestamp::from_second(unix).expect("a time within the calendar")
 }
 
-/// The day a Unix time falls on in the zone at `zone` in [`TIME_ZONES`],
-/// `2026年5月8日`.
-pub fn date(l: Lang, unix: i64, zone: usize) -> String {
+/// A Unix time on the calendar and clock of `zone`.
+fn local(unix: i64, zone: &TimeZone) -> DateTime {
+    instant(unix).to_zoned(zone.clone()).datetime()
+}
+
+/// How far ahead of UTC the clocks of `zone` are at a Unix time, in
+/// seconds: less than none to the west of it.
+pub fn utc_offset_seconds(unix: i64, zone: &TimeZone) -> i32 {
+    zone.to_offset(instant(unix)).seconds()
+}
+
+/// How far from UTC the clocks of `zone` are at a Unix time, as a list of
+/// zones tells it: `UTC+08:00`, `UTC−03:30`.
+pub fn utc_offset(unix: i64, zone: &TimeZone) -> String {
+    let seconds = utc_offset_seconds(unix, zone);
+    let minutes = seconds.unsigned_abs() / 60;
+    format!("UTC{}{:02}:{:02}", if seconds < 0 { '−' } else { '+' }, minutes / 60, minutes % 60)
+}
+
+/// The day a Unix time falls on in `zone`, `2026年5月8日`.
+pub fn date(l: Lang, unix: i64, zone: &TimeZone) -> String {
     let d = local(unix, zone);
     day(l, d.year().into(), d.month().into(), d.day().into())
 }
@@ -767,8 +786,8 @@ pub fn date(l: Lang, unix: i64, zone: usize) -> String {
 /// When a list entry last changed, as the stock file manager tells it
 /// against `now`, when the folder was read: the time for today, month and
 /// day for a file from this year, and the whole date for a folder from this
-/// year or anything older; all in the zone at `zone` in [`TIME_ZONES`].
-pub fn file_time(unix: i64, folder: bool, now: i64, zone: usize) -> String {
+/// year or anything older; all in `zone`.
+pub fn file_time(unix: i64, folder: bool, now: i64, zone: &TimeZone) -> String {
     let (day, today) = (local(unix, zone).date(), local(now, zone).date());
     if day == today {
         clock(unix, zone)
@@ -798,23 +817,21 @@ pub fn file_size(bytes: u64) -> String {
     format!("{n} {}", UNITS[unit])
 }
 
-/// A Unix time in the zone at `zone` in [`TIME_ZONES`], to the minute:
-/// `2026年10月19日 02:31`, `October 19, 2026, 02:31`.
-pub fn datetime(l: Lang, unix: i64, zone: usize) -> String {
-    let (date, clock) = (date(l, unix, zone), clock(unix, zone));
-    tr!(l, "{date} {clock}", "{date} {clock}", "{date}, {clock}")
+/// A Unix time in `zone`, to the minute: `2026年10月19日 02:31`,
+/// `October 19, 2026, 02:31`.
+pub fn datetime(l: Lang, unix: i64, zone: &TimeZone) -> String {
+    texts::date::at(l, date(l, unix, zone), clock(unix, zone))
 }
 
-/// The time of day in the zone at `zone` in [`TIME_ZONES`], `HH:MM`, as
-/// the status bar shows it.
-pub fn clock(unix: i64, zone: usize) -> String {
+/// The time of day in `zone`, `HH:MM`, as the status bar shows it.
+pub fn clock(unix: i64, zone: &TimeZone) -> String {
     let t = local(unix, zone);
     format!("{:02}:{:02}", t.hour(), t.minute())
 }
 
-/// A Unix time in the zone at `zone` in [`TIME_ZONES`], to the second, as
-/// the name of what is saved then, which sorts by it: `20261021-133000`.
-pub fn stamp(unix: i64, zone: usize) -> String {
+/// A Unix time in `zone`, to the second, as the name of what is saved
+/// then, which sorts by it: `20261021-133000`.
+pub fn stamp(unix: i64, zone: &TimeZone) -> String {
     let t = local(unix, zone);
     format!("{:04}{:02}{:02}-{:02}{:02}{:02}", t.year(), t.month(), t.day(), t.hour(), t.minute(), t.second())
 }
@@ -848,26 +865,22 @@ pub fn mode(mode: u32) -> String {
 
 /// The line under an entry's name in the file list, laid out as the stock
 /// file manager lays it out, with dates told against `now`, when the folder
-/// was read, in the zone at `zone` in [`TIME_ZONES`].
-pub fn file_line(l: Lang, f: &FileRow, now: i64, zone: usize) -> String {
+/// was read, in `zone`.
+pub fn file_line(l: Lang, f: &FileRow, now: i64, zone: &TimeZone) -> String {
     const DIVIDER: &str = "  |  ";
     match &f.kind {
         FileKind::Folder { items: Some(n) } => {
-            let items = match (l, n) {
-                (Lang::En, 1) => "1 item".to_string(),
-                _ => tr!(l, "{n} 项", "{n} 項", "{n} items"),
-            };
-            format!("{}{DIVIDER}{items}", file_time(f.modified, true, now, zone))
+            format!("{}{DIVIDER}{}", file_time(f.modified, true, now, zone), texts::files::line::items(l, *n as u64))
         }
-        FileKind::Folder { items: None } => l.pick(["无法读取", "無法讀取", "Unreadable"]).to_string(),
+        FileKind::Folder { items: None } => l.pick(texts::common::UNREADABLE).to_string(),
         FileKind::File => format!("{}{DIVIDER}{}", file_time(f.modified, false, now, zone), file_size(f.size)),
-        FileKind::Link { target, .. } => tr!(l, "链接到 {target}", "連結到 {target}", "Link to {target}"),
+        FileKind::Link { target, .. } => texts::files::line::link_to(l, target),
         FileKind::Special => {
             let what = l.pick(match f.mode & 0o170_000 {
-                0o020_000 => ["字符设备", "字元裝置", "Character device"],
-                0o060_000 => ["块设备", "區塊裝置", "Block device"],
-                0o010_000 => ["管道", "管道", "Pipe"],
-                _ => ["套接字", "通訊端", "Socket"],
+                0o020_000 => texts::files::line::CHAR_DEVICE,
+                0o060_000 => texts::files::line::BLOCK_DEVICE,
+                0o010_000 => texts::files::line::PIPE,
+                _ => texts::files::line::SOCKET,
             });
             format!("{}{DIVIDER}{what}", file_time(f.modified, false, now, zone))
         }
@@ -875,14 +888,13 @@ pub fn file_line(l: Lang, f: &FileRow, now: i64, zone: usize) -> String {
 }
 
 /// The parts a backup holds: `启动分区、系统分区`.
-pub fn parts(l: Lang, held: &[bool; 4]) -> String {
+pub fn parts(l: Lang, held: &[bool; 5]) -> String {
     list(l, BACKUP_PARTS.iter().zip(held).filter(|&(_, &on)| on).map(|(name, _)| l.pick(*name)))
 }
 
 /// What an image is, and what it holds.
-pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, &'static str) {
-    const RECOVERY: Text = ["恢复模式镜像", "復原模式映像檔", "Recovery image"];
-    const BOOT: Text = ["启动镜像", "啟動映像檔", "Boot image"];
+pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
+    use texts::image::{self, holds};
     let (name, holds) = match kind {
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Holds a kernel and a recovery ramdisk"]),
         ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds a recovery ramdisk alone"]),
@@ -895,68 +907,53 @@ pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, &'static str) {
         ImageKind::Dtbo => (["dtbo 镜像", "dtbo 映像檔", "dtbo image"], ["包含设备树叠加层", "包含裝置樹疊加層", "Holds device tree overlays"]),
         ImageKind::Vbmeta => (["vbmeta 镜像", "vbmeta 映像檔", "vbmeta image"], ["包含启动验证数据", "包含啟動驗證資料", "Holds verified boot data"]),
     };
-    (l.pick(name), l.pick(holds))
+    (l.pick(name), l.pick(holds).into())
 }
 
 /// What a partition an image can go to is for.
-pub fn partition_role(l: Lang, name: &str) -> &'static str {
-    l.pick(match name {
-        "boot" => ["内核", "核心", "Kernel"],
-        "init_boot" => ["通用 ramdisk", "通用 ramdisk", "Generic ramdisk"],
-        "recovery" => ["恢复模式", "復原模式", "Recovery"],
-        "vendor_boot" => ["厂商 ramdisk 和设备树", "廠商 ramdisk 和裝置樹", "Vendor ramdisk and device tree"],
-        "dtbo" => ["设备树叠加层", "裝置樹疊加層", "Device tree overlays"],
-        "vbmeta" => ["启动验证数据", "啟動驗證資料", "Verified boot data"],
-        "vbmeta_system" => ["系统分区的验证数据", "系統分割區的驗證資料", "Verification data of the system partitions"],
-        "vbmeta_vendor" => ["厂商分区的验证数据", "廠商分割區的驗證資料", "Verification data of the vendor partitions"],
-        _ => ["分区", "分割區", "Partition"],
+pub fn partition_role(l: Lang, partition: &FlashTarget) -> &'static str {
+    use texts::image::role;
+    l.pick(match (partition.place, partition.name.as_str()) {
+        (FlashPlace::Logical, _) => role::LOGICAL,
+        (FlashPlace::Single, _) => role::WHOLE_SUPER,
+        (FlashPlace::Slotted, "boot") => role::BOOT,
+        (FlashPlace::Slotted, "init_boot") => role::INIT_BOOT,
+        (FlashPlace::Slotted, "recovery") => role::RECOVERY,
+        (FlashPlace::Slotted, "vendor_boot") => role::VENDOR_BOOT,
+        (FlashPlace::Slotted, "dtbo") => role::DTBO,
+        (FlashPlace::Slotted, "vbmeta") => role::VBMETA,
+        (FlashPlace::Slotted, "vbmeta_system") => role::VBMETA_SYSTEM,
+        (FlashPlace::Slotted, "vbmeta_vendor") => role::VBMETA_VENDOR,
+        (FlashPlace::Slotted, _) => role::PARTITION,
     })
-}
-
-/// `槽位 B`, `槽位 A 和 B`, `slot B`, `slots A and B`
-pub fn slots(l: Lang, slots: &[Slot]) -> String {
-    let letters: Vec<&str> = slots.iter().map(|s| s.letter()).collect();
-    let joined = letters.join(l.pick([" 和 ", " 和 ", " and "]));
-    match (l, slots.len()) {
-        (Lang::En, 1) => format!("slot {joined}"),
-        (Lang::En, _) => format!("slots {joined}"),
-        _ => format!("槽位 {joined}"),
-    }
 }
 
 /// How long the screen stays on with nothing touched: `30 秒`, `2 分钟`,
 /// or `永不`.
 pub fn screen_off(l: Lang, after_ms: Option<u64>) -> String {
     match after_ms {
-        None => l.pick(["永不", "永不", "Never"]).into(),
-        Some(ms) if ms < 60_000 => match (l, ms / 1000) {
-            (Lang::En, 1) => "1 second".into(),
-            (_, n) => tr!(l, "{n} 秒", "{n} 秒", "{n} seconds"),
-        },
-        Some(ms) => match (l, ms / 60_000) {
-            (Lang::En, 1) => "1 minute".into(),
-            (_, n) => tr!(l, "{n} 分钟", "{n} 分鐘", "{n} minutes"),
-        },
+        None => l.pick(texts::screen_off::NEVER).into(),
+        Some(ms) if ms < 60_000 => texts::screen_off::seconds(l, ms / 1000),
+        Some(ms) => texts::screen_off::minutes(l, ms / 60_000),
     }
 }
 
 /// A mount or unmount that failed, with why: `挂载 vendor 失败：…`
 pub fn mount_failure(l: Lang, m: &MountFailure) -> String {
-    let (base, detail) = (&m.base, &m.detail);
     match m.mounting {
-        true => tr!(l, "挂载 {base} 失败：{detail}", "掛載 {base} 失敗：{detail}", "Couldn't mount {base}: {detail}"),
-        false => tr!(l, "卸载 {base} 失败：{detail}", "卸載 {base} 失敗：{detail}", "Couldn't unmount {base}: {detail}"),
+        true => texts::mount::failed(l, &m.base, &m.detail),
+        false => texts::mount::unmount_failed(l, &m.base, &m.detail),
     }
 }
 
-/// How another package is given to the installer from where this one came
-/// from: the computer sends it, or another file is chosen, as one is in
-/// place of a package the system named. English starts its sentence with it.
-fn give(l: Lang, source: Source) -> &'static str {
-    l.pick(match source {
-        Source::Computer | Source::Rescue => ["发送", "傳送", "Send"],
-        Source::File(_) | Source::Opened { .. } | Source::Asked { .. } => ["选择", "選擇", "Choose"],
-    })
+/// Whether another package from where this one came from is sent, as the
+/// computer sends one, and not chosen, as a file is in place of one chosen
+/// before or of a package the system named.
+fn sent(source: Source) -> bool {
+    match source {
+        Source::Computer | Source::Rescue => true,
+        Source::File(_) | Source::Opened { .. } | Source::Asked { .. } => false,
+    }
 }
 
 /// Why a package from `source` was not installed, for a phone with this
@@ -1077,22 +1074,15 @@ pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: usize
 /// Why the system's request to erase the partitions it lists was not
 /// carried out, on a phone whose codename is `codename`.
 pub fn erase_request_refusal(l: Lang, r: &Refusal, codename: &str) -> String {
+    use texts::erase_request::refused;
     match r {
-        Refusal::Unsigned => l.pick(["该请求未签名。", "這項要求未簽署。", "The request isn't signed."]).into(),
-        Refusal::Unverified => l.pick(["该请求未通过签名验证。", "這項要求未通過簽章驗證。", "The request's signature didn't verify."]).into(),
-        Refusal::NotBrick(kind) if kind.is_empty() => l.pick(["该请求未注明类型。", "這項要求未註明類型。", "The request doesn't say its type."]).into(),
-        Refusal::NotBrick(kind) => tr!(l, "该请求的类型为 {kind}。", "這項要求的類型為 {kind}。", "The request's type is {kind}."),
-        Refusal::OtherDevice(devices) => {
-            tr!(l, "该请求适用于 {devices}，本机为 {codename}。", "這項要求適用於 {devices}，本機為 {codename}。", "The request is for {devices}, and this phone is {codename}.")
-        }
-        Refusal::OtherSerial => l
-            .pick([
-                "该请求仅适用于指定序列号的设备，不包括本机。",
-                "這項要求僅適用於指定序號的裝置，不包括本機。",
-                "The request is only for devices with certain serial numbers, and this phone isn't one of them.",
-            ])
-            .into(),
-        Refusal::NoSerial => l.pick(["该请求未注明设备序列号。", "這項要求未註明裝置序號。", "The request names no serial number."]).into(),
+        Refusal::Unsigned => l.pick(refused::UNSIGNED).into(),
+        Refusal::Unverified => l.pick(refused::UNVERIFIED).into(),
+        Refusal::NotBrick(kind) if kind.is_empty() => l.pick(refused::UNTYPED).into(),
+        Refusal::NotBrick(kind) => refused::typed(l, kind),
+        Refusal::OtherDevice(devices) => refused::other_device(l, devices, codename),
+        Refusal::OtherSerial => l.pick(refused::OTHER_SERIAL).into(),
+        Refusal::NoSerial => l.pick(refused::NO_SERIAL).into(),
         other => unreachable!("a request to erase partitions is not refused as {other:?}"),
     }
 }
@@ -1100,6 +1090,7 @@ pub fn erase_request_refusal(l: Lang, r: &Refusal, codename: &str) -> String {
 /// What went wrong installing a package from `source`, and the details
 /// behind it when there are any.
 pub fn failure(l: Lang, f: &Failure, source: Source) -> (String, Option<String>) {
+    use texts::install::failed;
     let said = |text: Text| l.pick(text).to_string();
     match f {
         Failure::Engine(code) => {
@@ -1144,7 +1135,7 @@ pub fn failure(l: Lang, f: &Failure, source: Source) -> (String, Option<String>)
                 (said(["文件在读取过程中被修改，请重新选择。", "檔案在讀取過程中被修改，請重新選擇。", "The file changed while it was read. Choose it again."]), None)
             }
         },
-        Failure::Error(detail) => (said(UNEXPECTED), Some(detail.clone())),
+        Failure::Error(detail) => (said(texts::common::UNEXPECTED), Some(detail.clone())),
     }
 }
 
@@ -1177,10 +1168,10 @@ pub fn speed(bytes: u64) -> (String, &'static str) {
 /// A signal's strength in words, as the stock network details say it.
 pub fn signal(l: Lang, dbm: i32) -> &'static str {
     l.pick(match signal_level(dbm) {
-        3 => ["极佳", "極佳", "Excellent"],
-        2 => ["良好", "良好", "Good"],
-        1 => ["一般", "普通", "Fair"],
-        _ => ["微弱", "微弱", "Weak"],
+        3 => texts::wlan::signal::EXCELLENT,
+        2 => texts::wlan::signal::GOOD,
+        1 => texts::wlan::signal::FAIR,
+        _ => texts::wlan::signal::WEAK,
     })
 }
 
@@ -1198,14 +1189,14 @@ pub fn bands(l: Lang, b: Bands) -> String {
 
 /// A generation of Wi-Fi, as the stock network details say it.
 pub fn generation(l: Lang, n: u8) -> String {
-    tr!(l, "第{n}代", "第{n}代", "Wi-Fi {n}")
+    texts::wlan::generation(l, n)
 }
 
 /// How a network is protected, as the system's network details name it.
 pub fn security(l: Lang, s: Security) -> &'static str {
     match s {
-        Security::Open => l.pick(["无", "無", "None"]),
-        Security::Owe => l.pick(["增强型开放式", "增強型開放式", "Enhanced Open"]),
+        Security::Open => l.pick(texts::wlan::security::NONE),
+        Security::Owe => l.pick(texts::wlan::security::ENHANCED_OPEN),
         Security::Wep => "WEP",
         Security::Psk => "WPA/WPA2-Personal",
         Security::Sae => "WPA3-Personal",
@@ -1218,54 +1209,47 @@ pub fn security(l: Lang, s: Security) -> &'static str {
 /// how the WLAN stands.
 pub fn wlan_value(l: Lang, w: &Wlan) -> &str {
     match (&w.power, &w.joined) {
-        (Power::Off | Power::Failed(_), _) => l.pick(["已关闭", "已關閉", "Off"]),
-        (Power::Starting, _) => l.pick(["正在开启", "正在開啟", "Turning on"]),
+        (Power::Off | Power::Failed(_), _) => l.pick(texts::wlan::OFF),
+        (Power::Starting, _) => l.pick(texts::wlan::TURNING_ON),
         (Power::On, Some(Joined { stage: WlanStage::Connected(_), name, .. })) => name,
-        (Power::On, Some(_)) => l.pick(["正在连接", "正在連線", "Connecting"]),
-        (Power::On, None) => l.pick(["未连接", "未連線", "Not connected"]),
+        (Power::On, Some(_)) => l.pick(texts::wlan::CONNECTING),
+        (Power::On, None) => l.pick(texts::wlan::NOT_CONNECTED),
     }
 }
 
 /// How joining the network chosen goes, under its name; joined, how far it
 /// reaches, as the system's WLAN page says it.
 pub fn joining(l: Lang, stage: &WlanStage) -> &'static str {
+    use texts::wlan::joining;
     l.pick(match stage {
-        WlanStage::Joining => ["正在连接", "正在連線", "Connecting"],
-        WlanStage::Addressing => ["正在获取 IP 地址", "正在取得 IP 位址", "Getting an IP address"],
+        WlanStage::Joining => texts::wlan::CONNECTING,
+        WlanStage::Addressing => joining::GETTING_ADDRESS,
         WlanStage::Connected(link) => match link.reach {
-            Some(Reach::Login(_)) => ["需要登录", "需要登入", "Sign-in required"],
-            Some(Reach::Offline(_)) => ["已连接，但无法访问互联网", "已連線，但無法連上網際網路", "Connected, no internet"],
-            Some(Reach::Online) | None => ["已连接", "已連線", "Connected"],
+            Some(Reach::Login(_)) => joining::SIGN_IN_REQUIRED,
+            Some(Reach::Offline(_)) => joining::NO_INTERNET,
+            Some(Reach::Online) | None => joining::CONNECTED,
         },
-        WlanStage::WrongPassword => ["密码错误", "密碼錯誤", "Wrong password"],
-        WlanStage::NotFound => ["未找到该网络", "找不到這個網路", "Network not found"],
-        WlanStage::Failed => ["连接失败", "連線失敗", "Couldn't connect"],
-        WlanStage::NoAddress(_) => ["无法获取 IP 地址", "無法取得 IP 位址", "Couldn't get an IP address"],
+        WlanStage::WrongPassword => joining::WRONG_PASSWORD,
+        WlanStage::NotFound => joining::NOT_FOUND,
+        WlanStage::Failed => joining::FAILED,
+        WlanStage::NoAddress(_) => joining::NO_ADDRESS,
     })
 }
 
-/// What a network that wants a login in a browser first leaves to do,
-/// with a recovery that has no browser to log in with.
-const LOGIN: Text = [
-    "需要先在网页上登录才能访问互联网，Skyward 无法打开网页登录。可以改用无需登录的网络，例如手机热点。",
-    "需要先在網頁上登入才能連上網際網路，Skyward 無法開啟網頁登入。可以改用無需登入的網路，例如手機熱點。",
-    "needs a sign-in in a browser before it reaches the internet, and Skyward has no browser to sign in with. Use a network that needs no sign-in instead, such as a phone's hotspot.",
-];
-
 /// What the WLAN page says under the network joined of how far it reaches,
-/// where it reaches short of the internet.
+/// where it reaches short of the internet: a network that wants a login in
+/// a browser first is left to a recovery that has no browser to log in
+/// with.
 pub fn reach(l: Lang, reach: &Reach) -> Option<String> {
-    let login = l.pick(LOGIN);
     match reach {
         Reach::Online => None,
-        Reach::Login(_) => Some(tr!(l, "该网络{login}", "這個網路{login}", "This network {login}")),
-        Reach::Offline(why) => Some(tr!(l, "该网络无法访问互联网：{why}", "這個網路無法連上網際網路：{why}", "This network doesn't reach the internet: {why}")),
+        Reach::Login(_) => Some(l.pick(texts::wlan::NEEDS_LOGIN).into()),
+        Reach::Offline(why) => Some(texts::wlan::offline(l, why)),
     }
 }
 
 /// Why the update server gave no answer, as the update page says it.
 pub fn unanswered(l: Lang, why: &Unanswered) -> String {
-    let login = l.pick(LOGIN);
     match why {
         Unanswered::Login => tr!(l, "检查更新失败，当前 WLAN {login}", "檢查更新失敗，目前連線的 Wi-Fi 網路{login}", "Couldn't check for updates. The Wi-Fi network joined {login}"),
         Unanswered::Offline(why) => tr!(
@@ -1317,106 +1301,107 @@ pub fn skyward_download_failure(l: Lang, f: &DownloadFailure) -> String {
         }
         DownloadFailure::Damaged => l.pick(["安装包校验失败，已删除，请重新更新。", "安裝包驗證失敗，已刪除，請重新更新。", "The package didn't verify and was deleted. Update again."]).into(),
         DownloadFailure::Changed => unreachable!("GitHub is not asked again where a build is"),
-        DownloadFailure::Other(why) => tr!(l, "下载失败：{why}", "下載失敗：{why}", "Download failed: {why}"),
+        DownloadFailure::Other(why) => texts::download::failed::other(l, why),
     }
 }
 
 /// How the terminal page's shell ended.
 pub fn term_end(l: Lang, end: &TermEnd) -> String {
     match end {
-        TermEnd::Exited(code) => tr!(l, "shell 已退出，退出码 {code}", "shell 已結束，結束代碼 {code}", "The shell exited with code {code}"),
-        TermEnd::Signalled(signal) => tr!(l, "shell 已被信号 {signal} 终止", "shell 已被訊號 {signal} 終止", "Signal {signal} stopped the shell"),
-        TermEnd::Other(status) => tr!(l, "shell 已结束：{status}", "shell 已結束：{status}", "The shell ended: {status}"),
+        TermEnd::Exited(code) => texts::terminal::exited(l, code),
+        TermEnd::Signalled(signal) => texts::terminal::signalled(l, signal),
+        TermEnd::Other(status) => texts::terminal::ended(l, status),
     }
 }
 
 /// What a computer is told internal storage is called, as the stock system
 /// names it.
 pub fn storage_name(l: Lang) -> &'static str {
-    l.pick(["内部存储设备", "內部儲存裝置", "Internal shared storage"])
+    l.pick(texts::transfer::STORAGE_NAME)
 }
 
 /// File transfer kept internal storage from work that needed it back, as
 /// the system says why.
 pub fn transfer_kept(l: Lang, why: &str) -> String {
-    tr!(l, "未能停止文件传输：{why}", "無法停止檔案傳輸：{why}", "Couldn't stop file transfer: {why}")
+    texts::transfer::kept(l, why)
 }
 
 /// File transfer did not turn on, as the system says why.
 pub fn transfer_failed(l: Lang, why: &str) -> String {
-    tr!(l, "无法开启文件传输：{why}", "無法開啟檔案傳輸：{why}", "Couldn't turn on file transfer: {why}")
+    texts::transfer::failed(l, why)
 }
 
 /// File transfer did not turn off, as the system says why.
 pub fn transfer_left_on(l: Lang, why: &str) -> String {
-    tr!(l, "关闭文件传输失败：{why}", "關閉檔案傳輸失敗：{why}", "Couldn't turn off file transfer: {why}")
+    texts::transfer::left_on(l, why)
 }
 
 /// File transfer stopped on its own, as the system says why.
 pub fn transfer_stopped(l: Lang, why: &str) -> String {
-    tr!(l, "文件传输已停止：{why}", "檔案傳輸已停止：{why}", "File transfer stopped: {why}")
+    texts::transfer::stopped(l, why)
 }
 
 /// Merging the update failed, as the system says why.
 pub fn merge_failed(l: Lang, why: &str) -> String {
-    tr!(l, "未能合并更新：{why}", "無法合併更新：{why}", "Couldn't merge the update: {why}")
+    texts::update::merge_failed(l, why)
 }
 
 /// What work that takes a program of the installed system's `base`
 /// partition asks while that partition is not mounted.
 pub fn mount_first(l: Lang, base: &str) -> String {
-    tr!(l, "请先在「挂载」中挂载 {base} 分区", "請先在「掛載」中掛載 {base} 分割區", "Mount the {base} partition in Mount first")
+    texts::mount::first(l, base)
 }
 
 /// The installed system's SELinux rules could not be read, as the system
 /// says why.
 pub fn rules_unread(l: Lang, why: &str) -> String {
-    tr!(l, "未能读取系统的 SELinux 规则：{why}", "無法讀取系統的 SELinux 規則：{why}", "Couldn't read the system's SELinux rules: {why}")
+    texts::relabel::rules_unread(l, why)
 }
 
 /// The logs were saved in `folder`.
 pub fn exported(l: Lang, folder: &str) -> String {
-    tr!(l, "已导出到 {folder}", "已匯出到 {folder}", "Exported to {folder}")
+    texts::logs::exported(l, folder)
 }
 
 /// The logs were not saved, as the system says why.
 pub fn export_failed(l: Lang, why: &str) -> String {
-    tr!(l, "导出失败：{why}", "匯出失敗：{why}", "Couldn't export: {why}")
+    texts::logs::export_failed(l, why)
 }
 
 /// A screenshot went into the gallery's screenshots.
-pub const SCREENSHOT_SAVED: Text = ["截图已保存到相册", "截圖已儲存到相簿", "Screenshot saved to the gallery"];
+pub const SCREENSHOT_SAVED: Text = texts::screenshot::SAVED;
 
 /// A screenshot is held until the owner's storage opens, and then goes into
 /// the gallery's.
-pub const SCREENSHOT_HELD: Text = ["截图已暂存，解密后存入相册", "截圖已暫存，解密後存入相簿", "Screenshot kept. It goes to the gallery once decrypted"];
+pub const SCREENSHOT_HELD: Text = texts::screenshot::HELD;
 
 /// A screenshot was not saved, as the system says why.
 pub fn screenshot_failed(l: Lang, why: &str) -> String {
-    tr!(l, "截图保存失败：{why}", "截圖儲存失敗：{why}", "Couldn't save the screenshot: {why}")
+    texts::screenshot::failed(l, why)
 }
 
 /// The screenshots held while the owner's storage was closed did not go into
 /// the gallery's, as the system says why.
 pub fn screenshots_not_kept(l: Lang, why: &str) -> String {
-    tr!(l, "暂存的截图未能存入相册：{why}", "暫存的截圖未能存入相簿：{why}", "Kept screenshots couldn't go to the gallery: {why}")
+    texts::screenshot::not_kept(l, why)
 }
 
 /// The name a screenshot taken `unix_ms` milliseconds into Unix time is saved
-/// under, in the zone at `zone` in [`TIME_ZONES`]: as the system names its
-/// own, the time to the millisecond and then where it was taken,
+/// under, in `zone`: as the system names its own, the time to the
+/// millisecond and then where it was taken,
 /// `Screenshot_2026-10-26-01-45-00-123_Skyward.png`.
-pub fn screenshot_name(unix_ms: i64, zone: usize) -> String {
+pub fn screenshot_name(unix_ms: i64, zone: &TimeZone) -> String {
     let t = local(unix_ms.div_euclid(1000), zone);
     format!("Screenshot_{:04}-{:02}-{:02}-{:02}-{:02}-{:02}-{:03}_Skyward.png", t.year(), t.month(), t.day(), t.hour(), t.minute(), t.second(), unix_ms.rem_euclid(1000))
 }
 
 /// What the terminal is told while a command it runs holds it.
-pub const TERMINAL_BUSY: Text = ["终端正在运行命令，请结束后重试", "終端機正在執行指令，請結束後重試", "The terminal is running a command. End it, then try again"];
+pub const TERMINAL_BUSY: Text = texts::terminal::BUSY;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::listed;
 
     const HANS: Lang = Lang::Hans;
 
@@ -1448,8 +1433,8 @@ mod tests {
         assert_eq!(cpu(Lang::Hant, &Cpu { cores: 2, max_khz: None }), "雙核");
         assert_eq!(cpu(Lang::En, &nezha), "Octa-core, up to 4.61GHz");
         assert_eq!(cpu(Lang::En, &Cpu { cores: 12, max_khz: None }), "12-core");
-        assert_eq!(numeral(12, false), "十二");
-        assert_eq!(numeral(20, false), "二十");
+        assert_eq!(numeral(HANS, 12), "十二");
+        assert_eq!(numeral(HANS, 20), "二十");
     }
 
     // Xiaomi 13 Ultra battery as `skyward info` read it.
@@ -1500,17 +1485,13 @@ mod tests {
         assert_eq!(bytes(131_072), "131KB");
         assert_eq!(bytes(64), "64B");
         // The Xiaomi 13 Ultra's installed system, by its ro.build.date.utc.
-        assert_eq!(date(HANS, 1_778_243_655, 0), "2026年5月8日");
-        assert_eq!(date(Lang::En, 1_778_243_655, 0), "May 8, 2026");
-        assert_eq!(date(HANS, 0, 0), "1970年1月1日");
+        assert_eq!(date(HANS, 1_778_243_655, china()), "2026年5月8日");
+        assert_eq!(date(Lang::En, 1_778_243_655, china()), "May 8, 2026");
+        assert_eq!(date(HANS, 0, china()), "1970年1月1日");
         // Midnight on a leap day in UTC is eight in the morning in China.
-        assert_eq!(date(HANS, 1_709_164_800, 0), "2024年2月29日");
-        assert_eq!(date(HANS, 1_709_164_800 - 8 * 3600 - 1, 0), "2024年2月28日");
+        assert_eq!(date(HANS, 1_709_164_800, china()), "2024年2月29日");
+        assert_eq!(date(HANS, 1_709_164_800 - 8 * 3600 - 1, china()), "2024年2月28日");
         assert_eq!(patch(HANS, &PatchLevel { year: 2026, month: 4, day: 1 }), "2026年4月1日");
-        assert_eq!(slots(HANS, &[Slot::B]), "槽位 B");
-        assert_eq!(slots(HANS, &[Slot::A, Slot::B]), "槽位 A 和 B");
-        assert_eq!(slots(Lang::En, &[Slot::B]), "slot B");
-        assert_eq!(slots(Lang::En, &[Slot::A, Slot::B]), "slots A and B");
     }
 
     #[test]
@@ -1524,23 +1505,71 @@ mod tests {
     #[test]
     fn times_to_the_minute_in_china() {
         // 2026-10-18 18:31 UTC is 02:31 the next morning in Beijing.
-        assert_eq!(datetime(HANS, 1_792_348_260, 0), "2026年10月19日 02:31");
-        assert_eq!(datetime(Lang::En, 1_792_348_260, 0), "October 19, 2026, 02:31");
-        assert_eq!(clock(1_792_348_260, 0), "02:31");
+        assert_eq!(datetime(HANS, 1_792_348_260, china()), "2026年10月19日 02:31");
+        assert_eq!(datetime(Lang::En, 1_792_348_260, china()), "October 19, 2026, 02:31");
+        assert_eq!(clock(1_792_348_260, china()), "02:31");
         // Midnight in Beijing is 16:00 UTC the day before.
-        assert_eq!(clock(1_792_339_200, 0), "00:00");
-        assert_eq!(stamp(1_792_348_265, 0), "20261019-023105");
+        assert_eq!(clock(1_792_339_200, china()), "00:00");
+        assert_eq!(stamp(1_792_348_265, china()), "20261019-023105");
     }
 
     #[test]
     fn a_screenshot_is_named_as_the_system_names_its_own() {
-        assert_eq!(screenshot_name(1_792_348_265_007, 0), "Screenshot_2026-10-19-02-31-05-007_Skyward.png");
+        assert_eq!(screenshot_name(1_792_348_265_007, china()), "Screenshot_2026-10-19-02-31-05-007_Skyward.png");
         assert_eq!(screenshot_name(1_792_348_265_999, zone("UTC")), "Screenshot_2026-10-18-18-31-05-999_Skyward.png", "in the zone chosen");
     }
 
-    /// Where a zone named in the tz database is in [`TIME_ZONES`].
-    fn zone(name: &str) -> usize {
-        TIME_ZONES.iter().position(|&(_, _, n)| n == name).expect("a zone listed")
+    /// The rules of a zone listed, by its name in the tz database.
+    fn zone(name: &str) -> &'static TimeZone {
+        rules(listed(name).expect("a zone listed"))
+    }
+
+    /// China's, which most of the tests tell their times in.
+    fn china() -> &'static TimeZone {
+        zone("Asia/Shanghai")
+    }
+
+    #[test]
+    fn a_list_of_zones_tells_how_far_each_is_from_utc() {
+        // 2026-07-01 12:00 UTC, and 2026-01-15 12:00 UTC.
+        let (summer, winter) = (1_782_907_200, 1_768_478_400);
+        assert_eq!(utc_offset(summer, china()), "UTC+08:00");
+        assert_eq!(utc_offset(summer, zone("UTC")), "UTC+00:00");
+        assert_eq!((utc_offset(summer, zone("Europe/London")), utc_offset(winter, zone("Europe/London"))), ("UTC+01:00".into(), "UTC+00:00".into()));
+        assert_eq!((utc_offset(summer, zone("America/New_York")), utc_offset(winter, zone("America/New_York"))), ("UTC−04:00".into(), "UTC−05:00".into()));
+        assert_eq!(utc_offset(summer, zone("Asia/Kolkata")), "UTC+05:30");
+        assert_eq!(utc_offset(summer, zone("Asia/Kathmandu")), "UTC+05:45");
+        assert_eq!((utc_offset(summer, zone("Australia/Adelaide")), utc_offset(winter, zone("Australia/Adelaide"))), ("UTC+09:30".into(), "UTC+10:30".into()));
+        assert_eq!(utc_offset_seconds(winter, zone("America/Los_Angeles")), -8 * 3600);
+    }
+
+    #[test]
+    fn the_recovery_carries_the_rules_of_every_name_a_zone_is_known_by() {
+        let mut names: Vec<&str> = TIME_ZONES.iter().flat_map(|zone| std::iter::once(zone.tz).chain(zone.also.iter().copied())).collect();
+        for name in &names {
+            assert!(TimeZone::get(name).is_ok(), "{name}");
+        }
+        let all = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), all, "each name is one zone's");
+    }
+
+    #[test]
+    fn the_places_that_share_a_zone_s_name_keep_its_time() {
+        // Each month's middle, from 2026-01-15 12:00 UTC on.
+        let months: Vec<i64> = (0..24).map(|k| 1_768_478_400 + k * 2_629_800).collect();
+        let mut apart = Vec::new();
+        for zone in &TIME_ZONES {
+            let own = TimeZone::get(zone.tz).unwrap();
+            for also in zone.also {
+                let other = TimeZone::get(also).unwrap();
+                if months.iter().any(|&at| utc_offset_seconds(at, &other) != utc_offset_seconds(at, &own)) {
+                    apart.push((zone.tz, *also));
+                }
+            }
+        }
+        assert_eq!(apart, [], "names whose clocks part from their zone's");
     }
 
     #[test]
@@ -1564,9 +1593,9 @@ mod tests {
 
     #[test]
     fn a_time_past_the_calendar_shows_as_its_end() {
-        assert_eq!(date(HANS, i64::MAX, 0), "9999年12月31日");
+        assert_eq!(date(HANS, i64::MAX, china()), "9999年12月31日");
         assert_eq!(date(HANS, i64::MIN, zone("UTC")), "-9999年1月2日");
-        assert_eq!(date(Lang::En, i64::MAX, 0), "December 31, 9999");
+        assert_eq!(date(Lang::En, i64::MAX, china()), "December 31, 9999");
     }
 
     #[test]
@@ -1584,29 +1613,29 @@ mod tests {
         // Changed at 2026-10-19 02:31 in Beijing; listed a week later.
         let row = |kind, size, mode| FileRow { name: "x".into(), kind, size, modified: 1_792_348_260, mode, uid: 0, gid: 0 };
         let later = 1_792_348_260 + 7 * 86_400;
-        assert_eq!(file_line(HANS, &row(FileKind::Folder { items: Some(6) }, 4096, 0o040_755), later, 0), "2026/10/19  |  6 项");
-        assert_eq!(file_line(Lang::Hant, &row(FileKind::Folder { items: Some(6) }, 4096, 0o040_755), later, 0), "2026/10/19  |  6 項");
-        assert_eq!(file_line(Lang::En, &row(FileKind::Folder { items: Some(6) }, 4096, 0o040_755), later, 0), "2026/10/19  |  6 items");
-        assert_eq!(file_line(Lang::En, &row(FileKind::Folder { items: Some(1) }, 4096, 0o040_755), later, 0), "2026/10/19  |  1 item");
-        assert_eq!(file_line(HANS, &row(FileKind::Folder { items: None }, 4096, 0o040_700), later, 0), "无法读取");
-        assert_eq!(file_line(HANS, &row(FileKind::File, 26_950, 0o100_644), later, 0), "10/19  |  26.95 KB");
+        assert_eq!(file_line(HANS, &row(FileKind::Folder { items: Some(6) }, 4096, 0o040_755), later, china()), "2026/10/19  |  6 项");
+        assert_eq!(file_line(Lang::Hant, &row(FileKind::Folder { items: Some(6) }, 4096, 0o040_755), later, china()), "2026/10/19  |  6 項");
+        assert_eq!(file_line(Lang::En, &row(FileKind::Folder { items: Some(6) }, 4096, 0o040_755), later, china()), "2026/10/19  |  6 items");
+        assert_eq!(file_line(Lang::En, &row(FileKind::Folder { items: Some(1) }, 4096, 0o040_755), later, china()), "2026/10/19  |  1 item");
+        assert_eq!(file_line(HANS, &row(FileKind::Folder { items: None }, 4096, 0o040_700), later, china()), "无法读取");
+        assert_eq!(file_line(HANS, &row(FileKind::File, 26_950, 0o100_644), later, china()), "10/19  |  26.95 KB");
         let link = FileKind::Link { target: "/storage/self/primary".into(), folder: true };
-        assert_eq!(file_line(HANS, &row(link, 21, 0o120_777), later, 0), "链接到 /storage/self/primary");
-        assert_eq!(file_line(HANS, &row(FileKind::Special, 0, 0o060_600), later, 0), "10/19  |  块设备");
-        assert_eq!(file_line(Lang::En, &row(FileKind::Special, 0, 0o060_600), later, 0), "10/19  |  Block device");
+        assert_eq!(file_line(HANS, &row(link, 21, 0o120_777), later, china()), "链接到 /storage/self/primary");
+        assert_eq!(file_line(HANS, &row(FileKind::Special, 0, 0o060_600), later, china()), "10/19  |  块设备");
+        assert_eq!(file_line(Lang::En, &row(FileKind::Special, 0, 0o060_600), later, china()), "10/19  |  Block device");
     }
 
     #[test]
     fn list_dates_are_told_against_the_day_the_folder_was_read() {
         // 2026-10-19 02:31 in Beijing.
         let at = 1_792_348_260;
-        assert_eq!(file_time(at, false, at + 3600, 0), "02:31", "today: the time");
-        assert_eq!(file_time(at, true, at + 3600, 0), "02:31", "a folder today too");
-        assert_eq!(file_time(at, false, at + 86_400, 0), "10/19", "this year: a file's month and day");
-        assert_eq!(file_time(at, true, at + 86_400, 0), "2026/10/19", "this year: a folder's whole date");
-        assert_eq!(file_time(at, false, at + 90 * 86_400, 0), "2026/10/19", "another year: the whole date");
+        assert_eq!(file_time(at, false, at + 3600, china()), "02:31", "today: the time");
+        assert_eq!(file_time(at, true, at + 3600, china()), "02:31", "a folder today too");
+        assert_eq!(file_time(at, false, at + 86_400, china()), "10/19", "this year: a file's month and day");
+        assert_eq!(file_time(at, true, at + 86_400, china()), "2026/10/19", "this year: a folder's whole date");
+        assert_eq!(file_time(at, false, at + 90 * 86_400, china()), "2026/10/19", "another year: the whole date");
         // 2026-10-18 23:59 UTC is already the 19th in Beijing.
-        assert_eq!(file_time(1_792_367_940, false, at, 0), "07:59");
+        assert_eq!(file_time(1_792_367_940, false, at, china()), "07:59");
         // In London the file changed on the evening of the 18th, the day
         // before.
         assert_eq!(file_time(1_792_348_260, false, 1_792_367_940, zone("Europe/London")), "10/18");
@@ -1627,14 +1656,31 @@ mod tests {
 
     #[test]
     fn a_backup_lists_its_parts() {
-        assert_eq!(parts(HANS, &[true, true, false, true]), "启动分区、系统分区、基带与 EFS");
-        assert_eq!(parts(Lang::Hant, &[true, true, false, true]), "啟動分割區、系統分割區、基頻與 EFS");
-        assert_eq!(parts(Lang::En, &[true, true, true, true]), "Boot partitions, system partitions, data partition, modem and EFS");
+        assert_eq!(parts(HANS, &[true, true, false, false, true]), "启动分区、系统分区、基带与 EFS");
+        assert_eq!(parts(Lang::Hant, &[true, true, false, true, true]), "啟動分割區、系統分割區、內部儲存空間、基頻與 EFS");
+        assert_eq!(
+            parts(Lang::En, &[true, true, true, true, true]),
+            "Boot partitions, system partitions, data partition, internal storage, modem and EFS"
+        );
+    }
+
+    #[test]
+    fn a_data_partition_of_a_newer_android_is_said_not_to_go_back() {
+        let older = BackupRefusal::OlderAndroid { was: "17".into(), now: "16".into() };
+        assert_eq!(
+            backup_refusal(HANS, &older, true),
+            "该备份的 data 分区来自 Android 17，本机当前为 Android 16，无法恢复到更低的 Android 版本。"
+        );
+        assert_eq!(
+            backup_refusal(Lang::En, &older, true),
+            "This backup's data partition is from Android 17, and this phone runs Android 16. An older Android can't read it, so it can't be restored."
+        );
     }
 
     #[test]
     fn an_english_list_names_what_follows_the_first_as_a_sentence_does() {
         assert_eq!(list(Lang::En, ["ART cache", "App data", "Logs"]), "ART cache, app data, logs", "a word in capitals stays so");
+        assert_eq!(list(HANS, ["ART 缓存", "应用数据"]), "ART 缓存、应用数据");
         assert_eq!(bands(Lang::En, Bands { ghz2: true, ghz5: true, ghz6: false }), "2.4 GHz, 5 GHz");
         assert_eq!(bands(HANS, Bands { ghz2: true, ghz5: true, ghz6: true }), "2.4 GHz、5 GHz、6 GHz");
     }
@@ -1655,21 +1701,21 @@ mod tests {
         assert_eq!(refusal(HANS, &Refusal::OtherDevice("nezha".into()), "ishtar", pc, 0), "该更新包适用于 nezha，本机为 ishtar。");
         assert_eq!(refusal(HANS, &Refusal::Older { package: 1_770_000_000, installed: 1_778_243_655 }, "ishtar", pc, 0), "该更新包的构建日期为 2026年2月2日，早于当前系统的 2026年5月8日。");
         assert_eq!(
-            refusal(Lang::En, &Refusal::Older { package: 1_770_000_000, installed: 1_778_243_655 }, "ishtar", pc, 0),
+            refusal(Lang::En, &Refusal::Older { package: 1_770_000_000, installed: 1_778_243_655 }, "ishtar", pc, china()),
             "This package was built on February 2, 2026, before the current system, built on May 8, 2026."
         );
         assert_eq!(refusal(HANS, &Refusal::Battery { level: 12, charging: true }, "ishtar", pc, 0), "电量仅剩 12%，请充电至 15% 以上后重试。");
         assert_eq!(refusal(HANS, &Refusal::Pending(SnapshotState::Snapshotted), "ishtar", pc, 0), "更新已写入，等待合并。请重启到系统，完成上一次更新后重试。");
         assert_eq!(
-            refusal(Lang::En, &Refusal::Pending(SnapshotState::Snapshotted), "ishtar", pc, 0),
+            refusal(Lang::En, &Refusal::Pending(SnapshotState::Snapshotted), "ishtar", pc, china()),
             "Update written, waiting to merge. Reboot to the system to finish the last update, then try again."
         );
         assert_eq!(failure(HANS, &Failure::Engine(26), pc), ("更新包签名验证失败，请发送官方更新包。".into(), Some("错误代码：26".into())));
         assert_eq!(failure(Lang::Hant, &Failure::Engine(26), pc), ("更新檔簽章驗證失敗，請傳送官方更新檔。".into(), Some("錯誤代碼：26".into())));
         assert_eq!(failure(HANS, &Failure::Error("open ep0: busy".into()), pc).1.as_deref(), Some("open ep0: busy"));
         assert_eq!(failure(HANS, &Failure::Script(1), pc), ("安装脚本运行失败，退出码为 1。".into(), None));
-        assert_eq!(refusal(HANS, &Refusal::Unsigned, "ishtar", pc, 0), "该刷机包未签名，请关闭「验证刷机包签名」后重试。");
-        assert_eq!(refusal(HANS, &Refusal::Unverified, "ishtar", pc, 0), "该刷机包未通过签名验证，请关闭「验证刷机包签名」后重试。");
+        assert_eq!(refusal(HANS, &Refusal::Unsigned, "ishtar", pc, china()), "该刷机包未签名，请关闭「验证刷机包签名」后重试。");
+        assert_eq!(refusal(HANS, &Refusal::Unverified, "ishtar", pc, china()), "该刷机包未通过签名验证，请关闭「验证刷机包签名」后重试。");
     }
 
     #[test]
@@ -1784,5 +1830,48 @@ mod tests {
         assert_eq!(term_end(HANS, &TermEnd::Exited(0)), "shell 已退出，退出码 0");
         assert_eq!(term_end(Lang::Hant, &TermEnd::Signalled(9)), "shell 已被訊號 9 終止");
         assert_eq!(term_end(Lang::En, &TermEnd::Exited(127)), "The shell exited with code 127");
+    }
+
+    #[test]
+    fn every_language_writes_a_date_in_its_own_order_with_its_own_month() {
+        // The Xiaomi 13 Ultra's installed system, by its ro.build.date.utc.
+        let built = 1_778_243_655;
+        assert_eq!(date(Lang::Hant, built, china()), "2026年5月8日");
+        assert_eq!(date(Lang::Tr, built, china()), "8 Mayıs 2026");
+        assert_eq!(date(Lang::Ru, built, china()), "8 мая 2026 г.");
+        assert_eq!(date(Lang::De, built, china()), "8. Mai 2026");
+        assert_eq!(date(Lang::Fr, built, china()), "8 mai 2026");
+        assert_eq!(date(Lang::Pl, built, china()), "8 maja 2026");
+        assert_eq!(date(Lang::Ja, built, china()), "2026年5月8日");
+        for l in Lang::ALL {
+            let written = date(l, built, china());
+            assert!(written.contains("2026") && written.contains('8'), "{l:?} writes the year and the day: {written}");
+            let timed = datetime(l, built, china());
+            assert!(timed.contains(&written) && timed.contains(&clock(built, china())), "{l:?} writes the time with the date: {timed}");
+        }
+    }
+
+    #[test]
+    fn a_count_takes_the_form_its_language_gives_the_number() {
+        let items = |l, n| texts::files::line::items(l, n);
+        assert_eq!([items(Lang::En, 1), items(Lang::En, 2)], ["1 item", "2 items"]);
+        assert_eq!([items(Lang::Fr, 0), items(Lang::Fr, 1), items(Lang::Fr, 2)], ["0 élément", "1 élément", "2 éléments"], "none is one in French");
+        let russian = [1, 2, 5, 11, 21, 22, 25, 111].map(|n| items(Lang::Ru, n));
+        assert_eq!(russian, ["1 объект", "2 объекта", "5 объектов", "11 объектов", "21 объект", "22 объекта", "25 объектов", "111 объектов"]);
+        let polish = [1, 2, 5, 12, 21, 22].map(|n| items(Lang::Pl, n));
+        assert_eq!(polish, ["1 element", "2 elementy", "5 elementów", "12 elementów", "21 elementów", "22 elementy"]);
+        assert_eq!([items(Lang::Ja, 1), items(Lang::Ja, 68)], ["1 項目", "68 項目"], "one form where the language has one");
+        assert_eq!([items(HANS, 1), items(HANS, 68)], ["1 项", "68 项"]);
+    }
+
+    #[test]
+    fn a_row_of_names_is_set_and_ended_as_its_language_does() {
+        assert_eq!(list(Lang::De, ["ART-Cache", "App-Daten"]), "ART-Cache, App-Daten", "German keeps its nouns' capitals");
+        assert_eq!(list(Lang::Ru, ["Кэш ART", "Данные приложений"]), "Кэш ART, данные приложений");
+        assert_eq!(list(Lang::Tr, ["ART önbelleği", "İndirilenler", "Isı kayıtları"]), "ART önbelleği, indirilenler, ısı kayıtları", "by Turkish's own small letters");
+        assert_eq!(list(Lang::Ja, ["ART キャッシュ", "アプリのデータ"]), "ART キャッシュ、アプリのデータ");
+        assert_eq!(users(Lang::Tr, &[0, 10]), "cihaz sahibi ve kullanıcı 10");
+        assert_eq!(users(Lang::Ru, &[0, 10, 999]), "владелец, пользователь 10 и пользователь 999");
+        assert_eq!(users(Lang::Fr, &[10]), texts::users::user(Lang::Fr, 10));
     }
 }

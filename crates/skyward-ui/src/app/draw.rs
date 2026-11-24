@@ -3,6 +3,7 @@
 //! over the page.
 
 use super::*;
+use crate::tr;
 use crate::icons::{self, Icon};
 
 impl App {
@@ -1214,6 +1215,7 @@ mod tests {
             Screen::Terminal,
             Screen::Language,
             Screen::TimeZone,
+            Screen::TimeZones(Region::Asia),
             Screen::Logs,
             Screen::Update,
             Screen::SkywardUpdate,

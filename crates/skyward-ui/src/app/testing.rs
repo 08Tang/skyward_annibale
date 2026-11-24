@@ -26,6 +26,7 @@ pub(super) fn info() -> DeviceInfo {
         os_version: None,
         android: None,
         locale: None,
+        time_zone: None,
         security_patch: None,
         kernel: "5.15.178".into(),
         storage: Storage { total: 496_550_785_024, free: None },
@@ -353,6 +354,12 @@ pub(super) fn network(name: &str, signal: i32, security: Security) -> Network {
 pub(super) fn joined(name: &str, stage: Joining) -> Wlan {
     let n = network(name, -34, Security::Psk);
     Wlan { power: Power::On, networks: vec![n.clone()], joined: Some(skyward_net::wlan::Joined { ssid: n.ssid, name: n.name, security: n.security, stage }) }
+}
+
+/// Partitions an image can go to, each of which the phone has in both
+/// slots.
+pub(super) fn slotted(names: &[&str]) -> Vec<FlashTarget> {
+    names.iter().map(|name| FlashTarget { name: name.to_string(), place: FlashPlace::Slotted }).collect()
 }
 
 pub(super) fn connected(name: &str) -> Wlan {
