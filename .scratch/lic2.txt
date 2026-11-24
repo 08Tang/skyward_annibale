@@ -1,0 +1,13 @@
+﻿unbalanced: none
+5284     // margin under it, and the keys at the foot are counted in the page's
+5285     // height rather than taken from it, so the last of it stops above them.
+5286     let c = fit(c, t, end);
+5287     Frame { caret: Some(caret), dock, content_end: Some(end), ..Frame::new(t, c, out, title, top) }
+5288 }
+5289 
+5290 
+5291 const LICENSE_ORIGINAL: &str = "Skyward\nCopyright (C) 2026 Kirk Lin\n\n\
+5292 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public Licens
+5293 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warra
+5294 You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.
+5295 

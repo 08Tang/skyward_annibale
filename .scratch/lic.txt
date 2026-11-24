@@ -1,0 +1,20 @@
+﻿5281         None
+5282     };
+5283     // What the page scrolls to is where its content stops: `fit` adds the
+5284     // margin under it, and the keys at the foot are counted in the page's
+5285     // height rather than taken from it, so the last of it stops above them.
+5286     let c = fit(c, t, end);
+5287     Frame { caret: Some(caret), dock, content_end: Some(end), ..Frame::new(t, c, out, title, top) }
+5288 }
+5289 
+5290 发布 Skyward 是希望它有用，但不附带任何担保，也不担保其适销性或适用于特定用途。详见 GNU 通用公共许可证。",
+5291     "Skyward 是自由軟體：你可以依據自由軟體基金會發布的 GNU 通用公眾授權條款第 3 版，或（由你選擇）任何更新的版本，重新發布和修改它。\n\n\
+5292 發布 Skyward 是希望它有用，但不附帶任何擔保，也不擔保其適銷性或適用於特定用途。詳見 GNU 通用公眾授權條款。",
+5293 ];
+5294 
+5295 const LICENSE_ORIGINAL: &str = "Skyward\nCopyright (C) 2026 Kirk Lin\n\n\
+5296 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public Licens
+5297 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warra
+5298 You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.
+5299 
+5300 /// Skyward's own licence.
