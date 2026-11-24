@@ -1,0 +1,17 @@
+﻿5376     let y = widgets::section_first(&mut c, t, f, top, l.pick(texts::reboot::NEXT_BOOT));
+5377     let titles = [Slot::A, Slot::B].map(|slot| texts::slot::named(l, slot.letter()));
+5378     let subs = [Slot::A, Slot::B].map(|slot| {
+5379         let k = slot.number() as usize;
+5380         l.pick(match (slot == current, slots.bootable[k], slots.successful[k]) {
+5381             (true, false, _) => texts::slot::RUNNING_UNBOOTABLE,
+5382             (true, true, false) => texts::slot::RUNNING_UNSTARTED,
+5383             (true, true, true) => texts::slot::RUNNING,
+5384             (false, false, _) => texts::slot::OTHER_UNBOOTABLE,
+5385             (false, true, false) => texts::slot::OTHER_UNSTARTED,
+5386             (false, true, true) => texts::slot::OTHER,
+5387         })
+5388     });
+5389     let rows: Vec<Row> = [Slot::A, Slot::B].iter().enumerate().map(|(k, &slot)| Row::new(&titles[k]).subtitle(subs[k]).trail(Trail::Check(slot == chosen))).collect();
+5390     let list = widgets::list(&mut c, t, f, y, &rows);
+5391     out.extend(hits(&list.rows, &[Slot::A, Slot::B].map(Action::PickSlot)));
+5392     if let Some(note) = fmt::snapshot_slot_note(l, &i.snapshot) {

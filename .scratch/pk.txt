@@ -1,0 +1,7 @@
+﻿pub fn pick<T: Copy>(self, each: [T; Lang::COUNT]) -> T {
+        each[self as usize]
+    }
+
+    /// Of something written in the two kinds of Chinese characters and in
+    /// English alone, as a phone's own description of itself is, the one
+    /// this language reads: its own, or else the English.
