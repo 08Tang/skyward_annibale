@@ -221,6 +221,7 @@ pub enum RecordSetting {
 
 /// Choices the pages show and the user changes, and where installing
 /// stands.
+#[derive(Clone, Debug, PartialEq)]
 pub struct State {
     /// The language the pages speak.
     pub lang: Lang,
