@@ -5438,6 +5438,10 @@ pub fn license(cx: &Ctx) -> Frame {
 /// its first lines; the image carries the same file beside the font.
 const MONO_LICENSE: &str = include_str!("../../../resources/fonts/KirkMono-OFL.txt");
 
+/// The emoji typefaces' licence, which names the copyright holder on its
+/// first lines; the image carries the same file beside the fonts.
+const EMOJI_LICENSE: &str = include_str!("../../../resources/fonts/NotoColorEmoji-OFL.txt");
+
 /// The typefaces, as they name themselves, and the terms each is used under.
 pub fn font_license(cx: &Ctx) -> Frame {
     let (t, f, l) = (cx.t, cx.f, cx.state.lang);
@@ -5472,7 +5476,28 @@ pub fn font_license(cx: &Ctx) -> Frame {
         "終端機文字使用 Kirk Mono 等寬字型。這份授權條款允許自由使用、修改和再散布字型，但不允許單獨出售字型。\n\n授權條款全文位於 /skyward/KirkMono-OFL.txt，也可在 openfontlicense.org 查看。",
         "The terminal text is set in the monospaced Kirk Mono. Its license lets the font be used, changed and passed on freely, but not sold on its own.\n\nThe license in full is at /skyward/KirkMono-OFL.txt, and on openfontlicense.org.",
     ]);
-    let bottom = widgets::paragraph(&mut c, t, f, y + t.m.dp(4.0), mono);
+    let y = widgets::paragraph(&mut c, t, f, y + t.m.dp(4.0), mono);
+    // The emoji are drawn from a typeface of their own, which is under the
+    // same licence as the terminal's but names a different holder.
+    let y = widgets::section(&mut c, t, f, y, l.pick(["表情符号", "表情符號", "Emoji"]));
+    let holders: Vec<&str> = EMOJI_LICENSE.lines().take_while(|l| l.starts_with("Copyright")).collect();
+    let y = widgets::info_card(
+        &mut c,
+        t,
+        f,
+        y,
+        &[
+            (typeface, "Noto Color Emoji".to_string()),
+            (copyright, holders.join("\n")),
+            (l.pick(LICENSE_TERMS), l.pick(["SIL 开源字体许可证 1.1 版（OFL-1.1）", "SIL 開放字型授權條款 1.1 版（OFL-1.1）", "SIL Open Font License, version 1.1 (OFL-1.1)"]).to_string()),
+        ],
+    );
+    let emoji = l.pick([
+        "名字里的表情符号使用 Google 的 Noto Color Emoji 绘制。该许可证允许自由使用、修改和再发布字体，但不允许单独出售字体。\n\n许可证全文位于 /skyward/NotoColorEmoji-OFL.txt，也可在 openfontlicense.org 查看。",
+        "名字裡的表情符號使用 Google 的 Noto Color Emoji 繪製。這份授權條款允許自由使用、修改和再散布字型，但不允許單獨出售字型。\n\n授權條款全文位於 /skyward/NotoColorEmoji-OFL.txt，也可在 openfontlicense.org 查看。",
+        "An emoji in a name is drawn from Google's Noto Color Emoji. Its license lets the font be used, changed and passed on freely, but not sold on its own.\n\nThe license in full is at /skyward/NotoColorEmoji-OFL.txt, and on openfontlicense.org.",
+    ]);
+    let bottom = widgets::paragraph(&mut c, t, f, y + t.m.dp(4.0), emoji);
     Frame::new(t, fit(c, t, bottom), Vec::new(), l.pick(FONTS), top)
 }
 
