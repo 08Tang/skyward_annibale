@@ -483,6 +483,11 @@ pub fn strip_with(
     // The other place the files can be shown from, beside the trail: its
     // label and what reaching it does (`None` where there is but one place).
     other: Option<(&str, Action)>,
+    // One more place to go, pinned to the end of the trail rather than to the
+    // right of the strip: the card the files can also be read from, which
+    // reads as one more step below the folder shown (`None` where there is
+    // nowhere else, as there is not while it is the folder shown).
+    tail: Option<(&str, Action)>,
 ) -> Pinned {
     let m = &t.m;
     let p = palette(t);
@@ -564,6 +569,17 @@ pub fn strip_with(
             arrow(&mut c, t, x + *width + m.dp(ARROW_GAP_DP), x_top + h / 2.0, p.arrow);
         }
         x += *width + step;
+    }
+
+    // The tail, one more step past the folder shown: a place the files can be
+    // read from that is not a folder above this one, so it is drawn as one
+    // more pill of the trail and leads there rather than up.
+    if let Some((label, action)) = tail {
+        let width = c.text_width(&f.value, label, px) + m.dp(PILL_PAD_DP) * 2.0;
+        if x + width <= right_limit {
+            widgets::pill_sized(&mut c, f, x, x_top, h, px, m.dp(PILL_PAD_DP), label, p.pill, p.pill_text);
+            hits.push(Hit { rect: Rect::new(x, x_top, width, h), action });
+        }
     }
 
     // The other place, pinned to the right of the trail.
@@ -716,12 +732,12 @@ mod tests {
     fn the_path_goes_up_by_its_capsules_and_shows_its_end_when_long() {
         let f = crate::font::bundled();
         let t = Theme::light(1440, 3200, 3.5);
-        let path = strip_with(&t, &f, "根目录", "/system/bin", None);
+        let path = strip_with(&t, &f, "根目录", "/system/bin", None, None);
         let ups = |p: &Pinned| -> Vec<Action> { p.hits.iter().map(|h| h.action).filter(|a| matches!(a, Action::OpenAncestor(_))).collect() };
         assert_eq!(ups(&path), [Action::OpenAncestor(0), Action::OpenAncestor(1)], "the root and system go up; bin is where we are");
-        let place = strip_with(&t, &f, "内部存储", "Download", None);
+        let place = strip_with(&t, &f, "内部存储", "Download", None, None);
         assert_eq!(ups(&place), [Action::OpenAncestor(0)], "a place's top goes up");
-        let deep = strip_with(&t, &f, "根目录", "/data/media/0/Android/data/com.example.something.long/files/cache/images", None);
+        let deep = strip_with(&t, &f, "根目录", "/data/media/0/Android/data/com.example.something.long/files/cache/images", None, None);
         let last = deep.hits.last().expect("the capsules before the folder shown");
         assert!(last.rect.x + last.rect.w < t.m.w as f32, "the end shows");
         // A trail too long for the strip leaves the middle out rather than

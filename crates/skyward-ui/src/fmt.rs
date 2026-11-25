@@ -369,12 +369,19 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
     }
 }
 
+/// The text of `each` this language reads, made into a `String`; a free
+/// function rather than a closure because the arrays it is given are of
+/// different lengths.
+fn picked<const N: usize>(l: Lang, each: [&'static str; N]) -> String {
+    l.pick(each).to_string()
+}
+
 /// What the update page says of an update standing so, and the line under
 /// it on what comes next; `next` is the slot the bootloader starts next,
 /// where the boot control could tell.
 pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Option<String>) {
     use texts::update::standing;
-    let line = |text: &[&'static str]| Some(l.pick(text).to_string());
+    let line = |text: [&'static str; 3]| Some(l.pick(text).to_string());
     match s {
         Standing::None => (l.pick(["暂无待合并的更新", "沒有待合併的更新", "No update waiting to merge"]), None),
         Standing::Unknown => (
@@ -403,11 +410,11 @@ pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Optio
             };
             (l.pick(standing::INSTALLED), Some(detail))
         }
-        Standing::Waiting => (l.pick(standing::WAITING), line(standing::MERGES_OR_HERE)),
-        Standing::Compressed => (l.pick(standing::WAITING), line(standing::MERGES_IN_SYSTEM)),
+        Standing::Waiting => (l.pick(standing::WAITING), Some(picked(l, standing::MERGES_OR_HERE))),
+        Standing::Compressed => (l.pick(standing::WAITING), Some(picked(l, standing::MERGES_IN_SYSTEM))),
         Standing::Merging(_) => (l.pick(texts::snapshot::MERGING), None),
         Standing::Failed(code) => (l.pick(texts::snapshot::FAILED), Some(standing::goes_on_after_reboot(l, format!("{code:?}")))),
-        Standing::Merged => (l.pick(standing::MERGED), line(standing::CLEARED_NEXT_START)),
+        Standing::Merged => (l.pick(standing::MERGED), Some(picked(l, standing::CLEARED_NEXT_START))),
     }
 }
 
@@ -493,7 +500,7 @@ pub fn users(l: Lang, users: &[u32]) -> String {
 /// it when there is that.
 pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
     use texts::wipe::failed;
-    let said = |text: &[&'static str]| l.pick(text).to_string();
+    let said = |text: [&'static str; 3]| l.pick(text).to_string();
     match s {
         EraseStop::Update(Hold::Unconfirmed) => (
             said([
@@ -774,7 +781,7 @@ const UNEXPECTED: Text = [
     "Something went wrong.",
     "Something went wrong.",
     "Something went wrong.",
-    ];
+];
 const LOGIN: Text = [
     "需要先在网页上登录才能访问互联网，Skyward 无法打开网页登录。可以改用无需登录的网络，例如手机热点。",
     "需要先在網頁上登入才能連上網際網路，Skyward 無法開啟網頁登入。可以改用無需登入的網路，例如手機熱點。",
@@ -791,7 +798,7 @@ const LOGIN: Text = [
     "needs a sign-in in a browser before it reaches the internet, and Skyward has no browser to sign in with. Use a network that needs no sign-in instead, such as a phone's hotspot.",
     "needs a sign-in in a browser before it reaches the internet, and Skyward has no browser to sign in with. Use a network that needs no sign-in instead, such as a phone's hotspot.",
     "needs a sign-in in a browser before it reaches the internet, and Skyward has no browser to sign in with. Use a network that needs no sign-in instead, such as a phone's hotspot.",
-    ];
+];
 
 /// The rules of each of [`TIME_ZONES`], read once from the ones the
 /// recovery carries.
@@ -947,55 +954,55 @@ pub fn parts(l: Lang, held: &[bool; 5]) -> String {
 /// What an image is, and what it holds.
 pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
     const RECOVERY: Text = [
-    "恢复模式镜像",
-    "復原模式映像檔",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
-    "Recovery image",
+        "恢复模式镜像",
+        "復原模式映像檔",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
+        "Recovery image",
     ];
     const BOOT: Text = [
-    "启动镜像",
-    "啟動映像檔",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
-    "Boot image",
+        "启动镜像",
+        "啟動映像檔",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
+        "Boot image",
     ];
     let (name, holds) = match kind {
-        ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Holds a kernel and a recovery ramdisk"]),
-        ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds a recovery ramdisk alone"]),
-        ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (BOOT, ["包含内核和通用 ramdisk", "包含核心和通用 ramdisk", "Holds a kernel and a generic ramdisk"]),
-        ImageKind::Boot { kernel: true, ramdisk: Ramdisk::None } => (BOOT, ["仅包含内核", "僅包含核心", "Holds a kernel alone"]),
-        ImageKind::Boot { kernel: false, .. } => (BOOT, ["仅包含通用 ramdisk", "僅包含通用 ramdisk", "Holds a generic ramdisk alone"]),
+        ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (&RECOVERY[..], &["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Holds a kernel and a recovery ramdisk"]),
+        ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (&RECOVERY[..], &["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds a recovery ramdisk alone"]),
+        ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (&BOOT[..], &["包含内核和通用 ramdisk", "包含核心和通用 ramdisk", "Holds a kernel and a generic ramdisk"]),
+        ImageKind::Boot { kernel: true, ramdisk: Ramdisk::None } => (&BOOT[..], &["仅包含内核", "僅包含核心", "Holds a kernel alone"]),
+        ImageKind::Boot { kernel: false, .. } => (&BOOT[..], &["仅包含通用 ramdisk", "僅包含通用 ramdisk", "Holds a generic ramdisk alone"]),
         ImageKind::VendorBoot => {
-            (["vendor_boot 镜像", "vendor_boot 映像檔", "vendor_boot image"], ["包含厂商 ramdisk 和设备树", "包含廠商 ramdisk 和裝置樹", "Holds the vendor ramdisk and device tree"])
+            (&["vendor_boot 镜像", "vendor_boot 映像檔", "vendor_boot image"][..], &["包含厂商 ramdisk 和设备树", "包含廠商 ramdisk 和裝置樹", "Holds the vendor ramdisk and device tree"][..])
         }
-        ImageKind::Dtbo => (["dtbo 镜像", "dtbo 映像檔", "dtbo image"], ["包含设备树叠加层", "包含裝置樹疊加層", "Holds device tree overlays"]),
-        ImageKind::Vbmeta => (["vbmeta 镜像", "vbmeta 映像檔", "vbmeta image"], ["包含启动验证数据", "包含啟動驗證資料", "Holds verified boot data"]),
-        ImageKind::Super => (["super 镜像", "super 映像檔", "super image"], ["包含全部逻辑分区", "包含全部邏輯分割區", "Holds every logical partition"]),
+        ImageKind::Dtbo => (&["dtbo 镜像", "dtbo 映像檔", "dtbo image"][..], &["包含设备树叠加层", "包含裝置樹疊加層", "Holds device tree overlays"]),
+        ImageKind::Vbmeta => (&["vbmeta 镜像", "vbmeta 映像檔", "vbmeta image"][..], &["包含启动验证数据", "包含啟動驗證資料", "Holds verified boot data"]),
+        ImageKind::Super => (&["super 镜像", "super 映像檔", "super image"][..], &["包含全部逻辑分区", "包含全部邏輯分割區", "Holds every logical partition"]),
         ImageKind::Filesystem(filesystem) => {
             return (l.pick(PARTITION), texts::image::holds::filesystem(l, filesystem.name()));
         }
-        ImageKind::Other => (PARTITION, ["内容不明", "內容不明", "Holds what couldn't be identified"]),
+        ImageKind::Other => (&PARTITION[..], &["内容不明", "內容不明", "Holds what couldn't be identified"][..]),
     };
     (l.pick(name), l.pick(holds).into())
 }
@@ -1016,7 +1023,7 @@ const PARTITION: Text = [
     "Partition image",
     "Partition image",
     "Partition image",
-    ];
+];
 
 /// What a partition an image can go to is for.
 pub fn partition_role(l: Lang, partition: &FlashTarget) -> &'static str {
@@ -1188,7 +1195,7 @@ pub fn erase_request_refusal(l: Lang, r: &Refusal, codename: &str) -> String {
 /// What went wrong installing a package from `source`, and the details
 /// behind it when there are any.
 pub fn failure(l: Lang, f: &Failure, source: Source) -> (String, Option<String>) {
-    let said = |text: &[&'static str]| l.pick(text).to_string();
+    let said = |text: [&'static str; 3]| l.pick(text).to_string();
     match f {
         Failure::Engine(code) => {
             let what = match (Trouble::of(*code), source) {

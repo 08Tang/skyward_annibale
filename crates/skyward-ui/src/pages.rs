@@ -134,21 +134,21 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
 pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
     use texts::confirm;
     const INSTALL: Text = [
-    "滑动以安装",
-    "滑動以安裝",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
-    "Slide to install",
+        "滑动以安装",
+        "滑動以安裝",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
+        "Slide to install",
     ];
     let (label, danger) = match which {
         // 锁屏自己画它，这张只给按住电源键时的滑块用。
@@ -232,7 +232,7 @@ const WLAN: Text = [
     "WLAN",
     "WLAN",
     "WLAN",
-    ];
+];
 /// Whether the WLAN opens as the recovery starts.
 const WLAN_AUTO: Text = [
     "WiFi 自动连接",
@@ -250,7 +250,7 @@ const WLAN_AUTO: Text = [
     "WLAN on at start",
     "WLAN on at start",
     "WLAN on at start",
-    ];
+];
 /// Whether the password of the network joined last is kept with it.
 const WLAN_KEEP: Text = [
     "记住 WiFi 密码",
@@ -268,7 +268,7 @@ const WLAN_KEEP: Text = [
     "Keep the password",
     "Keep the password",
     "Keep the password",
-    ];
+];
 const DECRYPT: Text = [
     "解密",
     "解密",
@@ -285,7 +285,7 @@ const DECRYPT: Text = [
     "Decrypt",
     "Decrypt",
     "Decrypt",
-    ];
+];
 const ADVANCED: Text = [
     "高级工具",
     "進階工具",
@@ -302,7 +302,7 @@ const ADVANCED: Text = [
     "Advanced",
     "Advanced",
     "Advanced",
-    ];
+];
 const SETTINGS: Text = [
     "选项设置",
     "選項設定",
@@ -319,7 +319,7 @@ const SETTINGS: Text = [
     "Options",
     "Options",
     "Options",
-    ];
+];
 const REBOOT: Text = [
     "重启系统",
     "重新啟動",
@@ -336,7 +336,7 @@ const REBOOT: Text = [
     "Reboot",
     "Reboot",
     "Reboot",
-    ];
+];
 const LOGS: Text = [
     "导出日志",
     "匯出記錄",
@@ -353,7 +353,7 @@ const LOGS: Text = [
     "Export logs",
     "Export logs",
     "Export logs",
-    ];
+];
 const UPDATE: Text = [
     "系统更新",
     "系統更新",
@@ -370,7 +370,7 @@ const UPDATE: Text = [
     "System update",
     "System update",
     "System update",
-    ];
+];
 
 const MODEL: Text = [
     "设备型号",
@@ -388,7 +388,7 @@ const MODEL: Text = [
     "Model",
     "Model",
     "Model",
-    ];
+];
 const DATA_PART_NAME: Text = [
     "data 分区",
     "data 分割區",
@@ -405,7 +405,7 @@ const DATA_PART_NAME: Text = [
     "data partition",
     "data partition",
     "data partition",
-    ];
+];
 const UNREADABLE: Text = [
     "无法读取",
     "無法讀取",
@@ -422,7 +422,7 @@ const UNREADABLE: Text = [
     "Unreadable",
     "Unreadable",
     "Unreadable",
-    ];
+];
 const REFLASHING: Text = [
     "正在重新刷入 Skyward",
     "正在重新刷入 Skyward",
@@ -439,7 +439,7 @@ const REFLASHING: Text = [
     "Flashing Skyward again",
     "Flashing Skyward again",
     "Flashing Skyward again",
-    ];
+];
 const READING_FILE: Text = [
     "正在读取文件",
     "正在讀取檔案",
@@ -456,7 +456,7 @@ const READING_FILE: Text = [
     "Reading the file",
     "Reading the file",
     "Reading the file",
-    ];
+];
 const RUN_ON_COMPUTER: Text = [
     "在电脑上运行",
     "在電腦上執行",
@@ -473,7 +473,7 @@ const RUN_ON_COMPUTER: Text = [
     "Run on the computer",
     "Run on the computer",
     "Run on the computer",
-    ];
+];
 const GETTING_READY: Text = [
     "正在准备",
     "正在準備",
@@ -490,7 +490,7 @@ const GETTING_READY: Text = [
     "Getting ready",
     "Getting ready",
     "Getting ready",
-    ];
+];
 const WIPING: Text = [
     "正在清除",
     "正在清除",
@@ -507,7 +507,7 @@ const WIPING: Text = [
     "Wiping",
     "Wiping",
     "Wiping",
-    ];
+];
 const KEEP_POWER: Text = [
     "清除完成前，请不要关机。",
     "清除完成前，請不要關機。",
@@ -524,7 +524,7 @@ const KEEP_POWER: Text = [
     "Don't power off until it's wiped.",
     "Don't power off until it's wiped.",
     "Don't power off until it's wiped.",
-    ];
+];
 const VERIFIED: Text = [
     "已校验",
     "已驗證",
@@ -541,7 +541,7 @@ const VERIFIED: Text = [
     "Verified",
     "Verified",
     "Verified",
-    ];
+];
 const VERIFYING: Text = [
     "正在校验",
     "正在驗證",
@@ -558,7 +558,7 @@ const VERIFYING: Text = [
     "Verifying",
     "Verifying",
     "Verifying",
-    ];
+];
 const WAITING_TURN: Text = [
     "等待中",
     "等待中",
@@ -575,7 +575,7 @@ const WAITING_TURN: Text = [
     "Waiting",
     "Waiting",
     "Waiting",
-    ];
+];
 const RESTORE_FAILED: Text = [
     "恢复失败",
     "還原失敗",
@@ -592,7 +592,7 @@ const RESTORE_FAILED: Text = [
     "Restore failed",
     "Restore failed",
     "Restore failed",
-    ];
+];
 const ACTIONS: Text = [
     "操作",
     "操作",
@@ -609,7 +609,7 @@ const ACTIONS: Text = [
     "Actions",
     "Actions",
     "Actions",
-    ];
+];
 const CHECKING: Text = [
     "正在检查更新",
     "正在檢查更新",
@@ -626,7 +626,7 @@ const CHECKING: Text = [
     "Checking for updates",
     "Checking for updates",
     "Checking for updates",
-    ];
+];
 const DOWNLOADING: Text = [
     "正在下载",
     "正在下載",
@@ -643,7 +643,7 @@ const DOWNLOADING: Text = [
     "Downloading",
     "Downloading",
     "Downloading",
-    ];
+];
 const CHECKING_PART: Text = [
     "正在校验已下载的部分",
     "正在驗證已下載的部分",
@@ -660,7 +660,7 @@ const CHECKING_PART: Text = [
     "Verifying what was downloaded",
     "Verifying what was downloaded",
     "Verifying what was downloaded",
-    ];
+];
 const NOTES: Text = [
     "注意事项",
     "注意事項",
@@ -677,7 +677,7 @@ const NOTES: Text = [
     "Notes",
     "Notes",
     "Notes",
-    ];
+];
 const CANCEL: Text = [
     "取消",
     "取消",
@@ -694,7 +694,7 @@ const CANCEL: Text = [
     "Cancel",
     "Cancel",
     "Cancel",
-    ];
+];
 const RENAME: Text = [
     "重命名",
     "重新命名",
@@ -711,7 +711,7 @@ const RENAME: Text = [
     "Rename",
     "Rename",
     "Rename",
-    ];
+];
 const LICENSE_TERMS: Text = [
     "许可证",
     "授權條款",
@@ -728,7 +728,7 @@ const LICENSE_TERMS: Text = [
     "License",
     "License",
     "License",
-    ];
+];
 const POWERS_OFF_WHEN_DONE: Text = [
     "完成后将自动关机。",
     "完成後將自動關機。",
@@ -745,7 +745,7 @@ const POWERS_OFF_WHEN_DONE: Text = [
     "Powers off on its own once done.",
     "Powers off on its own once done.",
     "Powers off on its own once done.",
-    ];
+];
 const REBOOTS_WHEN_DONE: Text = [
     "完成后将自动重启。",
     "完成後將自動重新啟動。",
@@ -762,7 +762,7 @@ const REBOOTS_WHEN_DONE: Text = [
     "Reboots on its own once done.",
     "Reboots on its own once done.",
     "Reboots on its own once done.",
-    ];
+];
 const SKYWARD_UPDATE: Text = [
     "版本更新",
     "版本更新",
@@ -779,7 +779,7 @@ const SKYWARD_UPDATE: Text = [
     "Version update",
     "Version update",
     "Version update",
-    ];
+];
 /// Reporting a bug to the author, with the logs that show it.
 const FEEDBACK: Text = [
     "问题反馈",
@@ -797,7 +797,7 @@ const FEEDBACK: Text = [
     "Report a bug",
     "Report a bug",
     "Report a bug",
-    ];
+];
 
 /// How many lines of a bug report the field shows at once: more than a
 /// sentence, and few enough that the page under it is still read.
@@ -818,7 +818,7 @@ const FILES: Text = [
     "File manager",
     "File manager",
     "File manager",
-    ];
+];
 const TERMINAL: Text = [
     "终端",
     "終端機",
@@ -835,7 +835,7 @@ const TERMINAL: Text = [
     "Terminal",
     "Terminal",
     "Terminal",
-    ];
+];
 const LANGUAGE: Text = [
     "语言",
     "語言",
@@ -852,7 +852,7 @@ const LANGUAGE: Text = [
     "Language",
     "Language",
     "Language",
-    ];
+];
 const TIME_ZONE: Text = [
     "时区",
     "時區",
@@ -869,7 +869,7 @@ const TIME_ZONE: Text = [
     "Time zone",
     "Time zone",
     "Time zone",
-    ];
+];
 const LICENSE: Text = [
     "开源许可",
     "開放原始碼授權",
@@ -886,7 +886,7 @@ const LICENSE: Text = [
     "Open source licenses",
     "Open source licenses",
     "Open source licenses",
-    ];
+];
 const FONTS: Text = [
     "界面字体",
     "介面字型",
@@ -903,7 +903,7 @@ const FONTS: Text = [
     "UI fonts",
     "UI fonts",
     "UI fonts",
-    ];
+];
 const DUAL_BOOT: Text = [
     "第二系统",
     "第二系統",
@@ -920,7 +920,7 @@ const DUAL_BOOT: Text = [
     "Dual boot",
     "Dual boot",
     "Dual boot",
-    ];
+];
 
 /// A canvas for a page `h` tall in the colour `bg`, holding the rows `cx`
 /// asks to be drawn.
@@ -3516,7 +3516,7 @@ const SERVE: Text = [
     "Wireless transfer",
     "Wireless transfer",
     "Wireless transfer",
-    ];
+];
 const FETCH: Text = [
     "网络下载",
     "網路下載",
@@ -3533,7 +3533,7 @@ const FETCH: Text = [
     "Download",
     "Download",
     "Download",
-    ];
+];
 /// A length of bytes in the units the pages speak.
 fn mb(bytes: u64) -> String {
     match bytes {
@@ -3822,7 +3822,7 @@ const MODULES: Text = [
     "Modules",
     "Modules",
     "Modules",
-    ];
+];
 const DATA_APPS: Text = [
     "应用管理",
     "應用程式管理",
@@ -3839,7 +3839,7 @@ const DATA_APPS: Text = [
     "Apps",
     "Apps",
     "Apps",
-    ];
+];
 const SYSTEM_APPS: Text = [
     "系统应用",
     "系統應用程式",
@@ -3856,7 +3856,7 @@ const SYSTEM_APPS: Text = [
     "System apps",
     "System apps",
     "System apps",
-    ];
+];
 const RELABEL: Text = [
     "修复 SELinux 上下文",
     "修復 SELinux 上下文",
@@ -3873,7 +3873,7 @@ const RELABEL: Text = [
     "Fix SELinux contexts",
     "Fix SELinux contexts",
     "Fix SELinux contexts",
-    ];
+];
 const FILESYSTEMS: Text = [
     "文件系统",
     "檔案系統",
@@ -3890,7 +3890,7 @@ const FILESYSTEMS: Text = [
     "Filesystems",
     "Filesystems",
     "Filesystems",
-    ];
+];
 const PARTITIONS: Text = [
     "分区管理",
     "分割區管理",
@@ -3907,7 +3907,7 @@ const PARTITIONS: Text = [
     "Partitions",
     "Partitions",
     "Partitions",
-    ];
+];
 const IMAGE_BACKUP: Text = [
     "镜像备份",
     "映像檔備份",
@@ -3924,7 +3924,7 @@ const IMAGE_BACKUP: Text = [
     "Image backup",
     "Image backup",
     "Image backup",
-    ];
+];
 const POWER_OFF: Text = [
     "关机",
     "關機",
@@ -3941,7 +3941,7 @@ const POWER_OFF: Text = [
     "Power off",
     "Power off",
     "Power off",
-    ];
+];
 const TASKS: Text = [
     "任务",
     "任務",
@@ -3958,7 +3958,7 @@ const TASKS: Text = [
     "Tasks",
     "Tasks",
     "Tasks",
-    ];
+];
 const CHARGE: Text = [
     "充电设置",
     "充電設定",
@@ -3975,7 +3975,7 @@ const CHARGE: Text = [
     "Charging",
     "Charging",
     "Charging",
-    ];
+];
 const AVB: Text = [
     "AVB 校验",
     "AVB 驗證",
@@ -3992,7 +3992,7 @@ const AVB: Text = [
     "AVB verification",
     "AVB verification",
     "AVB verification",
-    ];
+];
 /// A pill's tap target: the pill and a little about it, so that a finger that
 /// lands beside it still finds it.
 fn pill_hit(t: &Theme, x: f32, y: f32, w: f32, h: f32, action: Action) -> Hit {
@@ -5693,7 +5693,7 @@ fn listing(
         }
         (None, Ok(entries)) => Some(files::rows(t, f, entries, action)),
     };
-    let pinned = Some(files::strip_with(t, f, top, &folder.path, places_other));
+    let pinned = Some(files::strip_with(t, f, top, &folder.path, places_other, card_place));
     Frame { bg, rows, pinned, ..Frame::new(t, c, Vec::new(), title, t.m.dp(files::LIST_TOP_DP)) }
 }
 
