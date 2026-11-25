@@ -175,7 +175,7 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
         Confirm::SwitchSystem => (&["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"][..], false),
         Confirm::RemoveSystem => (&["滑动以删除", "滑動以刪除", "Slide to remove"][..], true),
         Confirm::DeleteApp => (&["滑动以卸载", "滑動以卸載", "Slide to uninstall"][..], true),
-        Confirm::InstallSystem => (INSTALL, false),
+        Confirm::InstallSystem => (&INSTALL[..], false),
         Confirm::ExportImage(_) => (&["滑动以备份", "滑動以備份", "Slide to back up"][..], false),
         Confirm::ImportImage(_) => (&["滑动以写回", "滑動以寫回", "Slide to write back"][..], true),
         Confirm::DeleteImage(_) => (&["滑动以删除", "滑動以刪除", "Slide to delete"][..], true),
@@ -1929,6 +1929,18 @@ pub fn charge(cx: &Ctx) -> Frame {
                     "不启动充电服务，内核把电流限在它给未认证电池的上限，5W+。",
                     "不啟動充電服務，核心把電流限在它給未認證電池的上限，5W+。",
                     "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
+                    "Neither service runs, so the kernel holds the current at the ceiling it sets an unchecked battery: 5W+.",
                 ],
             ),
             (
@@ -1937,6 +1949,18 @@ pub fn charge(cx: &Ctx) -> Frame {
                 [
                     "启动小米充电服务，内核被告知电池已通过认证，10W+。",
                     "啟動小米充電服務，核心被告知電池已通過認證，10W+。",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
+                    "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
                     "Xiaomi's charging service runs, so the kernel is told the battery passed its check: 10W+.",
                 ],
             ),
@@ -2815,7 +2839,7 @@ fn afterwards_of(c: &mut Canvas, cx: &Ctx, y: f32, installed: bool) -> f32 {
 /// What the wipe page lists of [`WIPES`] beyond everything, under the
 /// partition each is in.
 const WIPE_GROUPS: [(Text, &[Wipe]); 2] =
-    [(DATA_PART_NAME, &[Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates]), (&["cache 分区", "cache 分割區", "cache partition"][..], &[Wipe::Cache])];
+    [(DATA_PART_NAME, &[Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates]), (["cache 分区", "cache 分割區", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition", "cache partition"], &[Wipe::Cache])];
 
 /// What a factory reset erases, as the wipe page tells it of its first
 /// choice, and the page that carries one out for the system tells it.
@@ -3317,8 +3341,8 @@ impl Pass {
 /// each language.
 fn job_words(restore: bool) -> (Text, Text) {
     match restore {
-        true => (&["已恢复", "已還原", "Restored"][..], &["正在恢复", "正在還原", "Restoring"][..]),
-        false => (&["已备份", "已備份", "Backed up"][..], &["正在备份", "正在備份", "Backing up"][..]),
+        true => (["已恢复", "已還原", "Restored", "Restored", "Restored", "Restored", "Restored", "Restored", "Restored", "Restored", "Restored", "Restored", "Restored", "Restored", "Restored"], ["正在恢复", "正在還原", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring", "Restoring"]),
+        false => (["已备份", "已備份", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up", "Backed up"], ["正在备份", "正在備份", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up", "Backing up"]),
     }
 }
 /// Where part `k` of a backup or restore stands, as its row says it.
