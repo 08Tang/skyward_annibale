@@ -56,6 +56,22 @@ impl App {
         self.state.sys_apps = Some(list);
     }
 
+    /// Which system apps the system has disabled, read from what the script
+    /// wrote back after the last start. Redrawn, since the page shows it.
+    pub fn set_app_disabled(&mut self, states: std::collections::BTreeMap<String, bool>) {
+        self.state.app_disabled = Some(states);
+        self.refresh();
+    }
+
+    /// A change was asked for and queued: the page shows that app as waiting
+    /// rather than as changed, since only the system itself can change it, and
+    /// only at the next start. A second tap on the same app undoes the first,
+    /// so what is kept is the state the app is headed for.
+    pub fn app_state_queued(&mut self, package: &str, disable: bool) {
+        self.state.app_state_queued.insert(package.to_string(), disable);
+        self.refresh();
+    }
+
     /// The apps are being read: the page says so until they come.
     pub fn set_apps_pending(&mut self) {
         self.state.apps = None;
@@ -196,6 +212,46 @@ mod tests {
         app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
         app.refresh();
         assert!(app.frame(&f, &i).hits.iter().all(|h| !matches!(h.action, Action::DataAppOpen(_))), "a system app opens nothing");
+    }
+
+    #[test]
+    fn tapping_a_system_app_queues_the_change_it_is_headed_for() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::SystemApps, W, H, PPD);
+        app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
+        app.refresh();
+        assert_eq!(
+            tap(&mut app, &f, &i, Action::SysAppToggle(0)),
+            vec![Effect::QueueAppState { package: "com.android.settings".into(), disable: true }],
+            "an app that is on is queued to be off"
+        );
+    }
+
+    #[test]
+    fn a_change_already_queued_is_what_the_next_tap_turns_over() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::SystemApps, W, H, PPD);
+        app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
+        // Queued to be off, so the next tap asks for it back on rather than
+        // for off again: two taps leave it where it started.
+        app.state.app_state_queued.insert("com.android.settings".into(), true);
+        app.refresh();
+        assert_eq!(
+            tap(&mut app, &f, &i, Action::SysAppToggle(0)),
+            vec![Effect::QueueAppState { package: "com.android.settings".into(), disable: false }],
+        );
+    }
+
+    #[test]
+    fn the_state_a_system_app_is_in_is_shown_where_the_system_said_so() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::SystemApps, W, H, PPD);
+        app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
+        app.state.app_disabled = Some([("com.android.settings".to_string(), true)].into_iter().collect());
+        app.refresh();
+        // A disabled app still has its row, and it is still the row that turns
+        // it back on.
+        assert!(app.frame(&f, &i).hits.iter().any(|h| matches!(h.action, Action::SysAppToggle(0))));
     }
 
     #[test]

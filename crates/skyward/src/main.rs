@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "android")]
 mod appread;
 #[cfg(target_os = "android")]
+mod appstate;
+#[cfg(target_os = "android")]
 mod avb;
 #[cfg(target_os = "android")]
 mod backup;

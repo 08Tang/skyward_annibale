@@ -424,6 +424,9 @@ pub enum Action {
     /// back.
     /// The system apps page turned to the screen at this place in the list.
     SysPage(usize),
+    /// Turn a system app on or off, by its place in the list: the change is
+    /// queued for the system to carry out at its next start.
+    SysAppToggle(usize),
     /// Open the app at this place in the list.
     DataAppOpen(usize),
     /// Open the search page to look through the apps.
@@ -622,6 +625,12 @@ pub enum Effect {
     /// Read the apps the system's own partitions hold, telling them with
     /// [`App::set_sys_apps`].
     ReadSystemApps,
+    /// Read which system apps the system has disabled, telling them with
+    /// [`App::set_app_disabled`].
+    ReadAppStates,
+    /// Have the system disable or enable the app with this package name at its
+    /// next start: the package, and whether it is to be disabled.
+    QueueAppState { package: String, disable: bool },
     /// Take the app with this package name, whose folder in `/data/app` this
     /// is, off the phone.
     DataAppRemove(String, String),

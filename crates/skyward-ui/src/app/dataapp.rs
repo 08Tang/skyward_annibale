@@ -58,6 +58,21 @@ pub fn install_times(xml: &str) -> std::collections::HashMap<String, (i64, i64)>
     out
 }
 
+/// The `package` an APK's compiled `AndroidManifest.xml` declares, which is the
+/// name the package manager knows it by.
+///
+/// An APK's file name is not that name: MIUI's `Backup.apk` is
+/// `com.miui.backup`, and asking `pm disable-user` for the file name answers
+/// "Unknown package". So the name is read out of the manifest, and the file
+/// name is only what the caller falls back to where this gives nothing.
+pub fn manifest_package(manifest: &[u8]) -> Option<String> {
+    match attribute(manifest, "manifest", "package")? {
+        // A package is a string, never a reference: anything else is not one.
+        Value::Text(text) if !text.is_empty() => Some(text),
+        _ => None,
+    }
+}
+
 /// The `label` of the `application` in an APK's compiled `AndroidManifest.xml`,
 /// where it is written out as words; one written as `@string/…` is not read
 /// here, and the caller falls back to the package name.
@@ -85,9 +100,27 @@ pub enum Label {
 }
 
 fn label_of(manifest: &[u8]) -> Option<Label> {
-    // A compiled AXML file is a string pool followed by the document as
-    // chunks that index into it, so the label is found by walking the
-    // chunks rather than by looking at the bytes beside its name.
+    match attribute(manifest, "application", "label")? {
+        Value::Text(text) if !text.is_empty() => Some(Label::Text(text)),
+        Value::Id(id) => Some(Label::Id(id)),
+        _ => None,
+    }
+}
+
+/// What an attribute of an element in a compiled manifest holds: words, or a
+/// reference into the resource table.
+enum Value {
+    Text(String),
+    Id(u32),
+}
+
+/// The value of `key` on the first `element` in a compiled `AndroidManifest.xml`,
+/// or nothing where the file is not one or does not hold them.
+///
+/// A compiled AXML file is a string pool followed by the document as chunks
+/// that index into it, so the value is found by walking the chunks rather than
+/// by looking at the bytes beside its name.
+fn attribute(manifest: &[u8], element: &str, key: &str) -> Option<Value> {
     const RES_STRING_POOL: u16 = 0x0001;
     const RES_XML_START_ELEMENT: u16 = 0x0102;
     const STRING_POOL_UTF8: u32 = 0x100;
@@ -143,11 +176,11 @@ fn label_of(manifest: &[u8]) -> Option<Label> {
             let attr_size = u16_at(manifest, ext + 10)? as usize;
             let count = u16_at(manifest, ext + 12)? as usize;
             let name = strings.get(name_at).map(String::as_str).unwrap_or("");
-            if name == "application" && attr_size >= 20 {
+            if name == element && attr_size >= 20 {
                 for i in 0..count {
                     let a = ext + attr_start + i * attr_size;
-                    let key = strings.get(u32_at(manifest, a + 4)? as usize)?.clone();
-                    if key != "label" {
+                    let Some(found) = strings.get(u32_at(manifest, a + 4)? as usize) else { continue };
+                    if found != key {
                         continue;
                     }
                     let raw = u32_at(manifest, a + 8)? as usize;
@@ -156,11 +189,11 @@ fn label_of(manifest: &[u8]) -> Option<Label> {
                     // is a reference into the resource table, whose id is in
                     // the data slot (the raw slot is 0xffffffff then).
                     let data = u32_at(manifest, a + 16)? as usize;
-                    match kind {
-                        0x03 => return strings.get(raw).filter(|s| !s.is_empty()).cloned().map(Label::Text),
-                        0x01 => return Some(Label::Id(data as u32)),
-                        _ => return None,
-                    }
+                    return match kind {
+                        0x03 => strings.get(raw).map(|s| Value::Text(s.clone())),
+                        0x01 => Some(Value::Id(data as u32)),
+                        _ => None,
+                    };
                 }
             }
         }
@@ -340,7 +373,91 @@ mod tests {
     fn a_manifest_that_is_not_compiled_is_not_read() {
         assert!(literal_label(b"<manifest/>").is_none());
         assert!(label_id(b"<manifest/>").is_none());
+        assert!(manifest_package(b"<manifest/>").is_none());
         assert!(resolve_string(b"not a table", 0x7f010001).is_none());
+    }
+
+    /// A compiled manifest holding one element with one string attribute, as
+    /// the resource compiler writes it.
+    fn compiled(element: &str, key: &str, value: &str) -> Vec<u8> {
+        // The pool's payload: for each string, its length in bytes, its length
+        // in UTF-16 units, the bytes, then a terminator.
+        let mut pool = Vec::new();
+        let mut offsets = Vec::new();
+        for text in [element, key, value] {
+            offsets.push(pool.len() as u32);
+            pool.push(text.len() as u8);
+            pool.push(text.encode_utf16().count() as u8);
+            pool.push_str(text);
+            pool.push(0);
+        }
+        let pool_header = 28usize;
+        // The offsets come before the payload, so the payload starts past them.
+        let payload_start = pool_header + offsets.len() * 4;
+        let pool_size = payload_start + pool.len();
+        let attr_size = 20u16;
+        // The element: its node header (8), its line and comment (8), its
+        // extension (20), and the one attribute.
+        let element_size = 8 + 8 + 20 + attr_size as usize;
+        let mut out = Vec::new();
+        out.extend_from_slice(&0x0003u16.to_le_bytes());
+        out.extend_from_slice(&8u16.to_le_bytes());
+        out.extend_from_slice(&((8 + pool_size + element_size) as u32).to_le_bytes());
+        // The string pool.
+        out.extend_from_slice(&0x0001u16.to_le_bytes());
+        out.extend_from_slice(&(pool_header as u16).to_le_bytes());
+        out.extend_from_slice(&(pool_size as u32).to_le_bytes());
+        out.extend_from_slice(&3u32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&0x100u32.to_le_bytes());
+        out.extend_from_slice(&(payload_start as u32).to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        for off in offsets {
+            out.extend_from_slice(&off.to_le_bytes());
+        }
+        out.extend_from_slice(&pool);
+        // The node: what it is, how long its header is, how long it is, and the
+        // line it came from.
+        out.extend_from_slice(&0x0102u16.to_le_bytes());
+        out.extend_from_slice(&16u16.to_le_bytes());
+        out.extend_from_slice(&(element_size as u32).to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        // Its comment, then the extension: its name, and where its attributes
+        // start, how big each is, and how many.
+        out.extend_from_slice(&0xffffffffu32.to_le_bytes());
+        out.extend_from_slice(&0xffffffffu32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&attr_size.to_le_bytes());
+        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        // The attribute: its name, its raw value, and its type.
+        out.extend_from_slice(&0xffffffffu32.to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&2u32.to_le_bytes());
+        out.extend_from_slice(&8u16.to_le_bytes());
+        out.push(0);
+        out.push(0x03);
+        out.extend_from_slice(&2u32.to_le_bytes());
+        out
+    }
+
+    #[test]
+    fn the_package_a_manifest_declares_is_the_name_the_package_manager_knows() {
+        // What MIUI's `Backup.apk` declares: the file name says nothing of it.
+        let manifest = compiled("manifest", "package", "com.miui.backup");
+        assert_eq!(manifest_package(&manifest).as_deref(), Some("com.miui.backup"));
+    }
+
+    #[test]
+    fn a_label_and_a_package_are_read_from_their_own_elements() {
+        let label = compiled("application", "label", "Backup");
+        assert_eq!(literal_label(&label).as_deref(), Some("Backup"));
+        assert_eq!(manifest_package(&label), None, "an application carries no package");
+        let package = compiled("manifest", "package", "com.miui.backup");
+        assert_eq!(literal_label(&package), None, "a manifest carries no label");
     }
 
     #[test]

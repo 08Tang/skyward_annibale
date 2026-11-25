@@ -185,14 +185,20 @@ fn system_apps() -> Vec<DataApp> {
             let Some(apk) = apk else { continue };
             let stem = apk.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             // `base.apk` says nothing of the package; the folder does.
-            let package = if stem.eq_ignore_ascii_case("base") {
+            let fallback = if stem.eq_ignore_ascii_case("base") {
                 dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
             } else {
                 stem
             };
-            if package.is_empty() {
+            if fallback.is_empty() {
                 continue;
             }
+            // An APK's file name is not always its package: MIUI's `Backup.apk`
+            // is `com.miui.backup`, and `pm disable-user` answers "Unknown
+            // package" for the file name. The real one is read out of the
+            // manifest, and the file name is only the fallback for an APK whose
+            // manifest cannot be read.
+            let package = real_package_of(&apk).unwrap_or(fallback);
             out.push(DataApp {
                 label: package.clone(),
                 package,
@@ -207,6 +213,20 @@ fn system_apps() -> Vec<DataApp> {
     }
     out.sort_by(|a, b| a.package.cmp(&b.package));
     out
+}
+
+/// The package an APK really declares, read from its compiled manifest, or
+/// nothing where the manifest cannot be read.
+///
+/// The file name is only a guess at the package: `Backup.apk` holds
+/// `com.miui.backup`, and the package manager knows nothing of the file name.
+fn real_package_of(apk: &Path) -> Option<String> {
+    use std::io::Read;
+    let file = std::fs::File::open(apk).ok()?;
+    let mut zip = zip::ZipArchive::new(file).ok()?;
+    let mut manifest = Vec::new();
+    zip.by_name("AndroidManifest.xml").ok()?.read_to_end(&mut manifest).ok()?;
+    app::manifest_package(&manifest)
 }
 
 /// The name an app gives itself, read from its compiled manifest and, where

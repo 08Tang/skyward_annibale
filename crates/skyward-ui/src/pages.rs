@@ -3252,10 +3252,11 @@ pub fn data_apps(cx: &Ctx) -> Frame {
     Frame::new(t, c, out, l.pick(DATA_APPS), top)
 }
 
-/// The apps the system's own partitions hold: laid out as the owner's are,
-/// but only to be looked at. There is no switch and no uninstalling, and a
-/// row opens nothing, since taking one of them away keeps the system from
-/// starting.
+/// The apps the system's own partitions hold: laid out as the owner's are, but
+/// only to be switched off. Taking one away keeps the system from starting, so
+/// there is no uninstalling; turning one off is something the system itself
+/// does, at its next start, so a tap queues the change and the row says it is
+/// waiting rather than done.
 ///
 /// Ported from skyward-pudding v0.3.15.
 pub fn system_apps(cx: &Ctx) -> Frame {
@@ -3266,6 +3267,7 @@ pub fn system_apps(cx: &Ctx) -> Frame {
     sample.sub = Some("/system/app");
     let per = rows_that_fit(t, f, top, &sample);
     let mut rows: Vec<Row> = Vec::new();
+    let mut acts: Vec<Action> = Vec::new();
     let mut pages = 1usize;
     match &s.sys_apps {
         None => rows.push(Row::new(l.pick(["正在读取…", "正在讀取…", "Reading…"]))),
@@ -3274,10 +3276,25 @@ pub fn system_apps(cx: &Ctx) -> Frame {
             pages = list.len().div_ceil(per).max(1);
             let page = s.sys_page.min(pages - 1);
             let (from, to) = (page * per, ((page + 1) * per).min(list.len()));
-            for a in list.iter().take(to).skip(from) {
+            for (k, a) in list.iter().enumerate().take(to).skip(from) {
                 let mut row = Row::new(&a.label).icon(SLATE, Icon::Layers);
                 row.sub = Some(a.package.as_str());
+                // What it is headed for, if a change is queued, comes before
+                // what it is now: a queued change is the thing the owner just
+                // did, and the state it is in is what they are changing.
+                let queued = s.app_state_queued.get(&a.package).copied();
+                let disabled = s.app_disabled.as_ref().and_then(|m| m.get(&a.package)).copied().unwrap_or(false);
+                let state = match queued {
+                    Some(true) => Some(l.pick(["待停用", "待停用", "Will disable"])),
+                    Some(false) => Some(l.pick(["待启用", "待啟用", "Will enable"])),
+                    None if disabled => Some(l.pick(["已停用", "已停用", "Disabled"])),
+                    None => None,
+                };
+                if let Some(text) = state {
+                    row = row.trail(Trail::Text(text));
+                }
                 rows.push(row);
+                acts.push(Action::SysAppToggle(k));
             }
         }
     }
@@ -3287,7 +3304,8 @@ pub fn system_apps(cx: &Ctx) -> Frame {
     let mut out = Vec::new();
     pager(t, f, &mut c, &mut out, l, pager_y, page, pages, Action::SysPage);
     let listed = widgets::list(&mut c, t, f, top, &rows);
-    let bottom = widgets::footnote(&mut c, t, f, listed.bottom, l.pick(["这些装在系统分区里，不能这样卸载", "這些裝在系統分區裡，不能這樣卸載", "These are in the system's partitions, and are not removed here"]));
+    out.extend(hits(&listed.rows, &acts));
+    let bottom = widgets::footnote(&mut c, t, f, listed.bottom, l.pick(["点一下停用或启用，下次开机由系统执行", "點一下停用或啟用，下次開機由系統執行", "Tap to disable or enable; the system does it at the next start"]));
     Frame::new(t, fit(c, t, bottom), out, l.pick(SYSTEM_APPS), top)
 }
 

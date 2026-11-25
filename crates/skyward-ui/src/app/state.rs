@@ -262,6 +262,13 @@ pub struct State {
     /// The apps the system's own partitions hold, for the page that only
     /// looks at them; none until that page is opened.
     pub sys_apps: Option<Vec<crate::app::dataapp::DataApp>>,
+    /// Which system apps the system itself has disabled, by package: what the
+    /// script wrote back after the last start. None until it has been read.
+    pub app_disabled: Option<std::collections::BTreeMap<String, bool>>,
+    /// The changes asked for and not carried out yet, by package: the page
+    /// shows one as waiting rather than as done, since only the system itself
+    /// can change it, at the next start.
+    pub app_state_queued: std::collections::BTreeMap<String, bool>,
     /// How many screens of apps the page has been turned by: a screen holds
     /// what fits, and the list is read a screen at a time.
     pub app_page: usize,
@@ -517,6 +524,8 @@ impl Default for State {
             apps: None,
             app_at: None,
             sys_apps: None,
+            app_disabled: None,
+            app_state_queued: std::collections::BTreeMap::new(),
             app_page: 0,
             sys_page: 0,
             search_scope: SearchScope::Features,

@@ -891,6 +891,26 @@ impl App {
                 self.refresh();
                 return Vec::new();
             }
+            // A system app's row is tapped: it turns over from what it is to
+            // what it is headed for, and the change is queued. The package
+            // manager's own record is a binary format that writing by hand
+            // would break, so the system itself makes the change, at its next
+            // start; the page shows the app as waiting until then.
+            Action::SysAppToggle(i) => {
+                let package = match &self.state.sys_apps {
+                    Some(list) => list.get(i).map(|a| a.package.clone()),
+                    None => None,
+                };
+                if let Some(package) = package {
+                    // What it is headed for already, if it was tapped before;
+                    // otherwise what it is now.
+                    let now_disabled = match self.state.app_state_queued.get(&package) {
+                        Some(&d) => d,
+                        None => self.state.app_disabled.as_ref().and_then(|m| m.get(&package)).copied().unwrap_or(false),
+                    };
+                    return vec![Effect::QueueAppState { package, disable: !now_disabled }];
+                }
+            }
             Action::DataAppOpen(k) => {
                 self.state.app_at = Some(k);
                 return self.act(Action::Open(Screen::DataAppInfo), now);
