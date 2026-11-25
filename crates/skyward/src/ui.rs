@@ -3451,24 +3451,6 @@ impl Pages<'_> {
             Effect::ReadSystemApps => {
                 self.app_reader = Some(appread::Reader::start_system()?);
             }
-            Effect::ReadAppStates => {
-                self.app.set_app_disabled(crate::appstate::states(), crate::appstate::queued());
-            }
-            // A change to a system app is queued rather than made: only the
-            // system itself can change its package manager's state, so the
-            // script this installs makes the change at the next start, and the
-            // page shows the app as waiting until then.
-            Effect::QueueAppState { package, disable } => match crate::appstate::queue(&package, disable) {
-                Ok(()) => {
-                    skyward_sys::kmsg(&format!("{package} is queued to be {} at the next start", if disable { "disabled" } else { "enabled" }))?;
-                    self.app.app_state_queued(&package, disable);
-                }
-                Err(e) => {
-                    skyward_sys::kmsg(&format!("{package} is not queued: {e:#}"))?;
-                    self.app.app_state_failed(&format!("{e:#}"));
-                    self.app.report(&format!("not queued: {e:#}"), monotonic_ms());
-                }
-            },
             Effect::DataAppRemove(package, dir) => {
                 match appread::remove(&package, &dir) {
                     Ok(()) => {

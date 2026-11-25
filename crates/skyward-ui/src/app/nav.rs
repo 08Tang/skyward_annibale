@@ -307,14 +307,10 @@ impl App {
             // first opened, and not before: it is only ever looked at.
             Screen::SystemApps => {
                 self.state.sys_page = 0;
-                // Which apps the system has disabled is read every time the
-                // page is opened, since it may have been changed in the system
-                // since; the list itself only the first time.
-                let mut fx = vec![Effect::ReadAppStates];
-                if self.state.sys_apps.is_none() {
-                    fx.push(Effect::ReadSystemApps);
+                match self.state.sys_apps.is_none() {
+                    true => vec![Effect::ReadSystemApps],
+                    false => Vec::new(),
                 }
-                fx
             }
             Screen::Filesystems => vec![Effect::ReadFilesystems],
             // The partitions and the images saved are read when the page is

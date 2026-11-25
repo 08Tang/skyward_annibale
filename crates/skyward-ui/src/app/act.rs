@@ -1077,24 +1077,6 @@ impl App {
             // manager's own record is a binary format that writing by hand
             // would break, so the system itself makes the change, at its next
             // start; the page shows the app as waiting until then.
-            Action::SysAppToggle(i) => {
-                let package = match &self.state.sys_apps {
-                    Some(list) => list.get(i).map(|a| a.package.clone()),
-                    None => None,
-                };
-                if let Some(package) = package {
-                    // What the app is headed for: a queued change first, since
-                    // it is the thing just asked for, and otherwise what the
-                    // system last reported. A queued change the system has
-                    // already carried out is no longer queued -- the state file
-                    // it was written from is what says so -- so this turns over
-                    // from the state the app is actually in.
-                    let disabled = self.state.app_disabled.as_ref().and_then(|m| m.get(&package)).copied().unwrap_or(false);
-                    let queued = self.state.app_state_queued.get(&package).copied();
-                    let now_disabled = queued.unwrap_or(disabled);
-                    return vec![Effect::QueueAppState { package, disable: !now_disabled }];
-                }
-            }
             Action::DataAppOpen(k) => {
                 self.state.app_at = Some(k);
                 return self.act(Action::Open(Screen::DataAppInfo), now);
