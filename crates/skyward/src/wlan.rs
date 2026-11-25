@@ -48,6 +48,10 @@ const SOCKET_WAIT: Duration = Duration::from_secs(10);
 /// How long the supplicant gets to end once asked to.
 const END_WAIT: Duration = Duration::from_secs(3);
 
+/// How long the radio is given to settle on the way out: the switches
+/// written, the driver let go of the chip, the modules unloaded.
+const PUT_AWAY_WAIT: Duration = Duration::from_secs(2);
+
 /// How often a network joined is read for its signal.
 const POLL: Duration = Duration::from_secs(5);
 
@@ -118,6 +122,22 @@ impl Worker {
 
     pub fn send(&self, c: Command) {
         self.inbox.tell(Inbox::Command(c));
+    }
+
+    /// Put the radio away before leaving: have the thread stop the
+    /// supplicant, put the chip's switches back and unload the driver, and
+    /// wait for it to finish rather than returning at once.
+    ///
+    /// Leaving without waiting is what breaks the phone: the power goes while
+    /// the chip is still in the state the recovery left it in, and the
+    /// installed system's own driver then fails its cold start. Waiting here
+    /// costs a couple of seconds once, on the way out.
+    pub fn stop(self) {
+        self.inbox.tell(Inbox::End);
+        let started = Instant::now();
+        while !self.worker.ended() && started.elapsed() < PUT_AWAY_WAIT {
+            thread::sleep(Duration::from_millis(20));
+        }
     }
 
     /// Readable while the screen has something to be told.
@@ -325,11 +345,17 @@ impl Station {
 
     fn off(&mut self) {
         self.unaddress();
+        // Whether the chip was really driven just now: only one that was has
+        // anything to be put back.
+        let driving = self.running.is_some() || Path::new("/sys/class/net").join(&self.cfg.interface).exists();
         if let Some(mut r) = self.running.take() {
             end(&mut r.child, Some(&r.control));
         }
         if let Err(e) = iface::set_up(&self.cfg.interface, false) {
             let _ = skyward_sys::kmsg(&format!("{e:#}"));
+        }
+        if driving {
+            put_away(&self.cfg, &self.modules);
         }
         self.state = Wlan::default();
     }
@@ -626,6 +652,51 @@ pub fn warm_up(cfg: &Config, modules: &[PathBuf]) -> Result<()> {
         fs::write(&w.path, &w.value).with_context(|| format!("write {} to {}", w.value, w.path))?;
     }
     Ok(())
+}
+
+/// Put the chip's switches back where the installed system expects them and
+/// unload the driver, on the way out of the recovery.
+///
+/// A radio left on with its driver still in the kernel is what makes the
+/// system's own driver fail its cold start: it finds the chip already
+/// powered and ready in a way it did not set up itself. A phone whose
+/// configuration names nothing to give back is left exactly as it was, so
+/// this does nothing there rather than guessing.
+fn put_away(cfg: &Config, modules: &[PathBuf]) {
+    if cfg.release.is_empty() {
+        return;
+    }
+    for w in &cfg.release {
+        if let Err(e) = fs::write(&w.path, &w.value) {
+            let _ = skyward_sys::kmsg(&format!("{} is not given {}: {e}", w.path, w.value));
+        }
+    }
+    // The switches are written before the driver is asked to leave: the
+    // driver reads them as it goes, and unmasking a clock under a driver that
+    // is still running is what hangs the chip.
+    thread::sleep(Duration::from_millis(300));
+    let mut left = None;
+    // A module still held is often one whose last user is on its way out too,
+    // so it is asked again rather than given up on at once.
+    for attempt in 0..3 {
+        match skyward_modules::unload(modules, &cfg.modules) {
+            Ok(gone) => {
+                if !gone.is_empty() {
+                    let _ = skyward_sys::kmsg(&format!("{} left the kernel", gone.join(", ")));
+                }
+                return;
+            }
+            Err(e) => {
+                left = Some(e);
+                if attempt < 2 {
+                    thread::sleep(Duration::from_millis(300));
+                }
+            }
+        }
+    }
+    if let Some(e) = left {
+        let _ = skyward_sys::kmsg(&format!("the WLAN's driver stays in the kernel: {e:#}"));
+    }
 }
 
 /// Load the driver where its interface is not there yet, and bring the

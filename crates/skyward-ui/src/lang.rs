@@ -32,9 +32,13 @@ impl Lang {
     ///
     /// A page may write fewer than all of them -- the three this project's own
     /// pages were written in, say -- and a language past the last reads the
-    /// last, which is why English is kept last of any short list.
-    pub fn pick<T: Copy, const N: usize>(self, each: [T; N]) -> T {
-        each[(self as usize).min(N - 1)]
+    /// last, which is why English is kept last of any short list. It takes
+    /// either an array written where it is read or a slice of one held
+    /// elsewhere, so that a helper need not know how many languages its
+    /// caller wrote.
+    pub fn pick<T: Copy, A: AsRef<[T]>>(self, each: A) -> T {
+        let each = each.as_ref();
+        each[(self as usize).min(each.len() - 1)]
     }
 
     /// Of something written in the two kinds of Chinese characters and in

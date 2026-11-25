@@ -49,12 +49,13 @@ pub fn load(dirs: &[PathBuf], names: &[String]) -> Result<Vec<PathBuf>> {
 ///
 /// This is the way out of the recovery, not a way to make room: the installed
 /// system's own driver cold-starts the chip, and a driver left in the kernel
-/// with the radio on makes that start fail. Returns the modules that left,
-/// as the kernel names them. A module that was never loaded, and one
-/// something else still holds, is not an error: the first has nothing to do,
-/// and the second is reported by what is left rather than by a failure.
+/// with the radio on makes that start fail. Returns the modules that left, as
+/// the kernel names them. A module that was never loaded has nothing to do
+/// and is passed over; one something else still holds is an error, since the
+/// caller is the one that can wait and try again.
 pub fn unload(dirs: &[PathBuf], names: &[String]) -> Result<Vec<String>> {
     let mut gone = Vec::new();
+    let mut held = Vec::new();
     // Every module the directories know of, so that a dependency loaded along
     // with the one named is taken out too: the reverse of the order `load`
     // put them in.
@@ -77,11 +78,14 @@ pub fn unload(dirs: &[PathBuf], names: &[String]) -> Result<Vec<String>> {
         let module = file.trim_end_matches(".ko").replace('-', "_");
         match remove(&module) {
             Ok(()) => gone.push(module),
-            // Still held by something that has not gone yet, or never there:
-            // neither is this one's to fix.
-            Err(e) if matches!(e.raw_os_error(), Some(libc::ENOENT) | Some(libc::EBUSY) | Some(libc::EINVAL)) => {}
+            // Never there: nothing to take out, and nothing to report.
+            Err(e) if e.raw_os_error() == Some(libc::ENOENT) => {}
+            Err(e) if matches!(e.raw_os_error(), Some(libc::EBUSY) | Some(libc::EINVAL)) => held.push(module),
             Err(e) => return Err(e).with_context(|| format!("remove {module}")),
         }
+    }
+    if !held.is_empty() {
+        bail!("{} {} still in use", held.join(", "), if held.len() == 1 { "is" } else { "are" });
     }
     Ok(gone)
 }
