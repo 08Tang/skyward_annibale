@@ -412,7 +412,7 @@ fn export_logs(recovery: bool, kernel: bool, into: &Path, zone: &TimeZone) -> Re
 /// Begin a take: the folder made, the file opened, and the threads that
 /// shrink, encode and write the frames started. Gives the recorder, the
 /// file's name and what it records at, for the page to show.
-fn start_recording(panel: (u32, u32), r: &skyward_ui::app::state::Record, zone: &TimeZone) -> Result<(skyward_ui::record::Recorder, String, String)> {
+fn start_recording(panel: (u32, u32), r: &skyward_ui::app::Record, zone: &TimeZone) -> Result<(skyward_ui::record::Recorder, String, String)> {
     let (w, h) = panel;
     anyhow::ensure!(w > 0 && h > 0, "the panel has no size");
     let folder = Path::new(skyward_crypto::data::SDCARD).join(RECORDINGS);
