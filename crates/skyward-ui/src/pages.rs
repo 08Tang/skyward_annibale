@@ -4287,6 +4287,12 @@ pub fn system_apps(cx: &Ctx) -> Frame {
     // accounted for by one of them, and there is no other way to see them from
     // the recovery.
     let bottom = widgets::footnote(&mut c, t, f, bottom + t.m.dp(8.0), &s.app_state_report);
+    // What the page believed at each tap, newest first: the row that will not
+    // turn over is accounted for by the reading it was given.
+    let mut bottom = bottom;
+    for line in s.app_state_trace.iter().rev().take(4) {
+        bottom = widgets::footnote(&mut c, t, f, bottom, line);
+    }
     Frame::new(t, fit(c, t, bottom), out, l.pick(SYSTEM_APPS), top)
 }
 

@@ -356,9 +356,14 @@ impl Font {
         if ![bx0, bx1, by0, by1].iter().all(|v| v.is_finite()) {
             return None;
         }
-        // One em of room on the line, whatever the picture's own width: the
-        // letter beside it is spaced as the letters of any other word are.
-        let advance = ppem as f32;
+        // The room the line gives it is the room the typeface asks for, read
+        // from the font rather than assumed to be one em: NotoColorEmoji's
+        // glyphs are 1.144 em wide, and giving them one em made each stand
+        // over the next one's left edge.
+        let advance = match face.glyph_hor_advance(ttf_parser::GlyphId(glyph)) {
+            Some(units) => (units as f32 * scale).max(1.0),
+            None => ppem as f32,
+        };
         // The picture is the painted shape plus a hair, laid so that the em's
         // own box stands centred on the advance: what paints to the left of it
         // reaches back over the letter before, which is what the typeface
@@ -368,9 +373,14 @@ impl Font {
         let (y0, y1) = (by0 * scale, by1 * scale);
         // The picture is placed so that the em's own box -- 0..ppem across and
         // ppem..0 up from the baseline -- stands where the line expects it,
-        // with the painted shape laid inside that.
-        let ox = -x0 + pad;
-        let oy = -y0 + pad;
+        // with the painted shape laid inside that. The y axis points up in the
+        // typeface and down on the canvas, so the topmost point of the shape
+        // is what goes one pad below the canvas's top edge. Across, what the
+        // advance has beyond the em is shared out either side, so the em
+        // stands in the middle of the room it was given.
+        let slack = (advance - ppem as f32) / 2.0;
+        let ox = -x0 + pad + slack;
+        let oy = y1 + pad;
         let (w, h) = (((x1 - x0) + pad * 2.0).ceil().max(1.0) as u32, ((y1 - y0) + pad * 2.0).ceil().max(1.0) as u32);
         let mut canvas = Canvas::new(w, h);
         let (wf, hf) = (w as f32, h as f32);

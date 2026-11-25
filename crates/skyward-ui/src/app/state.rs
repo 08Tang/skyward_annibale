@@ -352,6 +352,11 @@ pub struct State {
     /// foot: an app whose row will not turn over is accounted for by one of the
     /// two, and the recovery offers no other way to see them.
     pub app_state_report: String,
+    /// What the page believed at each tap on a system app, and what it asked
+    /// for as a result: the newest first, a few of them. An app whose row will
+    /// not turn over is accounted for here, and the recovery offers no other
+    /// way to see it.
+    pub app_state_trace: Vec<String>,
     /// How many screens of apps the page has been turned by: a screen holds
     /// what fits, and the list is read a screen at a time.
     pub app_page: usize,
@@ -623,6 +628,7 @@ impl Default for State {
             app_state_queued: std::collections::BTreeMap::new(),
             app_state_failed: None,
             app_state_report: String::new(),
+            app_state_trace: Vec::new(),
             app_page: 0,
             sys_page: 0,
             search_scope: SearchScope::Features,
