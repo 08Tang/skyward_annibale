@@ -440,9 +440,6 @@ impl App {
         for (i, &tile) in self.state.tiles.iter().enumerate() {
             let (cx, cy) = grid.centre(i);
             let lit = tile.lit(&self.state);
-            // The whole cell answers a touch, not the disc alone: a finger is
-            // not asked to find the middle of it.
-            hits.push((grid.rect(i), ShadeHit::Tile(tile)));
             let fill = if lit { t.pal.accent.with_alpha(232) } else { white.with_alpha(30) };
             out.fill_circle(cx, cy, disc / 2.0, fill);
             let ink = if lit { white } else { white.with_alpha(238) };
@@ -479,6 +476,10 @@ impl App {
             // While the panel is being put in order every tile carries a small
             // cross at its upper right, and the one a finger has picked up is
             // drawn under the finger rather than in its place.
+            //
+            // The cross answers first: it stands over the tile's own disc, and
+            // a list searched from its front would give every touch of the
+            // cross to the tile under it.
             if self.shade_editing {
                 let (kx, ky) = (cx + disc / 2.0 - m.dp(3.0), cy - disc / 2.0 + m.dp(3.0));
                 out.fill_circle(kx, ky, m.dp(9.0), Rgba::rgb(40, 40, 46));
@@ -487,6 +488,13 @@ impl App {
                 out.line(kx - arm, ky - arm, kx + arm, ky + arm, stroke, white.with_alpha(230));
                 out.line(kx + arm, ky - arm, kx - arm, ky + arm, stroke, white.with_alpha(230));
                 hits.push((Rect::new(kx - m.dp(15.0), ky - m.dp(15.0), m.dp(30.0), m.dp(30.0)), ShadeHit::TileRemove(tile)));
+                // The disc alone answers while editing: a whole cell would take
+                // the cross's own touch with it.
+                hits.push((Rect::new(cx - disc / 2.0, cy - disc / 2.0, disc, disc), ShadeHit::Tile(tile)));
+            } else {
+                // The whole cell answers a touch, not the disc alone: a finger
+                // is not asked to find the middle of it.
+                hits.push((grid.rect(i), ShadeHit::Tile(tile)));
             }
         }
         // The card saying how the phone stands: whether its data is open, the
@@ -1452,8 +1460,13 @@ mod tests {
         app.shade = 1.0;
         app.compose(&mut c, &f, &i, "12:00", 1000);
         // The twelve tiles and the two capsules, and nothing else.
-        assert_eq!(app.shade_hits.len(), 14, "twelve tiles and two capsules");
-        let tiles: Vec<ShadeHit> = app.shade_hits.iter().map(|(_, h)| *h).filter(|h| !matches!(h, ShadeHit::Brightness | ShadeHit::Vibration)).collect();
+        assert_eq!(app.shade_hits.len(), 14, "eleven tiles, the pencil and two capsules");
+        let tiles: Vec<ShadeHit> = app
+            .shade_hits
+            .iter()
+            .map(|(_, h)| *h)
+            .filter(|h| matches!(h, ShadeHit::Tile(_)))
+            .collect();
         let wanted: Vec<ShadeHit> = app.state.tiles.iter().map(|&t| ShadeHit::Tile(t)).collect();
         assert_eq!(tiles, wanted, "the tiles in the order the state lays them out");
         // Every one of them sits inside the sheet, and no two overlap: a tile
