@@ -288,21 +288,9 @@ impl Font {
             return None;
         }
         let upem = face.units_per_em() as f32;
-        // Drawn at the glyph's own size, one em. The picture is a little wider
-        // than an em: the advance follows the picture's width, so it never
-        // crowds the letter beside it. The picture is 1.2 em tall with the
-        // baseline left below the middle, so that what reaches under the
-        // baseline -- the peach's base, the whale's spout -- is not cut off
-        // (the proportion settled on in 0.0.78).
+        // Drawn at the glyph's own size, one em: what the typeface paints
+        // outside that box is kept, and what the line gives it is one em.
         let scale = ppem as f32 / upem;
-        // The picture is a little wider than an em on both sides: a COLR
-        // layer may paint past the advance (the clock's hands, a face's
-        // ears), and a picture cut at the advance would lose that part of it.
-        // The margin is the same on each side, so the em stands in the middle
-        // and the advance follows the picture's width.
-        let margin = ppem as f32 * 0.12;
-        let (fw, fh) = (ppem as f32 + margin * 2.0, ppem as f32 * 1.2);
-        let (ox, oy) = (margin, ppem as f32);
         let mut parts: Vec<Layer> = Vec::new();
         for shape in &painter.shapes {
             let m = shape.transform;
@@ -350,8 +338,40 @@ impl Font {
         if parts.is_empty() {
             return None;
         }
-        let (left, bottom) = (0.0f32, 0.0f32);
-        let (w, h) = (fw.ceil() as u32, fh.ceil() as u32);
+        // The picture is the shape the layers actually paint, not a margin
+        // guessed around an em: a COLR layer reaches as far as it reaches --
+        // the clock's hands, a face's ears -- and a picture cut at the advance
+        // lost that part of it. The bounds are taken from the transformed
+        // outlines themselves, so nothing is cut off whatever the typeface
+        // does, and the advance stays one em.
+        let (mut bx0, mut bx1, mut by0, mut by1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
+        for (segs, _, _) in &parts {
+            for (x, y) in segs.iter().flat_map(|s| s.points()) {
+                bx0 = bx0.min(x);
+                bx1 = bx1.max(x);
+                by0 = by0.min(y);
+                by1 = by1.max(y);
+            }
+        }
+        if ![bx0, bx1, by0, by1].iter().all(|v| v.is_finite()) {
+            return None;
+        }
+        // One em of room on the line, whatever the picture's own width: the
+        // letter beside it is spaced as the letters of any other word are.
+        let advance = ppem as f32;
+        // The picture is the painted shape plus a hair, laid so that the em's
+        // own box stands centred on the advance: what paints to the left of it
+        // reaches back over the letter before, which is what the typeface
+        // means, and what paints past it does the same to the letter after.
+        let pad = ppem as f32 * 0.02;
+        let (x0, x1) = (bx0 * scale, bx1 * scale);
+        let (y0, y1) = (by0 * scale, by1 * scale);
+        // The picture is placed so that the em's own box -- 0..ppem across and
+        // ppem..0 up from the baseline -- stands where the line expects it,
+        // with the painted shape laid inside that.
+        let ox = -x0 + pad;
+        let oy = -y0 + pad;
+        let (w, h) = (((x1 - x0) + pad * 2.0).ceil().max(1.0) as u32, ((y1 - y0) + pad * 2.0).ceil().max(1.0) as u32);
         let mut canvas = Canvas::new(w, h);
         let (wf, hf) = (w as f32, h as f32);
         // The rasterizer draws only inside the picture: a point has to fall
@@ -429,13 +449,10 @@ impl Font {
                 canvas.blend(x as i32, y as i32, color, cov)
             });
         }
-        let _ = (left, bottom);
-        // The advance is one em, not the picture's width: the picture is wider
-        // than that on each side to hold what a layer paints past the advance,
-        // and charging the whole of it would push the letter beside the emoji
-        // a margin away from it and crowd it off the end of a name. The picture
-        // is centred on the advance, so `dx` takes back the left margin.
-        Some(Art { canvas, dx: -ox.round() as i32, dy: -oy.round() as i32, advance: ppem as f32 })
+        // The picture is laid with its left edge where the em box's own left
+        // edge is, less whatever paints before it, and its baseline where the
+        // line's is: `dx` and `dy` take the pen back to the em's corner.
+        Some(Art { canvas, dx: -ox.round() as i32, dy: -oy.round() as i32, advance })
     }
 
     /// The bitmap one (the flags): the glyph is a PNG, decoded and scaled to
