@@ -155,6 +155,16 @@ mkdir "$D" 2>/dev/null || exit 0
     esac
     echo "$(date) $op $pkg -> $ok ${out}" >> "$L" 2>/dev/null
   done 3< "$Q"
+  # 状态文件整份重写，不再只追加这一次的结果：它是我们自己的记录，会跟系统的
+  # 实际状态走散（用 adb 手工 enable 过、或者某一次失败留了半行），而页面只有
+  # 这一份记录可看。系统的 `pm list packages -d` 才是权威的，开机后就在手边，
+  # 于是每次开机都照它重写一遍 —— 没列出来的包就是启用着的。这条命令要是失
+  # 败了，就留着这一次的结果不动：把整份清空会让每个包都显示成启用着。
+  if "$PM" list packages -d < /dev/null 2>/dev/null > "$T.d"; then
+    sed -n 's/^package:/disabled /p' "$T.d" > "$T.new"
+    mv "$T.new" "$T"
+  fi
+  rm -f "$T.d"
   mv "$T" "$S"
   rm -f "$Q"
   rmdir "$D" 2>/dev/null
@@ -240,6 +250,24 @@ pub fn queue(package: &str, disable: bool) -> Result<()> {
     Ok(())
 }
 
+/// 状态文件整份丢掉，队列也清空：页面回到「什么都不知道」的样子，下一次点
+/// 一下就是照「启用中」算的停用。系统应用页面给的这个入口，是为了那份记录和
+/// 系统的实际状态走散的时候 —— 用 adb 手工 enable 过、或者某次运行留了半行，
+/// 记录说「已停用」而包其实是启用着的，于是点一下排的是启用、页面不动。
+///
+/// 记录丢了不会让系统变样：它只是页面读的一份东西，脚本每次开机还会照系统的
+/// `pm list packages -d` 重写一遍。
+pub fn forget() -> Result<()> {
+    for path in [STATE, QUEUE] {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == ErrorKind::NotFound => {}
+            Err(e) => return Err(e).with_context(|| format!("remove {path}")),
+        }
+    }
+    Ok(())
+}
+
 /// 装上（或刷新）启动脚本，返回装到了哪些地方。
 ///
 /// `/data/adb` 不在就是真的走不通：没有 KernelSU / Magisk，系统启动后没有任何
@@ -318,6 +346,10 @@ mod tests {
         // same, so turning one back on is read back rather than trusted.
         assert!(SCRIPT.contains("install-existing"));
         assert!(SCRIPT.contains("list packages -d"));
+        // The state file is rewritten from the system's own list every start:
+        // it is our record, and it drifts from what the system holds -- a
+        // package enabled by hand over adb, or a run that left half a line.
+        assert!(SCRIPT.contains("sed -n 's/^package:/disabled /p'"), "状态文件照系统重写");
         // 整段在后台跑（`( ... ) &`），否则 root 管理器的 service.d 会被这段
         // sleep 拖住，开机变慢；队列清空仍然是最后一步。
         assert!(SCRIPT.trim_end().ends_with(") &"));

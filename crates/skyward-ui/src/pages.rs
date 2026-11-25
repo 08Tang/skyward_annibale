@@ -4277,6 +4277,13 @@ pub fn system_apps(cx: &Ctx) -> Frame {
     let listed = widgets::list(&mut c, t, f, top, &rows);
     out.extend(hits(&listed.rows, &acts));
     let bottom = widgets::footnote(&mut c, t, f, listed.bottom, l.pick(["点一下停用或启用，下次开机由系统执行", "點一下停用或啟用，下次開機由系統執行", "Tap to disable or enable; the system does it at the next start"]));
+    // The record of what is disabled is the recovery's own, and it drifts from
+    // what the system holds -- a package enabled by hand, or a run that left
+    // half a line -- which makes every tap ask for the change already queued.
+    // Throwing it away is what puts the page back in step.
+    let forget = widgets::button(&mut c, t, f, bottom + t.m.dp(10.0), l.pick(["重读系统状态", "重讀系統狀態", "Read the system again"]));
+    out.push(Hit { rect: forget, action: Action::ForgetAppStates });
+    let bottom = forget.y + forget.h;
     // A change that could not be written says so here, where it stays: a tap
     // that leaves the row as it was looks like a tap that did nothing.
     let bottom = match &s.app_state_failed {

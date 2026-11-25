@@ -1114,6 +1114,11 @@ impl App {
                     return vec![Effect::QueueAppState { package, disable: !now_disabled }];
                 }
             }
+            Action::ForgetAppStates => {
+                self.state.app_state_trace.clear();
+                self.state.app_state_failed = None;
+                return vec![Effect::ForgetAppStates];
+            }
             Action::DataAppOpen(k) => {
                 self.state.app_at = Some(k);
                 return self.act(Action::Open(Screen::DataAppInfo), now);
