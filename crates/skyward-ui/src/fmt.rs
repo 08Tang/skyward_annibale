@@ -996,7 +996,7 @@ pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
         ImageKind::Boot { kernel: false, .. } => (&BOOT[..], &["仅包含通用 ramdisk", "僅包含通用 ramdisk", "Holds a generic ramdisk alone"]),
         ImageKind::VendorBoot => (
             &["vendor_boot 镜像", "vendor_boot 映像檔", "vendor_boot image"][..],
-            &["包含厂商 ramdisk 和设备树", "包含廠商 ramdisk 和裝置樹", "Holds the vendor ramdisk and device tree"][..],
+            &["包含厂商 ramdisk 和设备树", "包含廠商 ramdisk 和裝置樹", "Holds the vendor ramdisk and device tree"],
         ),
         ImageKind::Dtbo => (&["dtbo 镜像", "dtbo 映像檔", "dtbo image"][..], &["包含设备树叠加层", "包含裝置樹疊加層", "Holds device tree overlays"]),
         ImageKind::Vbmeta => (&["vbmeta 镜像", "vbmeta 映像檔", "vbmeta image"][..], &["包含启动验证数据", "包含啟動驗證資料", "Holds verified boot data"]),
