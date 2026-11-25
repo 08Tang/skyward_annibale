@@ -1092,32 +1092,8 @@ impl App {
                     let disabled = self.state.app_disabled.as_ref().and_then(|m| m.get(&package)).copied().unwrap_or(false);
                     let queued = self.state.app_state_queued.get(&package).copied();
                     let now_disabled = queued.unwrap_or(disabled);
-                    // Every tap's reading is kept: an app whose row will not
-                    // turn over is accounted for by what the page believed at
-                    // the tap, and there is no other way to see it.
-                    self.state.app_state_trace.push(format!(
-                        "{package} 状态={} 排队={} 由此排={}",
-                        if disabled { "已停用" } else { "启用中" },
-                        match queued {
-                            Some(true) => "待停用",
-                            Some(false) => "待启用",
-                            None => "无",
-                        },
-                        if now_disabled { "启用" } else { "停用" },
-                    ));
-                    // Only the last few are shown, and only the last few are
-                    // kept: a page tapped at all day would grow without end.
-                    let extra = self.state.app_state_trace.len().saturating_sub(8);
-                    if extra > 0 {
-                        self.state.app_state_trace.drain(..extra);
-                    }
                     return vec![Effect::QueueAppState { package, disable: !now_disabled }];
                 }
-            }
-            Action::ForgetAppStates => {
-                self.state.app_state_trace.clear();
-                self.state.app_state_failed = None;
-                return vec![Effect::ForgetAppStates];
             }
             Action::DataAppOpen(k) => {
                 self.state.app_at = Some(k);

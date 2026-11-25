@@ -447,10 +447,6 @@ pub enum Action {
     /// Turn a system app on or off, by its place in the list: the change is
     /// queued for the system to carry out at its next start.
     SysAppToggle(usize),
-    /// Throw away the record of which system apps are disabled, and the queue
-    /// with it: for when that record no longer matches what the system holds,
-    /// which makes every tap on an app ask for the same change.
-    ForgetAppStates,
     /// Open the app at this place in the list.
     DataAppOpen(usize),
     /// Open the search page to look through the apps.
@@ -679,10 +675,6 @@ pub enum Effect {
     /// Read which system apps the system has disabled, telling them with
     /// [`App::set_app_disabled`].
     ReadAppStates,
-    /// Throw away the record of which system apps are disabled, and the queue
-    /// with it, then read them again: the record is ours, and it drifts from
-    /// what the system holds.
-    ForgetAppStates,
     /// Have the system disable or enable the app with this package name at its
     /// next start: the package, and whether it is to be disabled.
     QueueAppState { package: String, disable: bool },

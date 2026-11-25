@@ -64,21 +64,17 @@ impl App {
     /// the queue the script has not run. The two are kept apart: one is what
     /// the app is, the other what it is headed for, and a queued change shows
     /// as waiting rather than as made. Redrawn, since the page shows both.
+    ///
+    /// A change queued at this start stays queued: the file is read when the
+    /// page opens, and the page is opened again by every visit, so reading it
+    /// here must not undo a tap that came before. What the system has carried
+    /// out is gone from the queue by then, and the state it wrote back is what
+    /// says so.
     pub fn set_app_disabled(&mut self, states: std::collections::BTreeMap<String, bool>, queued: std::collections::BTreeMap<String, bool>) {
         self.state.app_disabled = Some(states);
-        // A request the script has already carried out is no longer in the
-        // queue, and the state it wrote back says what happened; a request
-        // still in it is the one thing the page has to show as waiting, so the
-        // queue is what the waiting is kept in.
-        self.state.app_state_queued = queued;
-        self.refresh();
-    }
-
-    /// What the queue and the state file hold, written out for the page's foot:
-    /// the recovery shows no files, and an app whose row will not turn over is
-    /// accounted for by one of these two.
-    pub fn set_app_state_report(&mut self, report: String) {
-        self.state.app_state_report = report;
+        for (package, disable) in queued {
+            self.state.app_state_queued.insert(package, disable);
+        }
         self.refresh();
     }
 
@@ -288,6 +284,28 @@ mod tests {
             tap(&mut app, &f, &i, Action::SysAppToggle(0)),
             vec![Effect::QueueAppState { package: "com.android.settings".into(), disable: false }],
             "the second tap asks for it back on, rather than for off again"
+        );
+    }
+
+    #[test]
+    fn a_change_queued_at_this_start_survives_the_states_being_read_again() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::SystemApps, W, H, PPD);
+        app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
+        app.state.app_disabled = Some([("com.android.settings".to_string(), false)].into_iter().collect());
+        app.refresh();
+        // A tap queues the change, and the file it was written to says so.
+        tap(&mut app, &f, &i, Action::SysAppToggle(0));
+        app.app_state_queued("com.android.settings", true);
+        // The page is opened again, and the files are read as they are on a
+        // phone where the queue file holds nothing yet -- the write and the
+        // read race, and a read that wins must not undo the tap. The change
+        // asked for at this start is the page's own, and it is kept.
+        app.set_app_disabled([("com.android.settings".to_string(), false)].into_iter().collect(), Default::default());
+        assert_eq!(
+            tap(&mut app, &f, &i, Action::SysAppToggle(0)),
+            vec![Effect::QueueAppState { package: "com.android.settings".into(), disable: false }],
+            "the tap that came before is not undone by reading the files"
         );
     }
 

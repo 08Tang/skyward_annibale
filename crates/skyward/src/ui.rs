@@ -3451,21 +3451,8 @@ impl Pages<'_> {
             Effect::ReadSystemApps => {
                 self.app_reader = Some(appread::Reader::start_system()?);
             }
-            Effect::ForgetAppStates => match crate::appstate::forget() {
-                Ok(()) => {
-                    skyward_sys::kmsg("the system apps' record is thrown away")?;
-                    self.app.set_app_disabled(Default::default(), Default::default());
-                    self.app.set_app_state_report(crate::appstate::report());
-                }
-                Err(e) => {
-                    skyward_sys::kmsg(&format!("the record is not thrown away: {e:#}"))?;
-                    self.app.app_state_failed(&format!("{e:#}"));
-                    self.app.report(&format!("not forgotten: {e:#}"), monotonic_ms());
-                }
-            },
             Effect::ReadAppStates => {
                 self.app.set_app_disabled(crate::appstate::states(), crate::appstate::queued());
-                self.app.set_app_state_report(crate::appstate::report());
             }
             // A change to a system app is queued rather than made: only the
             // system itself can change its package manager's state, so the
@@ -3475,7 +3462,6 @@ impl Pages<'_> {
                 Ok(()) => {
                     skyward_sys::kmsg(&format!("{package} is queued to be {} at the next start", if disable { "disabled" } else { "enabled" }))?;
                     self.app.app_state_queued(&package, disable);
-                    self.app.set_app_state_report(crate::appstate::report());
                 }
                 Err(e) => {
                     skyward_sys::kmsg(&format!("{package} is not queued: {e:#}"))?;

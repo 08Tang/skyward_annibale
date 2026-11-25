@@ -210,17 +210,6 @@ pub fn queued() -> BTreeMap<String, bool> {
     out
 }
 
-/// 队列和状态两个文件的原样内容，给页面末尾看：recovery 里没有别的办法看它们，
-/// 而一个点不动的应用只能由这两份文件里的某一行解释。
-pub fn report() -> String {
-    let read = |path: &str| match fs::read_to_string(path) {
-        Ok(text) if !text.trim().is_empty() => text.trim().replace('\n', " | "),
-        Ok(_) => "（空）".to_string(),
-        Err(e) => format!("（读不到：{e}）"),
-    };
-    format!("排队：{} ／ 状态：{}", read(QUEUE), read(STATE))
-}
-
 /// 把一个停用/启用请求排进队列，并把启动脚本装上（已经有了就覆盖成最新
 /// 那份）。data 分区没打开时这里会失败，页面据此说一句。
 pub fn queue(package: &str, disable: bool) -> Result<()> {
@@ -247,24 +236,6 @@ pub fn queue(package: &str, disable: bool) -> Result<()> {
     fs::write(&writing, text.as_bytes()).with_context(|| format!("write {writing}"))?;
     fs::rename(&writing, QUEUE).with_context(|| format!("move {writing} onto {QUEUE}"))?;
     skyward_sys::kmsg(&format!("{package} is queued to be {} at the next start", if disable { "disabled" } else { "enabled" }))?;
-    Ok(())
-}
-
-/// 状态文件整份丢掉，队列也清空：页面回到「什么都不知道」的样子，下一次点
-/// 一下就是照「启用中」算的停用。系统应用页面给的这个入口，是为了那份记录和
-/// 系统的实际状态走散的时候 —— 用 adb 手工 enable 过、或者某次运行留了半行，
-/// 记录说「已停用」而包其实是启用着的，于是点一下排的是启用、页面不动。
-///
-/// 记录丢了不会让系统变样：它只是页面读的一份东西，脚本每次开机还会照系统的
-/// `pm list packages -d` 重写一遍。
-pub fn forget() -> Result<()> {
-    for path in [STATE, QUEUE] {
-        match fs::remove_file(path) {
-            Ok(()) => {}
-            Err(e) if e.kind() == ErrorKind::NotFound => {}
-            Err(e) => return Err(e).with_context(|| format!("remove {path}")),
-        }
-    }
     Ok(())
 }
 
