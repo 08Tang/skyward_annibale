@@ -2,7 +2,7 @@ use crate::app::{
     ADDABLE, Action, AvbCheck, BACKUP_PARTS, BackupAt, BackupEnd, BackupJob, Check, ChargeMode, ClashChoice, Confirm, DATA_ERASED, DATA_PARTITION, DOWNLOADS, Damage, Data, Dock,
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Region, Rows,
-    SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target, Report,
+    RecordSetting, SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target, Report,
     UsbDrive, UsbLink, WIPES, Wipe, installs, starting, MEDIA_PART, UTC, listed, DATA_PART,};
 use crate::canvas::Canvas;
 use crate::color::Rgba;
@@ -13,7 +13,6 @@ use crate::font::Fonts;
 use crate::geom::Rect;
 use crate::icons::{self, Icon};
 use crate::lang::{Lang, Text, same};
-use crate::app::state::RecordSetting;
 use crate::search;
 use crate::term::{self, Term};
 use crate::texts;

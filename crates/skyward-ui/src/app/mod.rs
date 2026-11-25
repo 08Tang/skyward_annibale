@@ -66,6 +66,7 @@ mod terminal;
 mod tiles;
 #[cfg(test)]
 mod record_tests;
+#[cfg(test)]
 mod testing;
 mod update;
 mod wipe;
@@ -358,14 +359,6 @@ pub enum Action {
     Confirm(Confirm),
     /// The pattern grid on the unlock page.
     Pattern,
-    /// Begin a take of the screen at the settings the recording page holds,
-    /// telling how it went with [App::record_started] or
-    /// [App::record_failed].
-    RecordStart,
-    /// End the take running, telling of it with [App::record_stopped].
-    RecordStop,
-    /// Pause the take running, or carry it on.
-    RecordPause(bool),
     /// Start receiving a package over USB.
     Sideload,
     /// Send the image to one of the partitions it fits.
@@ -639,6 +632,14 @@ pub enum Effect {
     Screenshot {
         storage: bool,
     },
+    /// Begin a take of the screen at the settings the recording page holds,
+    /// telling how it went with [`App::record_started`] or
+    /// [`App::record_failed`].
+    RecordStart,
+    /// End the take running, telling of it with [`App::record_stopped`].
+    RecordStop,
+    /// Pause the take running, or carry it on.
+    RecordPause(bool),
     /// Offer internal storage to a computer over USB, or stop.
     FileTransfer(bool),
     /// Start receiving a package over USB.

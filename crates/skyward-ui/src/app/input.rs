@@ -4,8 +4,7 @@
 use super::*;
 
 impl App {
-    pub fn touch(&mut self, ev: Touch, f: &Fonts, now: u64) -> Vec<Effect> {
-        /// A finger on the recording's capsule: dragged, it moves the capsule,
+    /// A finger on the recording's capsule: dragged, it moves the capsule,
     /// and tapped, the left cell pauses or carries on while the right one
     /// ends the take. `None` where the touch is not the capsule's.
     ///
@@ -62,7 +61,8 @@ impl App {
         }
     }
 
-    // A finger on the recording's capsule is the capsule's: dragged, it
+    pub fn touch(&mut self, ev: Touch, f: &Fonts, now: u64) -> Vec<Effect> {
+        // A finger on the recording's capsule is the capsule's: dragged, it
         // moves the capsule, and tapped, it pauses or ends the take. It is
         // read before anything else, since the capsule is drawn over
         // everything and so is over everything for a finger too.
