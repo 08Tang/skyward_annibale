@@ -183,10 +183,10 @@ fn decode_name(raw: &str) -> String {
 /// UTF-16 big-endian bytes as text: an odd length, or a lone surrogate, is not
 /// a name.
 fn utf16be(bytes: &[u8]) -> Option<String> {
-    if bytes.is_empty() || bytes.len() % 2 != 0 {
+    if bytes.is_empty() || !bytes.len().is_multiple_of(2) {
         return None;
     }
-    let units: Vec<u16> = bytes.chunks_exact(2).map(|p| u16::from_be_bytes([p[0], p[1]])).collect();
+    let units: Vec<u16> = bytes.chunks(2).map(|p| u16::from_be_bytes([p[0], p[1]])).collect();
     String::from_utf16(&units).ok()
 }
 
@@ -196,7 +196,7 @@ fn utf16be(bytes: &[u8]) -> Option<String> {
 /// plain name that happens to be valid base64 is not decoded by mistake.
 fn unbase64(text: &str) -> Option<Vec<u8>> {
     let s = text.as_bytes();
-    if s.len() < 8 || s.len() % 4 != 0 {
+    if s.len() < 8 || !s.len().is_multiple_of(4) {
         return None;
     }
     let pad = s.iter().rev().take_while(|&&b| b == b'=').count();
@@ -214,7 +214,7 @@ fn unbase64(text: &str) -> Option<Vec<u8>> {
         })
     };
     let mut out = Vec::with_capacity(s.len() / 4 * 3);
-    for group in s.chunks_exact(4) {
+    for group in s.chunks(4) {
         let mut bits = 0u32;
         let mut count = 0;
         for &b in group {
