@@ -1562,7 +1562,7 @@ mod tests {
         app.shade = 1.0;
         app.compose(&mut c, &f, &i, "12:00", 1000);
         // The twelve tiles and the two capsules, and nothing else.
-        assert_eq!(app.shade_hits.len(), 14, "eleven tiles, the pencil and two capsules");
+        assert_eq!(app.shade_hits.len(), 15, "twelve tiles, the pencil and two capsules");
         let tiles: Vec<ShadeHit> = app
             .shade_hits
             .iter()
