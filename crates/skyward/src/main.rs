@@ -62,6 +62,8 @@ mod sortmem;
 #[cfg(target_os = "android")]
 mod systems;
 #[cfg(target_os = "android")]
+mod tilesmem;
+#[cfg(target_os = "android")]
 mod ui;
 #[cfg(target_os = "android")]
 mod updates;

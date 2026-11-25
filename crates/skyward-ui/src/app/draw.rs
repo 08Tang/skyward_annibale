@@ -386,7 +386,7 @@ impl App {
         let w = m.w as f32;
         let l = self.state.lang;
         let white = Rgba::rgb(255, 255, 255);
-        let tall = m.dp(SHADE_HEIGHT_DP);
+        let tall = shade_height(&t, self.state.tiles.len(), self.shade_editing);
         let sheet = tall * self.shade;
         let top = sheet - tall;
         let pane = Rgba::rgb(20, 20, 26).with_alpha(238);
@@ -427,59 +427,72 @@ impl App {
             let wide = out.text_width(&f.heading, clock, time_px);
             out.text(&f.body, date, m.margin + inset + wide + m.dp(12.0), top + m.dp(86.0), m.dp(19.0), white.with_alpha(170), None);
         }
-        // The twelve round tiles, three rows of four. A tile is a disc with its
-        // mark in it and its word under it, and the ones that turn something on
-        // show lit while it is on.
-        let (gap, disc, word_gap) = (m.dp(10.0), m.dp(56.0), m.dp(7.0));
-        let cell = (w - m.margin * 2.0 - gap * 3.0) / 4.0;
-        let tiles_top = top + m.dp(116.0);
-        let row_h = disc + word_gap + m.dp(19.0);
+        // The tiles the owner has laid out, four to a row, as many rows as
+        // there are: a tile is a disc with its mark in it and its word under
+        // it, and the ones that turn something on show lit while it is on.
+        //
+        // How many there are is the owner's to say, so the sheet's height
+        // comes from the count rather than from a fixed number of rows: four
+        // tiles take one row and the sheet closes up under them.
+        let grid = TileGrid::of(&t, top);
+        let (disc, word_gap) = (grid.dia, m.dp(7.0));
         let mut hits = Vec::new();
-        for (i, hit) in ShadeHit::TILES.into_iter().enumerate() {
-            let (col, row) = (i % 4, i / 4);
-            let cx = m.margin + col as f32 * (cell + gap) + cell / 2.0;
-            let cy = tiles_top + row as f32 * (row_h + gap) + disc / 2.0;
-            let lit = hit.lit(&self.state);
+        for (i, &tile) in self.state.tiles.iter().enumerate() {
+            let (cx, cy) = grid.centre(i);
+            let lit = tile.lit(&self.state);
             // The whole cell answers a touch, not the disc alone: a finger is
             // not asked to find the middle of it.
-            hits.push((Rect::new(cx - cell / 2.0, cy - disc / 2.0 - m.dp(2.0), cell, row_h + m.dp(4.0)), hit));
+            hits.push((grid.rect(i), ShadeHit::Tile(tile)));
             let fill = if lit { t.pal.accent.with_alpha(232) } else { white.with_alpha(30) };
             out.fill_circle(cx, cy, disc / 2.0, fill);
             let ink = if lit { white } else { white.with_alpha(238) };
-            Self::shade_glyph(out, &t, hit, cx, cy, m.dp(26.0), ink);
+            crate::icons::glyph(out, tile.icon(), cx, cy, m.dp(26.0), ink);
             // The tile's word, kept inside its cell however long it is: a name
             // wider than the cell would run under the tile beside it.
-            let label = Self::shade_label(l, hit, &wlan);
-            let px = widgets::fitted_px(out, &f.body, label, m.dp(SHADE_LABEL_DP), m.dp(SHADE_NAME_LEAST_DP), cell);
+            let label = if tile == Tile::Wlan { wlan.as_str() } else { tile.label(l) };
+            let px = widgets::fitted_px(out, &f.body, label, m.dp(SHADE_LABEL_DP), m.dp(SHADE_NAME_LEAST_DP), grid.cell);
             let travel = out.text_width(&f.body, label, px);
             let baseline = cy + disc / 2.0 + word_gap + m.dp(14.0);
-            if travel <= cell {
-                if hit == ShadeHit::Wlan {
+            if travel <= grid.cell {
+                if tile == Tile::Wlan {
                     self.shade_roll = None;
                 }
                 let x = cx - travel / 2.0;
                 out.text(&f.body, label, x, baseline, px, ink, None);
-            } else if hit == ShadeHit::Wlan {
+            } else if tile == Tile::Wlan {
                 // A name still too long at the least size rolls, rather than
                 // being cut: the whole of it is read as it passes.
                 let since = match self.shade_roll {
                     Some(r) if (r.travel - travel).abs() < 0.5 => r.since,
                     _ => now,
                 };
-                let roll = Roll { since, travel, room: cell, pace: roll_pace(m.dp(1.0)) };
+                let roll = Roll { since, travel, room: grid.cell, pace: roll_pace(m.dp(1.0)) };
                 self.shade_roll = Some(roll);
-                let x = cx - cell / 2.0;
-                Self::paint_rolled(out, &f.body, label, x, baseline, px, cell, ink, roll.offset(now));
+                let x = cx - grid.cell / 2.0;
+                Self::paint_rolled(out, &f.body, label, x, baseline, px, grid.cell, ink, roll.offset(now));
             } else {
                 // Anything else too long is set from its middle and let past
                 // its cell, since it names a page rather than a network.
                 let x = cx - travel / 2.0;
                 out.text(&f.body, label, x, baseline, px, ink, None);
             }
+            // While the panel is being put in order every tile carries a small
+            // cross at its upper right, and the one a finger has picked up is
+            // drawn under the finger rather than in its place.
+            if self.shade_editing {
+                let (kx, ky) = (cx + disc / 2.0 - m.dp(3.0), cy - disc / 2.0 + m.dp(3.0));
+                out.fill_circle(kx, ky, m.dp(9.0), Rgba::rgb(40, 40, 46));
+                let arm = m.dp(3.4);
+                let stroke = m.dp(1.6);
+                out.line(kx - arm, ky - arm, kx + arm, ky + arm, stroke, white.with_alpha(230));
+                out.line(kx + arm, ky - arm, kx - arm, ky + arm, stroke, white.with_alpha(230));
+                hits.push((Rect::new(kx - m.dp(15.0), ky - m.dp(15.0), m.dp(30.0), m.dp(30.0)), ShadeHit::TileRemove(tile)));
+            }
         }
         // The card saying how the phone stands: whether its data is open, the
         // slot it starts from, what is left in the battery and how warm it is.
-        let card_top = tiles_top + 3.0 * (row_h + gap) + m.dp(4.0);
+        let rows = self.state.tiles.len().div_ceil(4).max(1);
+        let card_top = grid.top + rows as f32 * grid.row_h + m.dp(4.0);
         let card = Rect::new(m.margin, card_top, w - m.margin * 2.0, m.dp(58.0));
         out.fill_round_rect(card.x, card.y, card.w, card.h, m.dp(18.0), white.with_alpha(20));
         let cells: [String; 4] = [
@@ -508,6 +521,7 @@ impl App {
         // its middle -- the name inside was never level with anything. A finger
         // anywhere on one slides it.
         let cap_h = m.dp(46.0);
+        let gap = m.dp(10.0);
         let cap_w = (w - m.margin * 2.0 - gap) / 2.0;
         let row = card.y + card.h + m.dp(14.0);
         for (col, (which, hit)) in [(Slider::Brightness, ShadeHit::Brightness), (Slider::Vibration, ShadeHit::Vibration)].into_iter().enumerate() {
@@ -529,6 +543,100 @@ impl App {
             // the level it is set to.
             Self::shade_glyph(out, &t, hit, cap.x + m.dp(26.0), cap.y + cap.h / 2.0, m.dp(23.0), white.with_alpha(235));
             hits.push((cap, hit));
+        }
+        // At the right end of the clock's line, a round button: a pencil as a
+        // rule, which opens the editor, and a tick while editing, which closes
+        // it. It is the one way in -- a tile is no longer held down for it --
+        // so it is put where it can be seen and reached.
+        //
+        // Its middle stands over the middle of the last column's tiles rather
+        // than over the middle of their cells: a cell is wider than the disc
+        // and the disc is centred in it, so a cell's middle sits to the right.
+        {
+            let d = m.dp(34.0);
+            let (last_cx, _) = grid.centre(3);
+            // On the clock's own line: the ink reaches above and below the
+            // baseline the time is set on, and the middle of that is the line.
+            let clock_px = m.dp(44.0);
+            let clock_y = top + m.dp(88.0);
+            let (tt, tb) = f.heading.ink(clock_px);
+            let (cx, cy) = (last_cx, clock_y + (tt + tb) / 2.0);
+            out.fill_circle(cx, cy, d / 2.0, t.pal.accent.with_alpha(215));
+            let stroke = m.dp(2.2);
+            if self.shade_editing {
+                // A tick: two strokes, the short one down and the long one up
+                // to the right.
+                let s = d * 0.42;
+                out.line(cx - s * 0.52, cy + s * 0.04, cx - s * 0.08, cy + s * 0.46, stroke, white);
+                out.line(cx - s * 0.08, cy + s * 0.46, cx + s * 0.56, cy - s * 0.40, stroke, white);
+            } else {
+                icons::glyph(out, Icon::Pencil, cx, cy, d * 0.56, white);
+            }
+            // A finger is asked to find a disc, not to hit it exactly: the
+            // place that answers is wider than the disc by 6 dp on each side.
+            let reach = d + m.dp(12.0);
+            let which = if self.shade_editing { ShadeHit::TilesDone } else { ShadeHit::TilesEdit };
+            hits.push((Rect::new(cx - reach / 2.0, cy - reach / 2.0, reach, reach), which));
+        }
+        // With no tile laid out that band is empty: a line of words says so,
+        // rather than leaving what looks like a page that failed to draw.
+        if self.state.tiles.is_empty() {
+            let said = if self.shade_editing {
+                l.pick(["从下面挑几枚摆上来", "從下面挑幾枚擺上來", "Pick a few from below"])
+            } else {
+                l.pick(["长按这里可以摆磁贴", "長按這裡可以擺磁貼", "Hold here to choose tiles"])
+            };
+            out.text(&f.body, said, m.margin, grid.top + m.dp(20.0), m.dp(12.0), white.with_alpha(150), None);
+        }
+        // While the panel is being put in order the status card gives way: the
+        // tiles not laid out yet are listed under it, six to a row.
+        if self.shade_editing {
+            let add_top = card.y + card.h + m.dp(4.0);
+            let left = self.state.tiles_left();
+            if left.is_empty() {
+                let said = l.pick(["磁贴都摆上了", "磁貼都擺上了", "Every tile is on the sheet"]);
+                out.text(&f.body, said, m.margin, add_top + m.dp(18.0), m.dp(12.5), white.with_alpha(150), None);
+            } else {
+                out.text(&f.body, l.pick(["添加磁贴", "新增磁貼", "Add a tile"]), m.margin, add_top + m.dp(20.0), m.dp(12.5), white.with_alpha(150), None);
+                // There are more than twenty to offer, and four to a row would
+                // take seven: six to a row, a size smaller, fits them in three.
+                let small = m.dp(32.0);
+                let label_px = m.dp(9.0);
+                let slot_w = (w - m.margin * 2.0) / 6.0;
+                let pitch = small + m.dp(24.0);
+                for (k, &tile) in left.iter().enumerate() {
+                    let (col, line) = (k % 6, k / 6);
+                    let cx = m.margin + slot_w * (col as f32 + 0.5);
+                    let cy = add_top + m.dp(54.0) + line as f32 * pitch + small / 2.0;
+                    out.stroke_circle(cx, cy, small / 2.0, m.dp(1.3), white.with_alpha(115));
+                    icons::glyph(out, tile.icon(), cx, cy, small * 0.46, white.with_alpha(200));
+                    let name = tile.label(l);
+                    // A name too long is cut to the cell: six to a row leaves a
+                    // little over 200 pixels for each.
+                    let room = slot_w - m.dp(6.0);
+                    let shown = if out.text_width(&f.body, name, label_px) <= room {
+                        name.to_string()
+                    } else {
+                        let mut cut = name.to_string();
+                        while !cut.is_empty() && out.text_width(&f.body, &cut, label_px) > room {
+                            cut.pop();
+                        }
+                        cut
+                    };
+                    out.text_center(&f.body, &shown, cx, cy + small / 2.0 + m.dp(10.0), label_px, white.with_alpha(180));
+                    let reach = Rect::new(cx - slot_w / 2.0, cy - small / 2.0 - m.dp(3.0), slot_w, pitch - m.dp(6.0));
+                    hits.push((reach, ShadeHit::TileAdd(tile)));
+                }
+            }
+        }
+        // The tile a finger has picked up follows it, drawn over everything
+        // else.
+        if let Some(drag) = self.shade_drag {
+            let (cx, cy) = (drag.x, drag.y);
+            let fill = if drag.tile.lit(&self.state) { t.pal.accent } else { Rgba::rgb(53, 53, 55) };
+            out.fill_circle(cx, cy, disc * 0.58, Rgba::rgb(0, 0, 0).with_alpha(60));
+            out.fill_circle(cx, cy, disc / 2.0 * 1.08, fill);
+            icons::glyph(out, drag.tile.icon(), cx, cy, disc * 0.46 * 1.08, white);
         }
         self.shade_hits = hits;
     }
@@ -552,58 +660,22 @@ impl App {
         strip.draw(out, 0.0, 0.0, ink, 1.0);
     }
 
-    /// What a tile is called on the sheet: the network's own name for the
-    /// WLAN, and a word for each of the others.
-    fn shade_label(l: Lang, hit: ShadeHit, wlan: &str) -> &str {
-        match hit {
-            ShadeHit::Wlan => wlan,
-            ShadeHit::Vibrate => l.pick(["震动", "震動", "Vibration"]),
-            ShadeHit::Transfer => l.pick(["文件传输", "檔案傳輸", "Transfer"]),
-            ShadeHit::UsbDrive => l.pick(["U 盘", "USB 隨身碟", "USB drive"]),
-            ShadeHit::Files => l.pick(["文件管理", "檔案管理", "Files"]),
-            ShadeHit::Modules => l.pick(["模块管理", "模組管理", "Modules"]),
-            ShadeHit::Partitions => l.pick(["分区管理", "分割區管理", "Partitions"]),
-            ShadeHit::Terminal => l.pick(["终端", "終端機", "Terminal"]),
-            ShadeHit::Sleep => l.pick(["熄屏", "關閉螢幕", "Screen off"]),
-            ShadeHit::Screenshot => l.pick(["截图", "截圖", "Screenshot"]),
-            ShadeHit::Reboot => l.pick(["重启", "重新啟動", "Reboot"]),
-            ShadeHit::Settings => l.pick(["设置", "設定", "Settings"]),
-            ShadeHit::Brightness | ShadeHit::Vibration => "",
-        }
-    }
-
     /// The mark a tile or a slider carries.
     fn shade_glyph(out: &mut Canvas, t: &Theme, hit: ShadeHit, cx: f32, cy: f32, size: f32, ink: Rgba) {
         let m = &t.m;
         let stroke = (size * 0.075).max(m.dp(1.6));
         match hit {
-            ShadeHit::Wlan => icons::glyph(out, Icon::Wlan, cx, cy, size, ink),
-            ShadeHit::Sleep => icons::glyph(out, Icon::Power, cx, cy, size, ink),
-            ShadeHit::Screenshot => {
-                // A camera: its body, the bump over its viewfinder, its lens.
-                let (w, h) = (size * 0.74, size * 0.54);
-                let top = cy - h / 2.0 + size * 0.04;
-                out.stroke_round_rect(cx - w / 2.0, top, w, h, size * 0.13, stroke, ink);
-                out.fill_round_rect(cx - size * 0.12, top - size * 0.10, size * 0.24, size * 0.11, size * 0.045, ink);
-                out.stroke_circle(cx, top + h / 2.0, size * 0.145, stroke, ink);
-            }
-            ShadeHit::Reboot => icons::glyph(out, Icon::Restore, cx, cy, size, ink),
-            // The motor's mark is the slider's own: the tile and the capsule
-            // below it stand for the same thing.
-            ShadeHit::Vibrate | ShadeHit::Vibration => {
+            ShadeHit::Tile(tile) => icons::glyph(out, tile.icon(), cx, cy, size, ink),
+            // The small cross and the tiles offered below are drawn by
+            // `paint_shade` itself, and are no mark in a disc.
+            ShadeHit::TileRemove(_) | ShadeHit::TileAdd(_) | ShadeHit::TilesDone | ShadeHit::TilesEdit => {}
+            ShadeHit::Vibration => {
                 // Three bars, the middle one longer: a motor tapping.
                 for (i, tall) in [0.36f32, 0.68, 0.36].iter().enumerate() {
                     let x = cx + (i as f32 - 1.0) * size * 0.24;
                     out.fill_round_rect(x - size * 0.06, cy - size * tall / 2.0, size * 0.12, size * tall, size * 0.06, ink);
                 }
             }
-            ShadeHit::Transfer => icons::glyph(out, Icon::Usb, cx, cy, size, ink),
-            ShadeHit::UsbDrive => icons::glyph(out, Icon::UsbDrive, cx, cy, size, ink),
-            ShadeHit::Files => icons::glyph(out, Icon::Folder, cx, cy, size, ink),
-            ShadeHit::Modules => icons::glyph(out, Icon::Layers, cx, cy, size, ink),
-            ShadeHit::Partitions => icons::glyph(out, Icon::Mount, cx, cy, size, ink),
-            ShadeHit::Terminal => icons::glyph(out, Icon::Terminal, cx, cy, size, ink),
-            ShadeHit::Settings => icons::glyph(out, Icon::Gear, cx, cy, size, ink),
             ShadeHit::Brightness => {
                 // A sun: its disc and eight rays.
                 out.fill_circle(cx, cy, size * 0.19, ink);
@@ -1373,7 +1445,7 @@ mod tests {
     }
 
     #[test]
-    fn the_control_centre_lays_out_twelve_tiles_and_every_one_answers_a_touch() {
+    fn the_control_centre_lays_out_the_tiles_it_holds_and_every_one_answers_a_touch() {
         let (f, i) = (fonts(), info());
         let mut app = App::new(Screen::Home, W, H, PPD);
         let mut c = Canvas::new(W, H);
@@ -1382,11 +1454,13 @@ mod tests {
         // The twelve tiles and the two capsules, and nothing else.
         assert_eq!(app.shade_hits.len(), 14, "twelve tiles and two capsules");
         let tiles: Vec<ShadeHit> = app.shade_hits.iter().map(|(_, h)| *h).filter(|h| !matches!(h, ShadeHit::Brightness | ShadeHit::Vibration)).collect();
-        assert_eq!(tiles, ShadeHit::TILES.to_vec(), "the tiles in the order the sheet lays them out");
+        let wanted: Vec<ShadeHit> = app.state.tiles.iter().map(|&t| ShadeHit::Tile(t)).collect();
+        assert_eq!(tiles, wanted, "the tiles in the order the state lays them out");
         // Every one of them sits inside the sheet, and no two overlap: a tile
         // a finger cannot reach, or one that takes another's touch, is a tile
         // that does nothing.
-        let sheet = app.theme().m.dp(SHADE_HEIGHT_DP);
+        let theme = app.theme();
+        let sheet = shade_height(&theme, app.state.tiles.len(), app.shade_editing);
         for (k, (rect, hit)) in app.shade_hits.iter().enumerate() {
             assert!(rect.y >= 0.0 && rect.y + rect.h <= sheet, "{hit:?} runs past the sheet: {rect:?}");
             assert!(rect.x >= 0.0 && rect.x + rect.w <= W as f32, "{hit:?} runs off the side: {rect:?}");
@@ -1396,7 +1470,7 @@ mod tests {
             }
         }
         // The rows are three, and the four of each sit on the same line.
-        let ys: Vec<f32> = app.shade_hits.iter().filter(|(_, h)| ShadeHit::TILES.contains(h)).map(|(r, _)| r.y).collect();
+        let ys: Vec<f32> = app.shade_hits.iter().filter(|(_, h)| matches!(h, ShadeHit::Tile(_))).map(|(r, _)| r.y).collect();
         assert_eq!(ys.chunks(4).count(), 3, "three rows of four");
         for row in ys.chunks(4) {
             assert!(row.windows(2).all(|w| (w[0] - w[1]).abs() < 0.01), "a row is level: {row:?}");
@@ -1417,7 +1491,7 @@ mod tests {
         app.state.file_transfer = false;
         app.state.usb_drive = None;
         app.compose(&mut c, &f, &i, "12:00", 1000);
-        let lit = |app: &App| -> Vec<ShadeHit> { ShadeHit::TILES.into_iter().filter(|h| h.lit(&app.state)).collect() };
+        let lit = |app: &App| -> Vec<Tile> { TILES.into_iter().filter(|t| t.lit(&app.state)).collect() };
         assert!(lit(&app).is_empty(), "nothing is lit with everything off");
         // Turned on, each shows lit; the ones that open a page never do.
         app.state.wlan = Some(connected("Redmi-AX6000"));
@@ -1425,8 +1499,8 @@ mod tests {
         app.state.file_transfer = true;
         app.state.usb_drive = Some(UsbDrive::Shown);
         app.compose(&mut c, &f, &i, "12:00", 1000);
-        assert_eq!(lit(&app), vec![ShadeHit::Wlan, ShadeHit::Vibrate, ShadeHit::Transfer, ShadeHit::UsbDrive]);
-        assert!(!ShadeHit::Files.lit(&app.state) && !ShadeHit::Settings.lit(&app.state), "a page's tile is never lit");
+        assert_eq!(lit(&app), vec![Tile::Wlan, Tile::Vibrate, Tile::FileTransfer]);
+        assert!(!Tile::Files.lit(&app.state) && !Tile::Settings.lit(&app.state), "a page's tile is never lit");
     }
 
     #[test]

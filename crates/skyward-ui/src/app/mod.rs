@@ -62,6 +62,7 @@ mod skyward;
 mod state;
 mod systems;
 mod terminal;
+mod tiles;
 #[cfg(test)]
 mod testing;
 mod update;
@@ -87,6 +88,7 @@ pub use skyward::*;
 pub use state::*;
 pub use systems::*;
 pub use terminal::*;
+pub use tiles::*;
 pub use update::*;
 pub use wipe::*;
 pub use wlan::*;
@@ -856,6 +858,9 @@ pub enum Effect {
     StopFetch,
     /// Keep the file manager's order for the starts that follow.
     KeepSort(SortKey, bool, bool),
+    /// Keep the control centre's tiles, and the order they stand in, for the
+    /// starts that follow.
+    KeepTiles(Vec<Tile>),
     Wlan(bool),
     /// Keep the WLAN open as the recovery starts, or stop keeping it so.
     WlanAuto(bool),
@@ -1431,11 +1436,28 @@ const SHADE_PULL_DP: f32 = 320.0;
 const SHADE_PERIOD: f32 = 1.8;
 /// The share of the pull past which letting go opens the sheet.
 const SHADE_KEEPS: f32 = 0.36;
-/// How tall the control centre's sheet is, in dp, at full pull: the time and
-/// the date, the twelve round tiles in three rows of four, the card saying
-/// how the phone stands, the two capsules, and the rounded foot with the
-/// grabber. It was 474 dp while the sheet held four square tiles.
-const SHADE_HEIGHT_DP: f32 = 556.0;
+/// How tall the control centre's sheet is, in dp, with `tiles` laid out and
+/// the editor open or not: the time and the date, the tiles in rows of four,
+/// the card saying how the phone stands, the two capsules, and the rounded
+/// foot with the grabber.
+///
+/// How many tiles there are is the owner's to say, so the height comes from
+/// the count rather than from a fixed number: four tiles take one row and the
+/// sheet closes up under them, leaving no empty band at the foot.
+fn shade_height(t: &Theme, tiles: usize, editing: bool) -> f32 {
+    let m = &t.m;
+    let rows = tiles.div_ceil(4).max(1);
+    let tile_h = m.dp(48.0) + m.dp(26.0);
+    // 128 dp is the clock and the date; 38 the room under the status card.
+    let base = m.dp(128.0) + rows as f32 * tile_h + m.dp(18.0) + m.dp(46.0) + m.dp(16.0) + m.dp(72.0) + m.dp(38.0);
+    if !editing {
+        return base;
+    }
+    // Under the status card while editing: a line of heading, then the tiles
+    // not laid out yet, six to a row.
+    let add_rows = (TILES.len().saturating_sub(tiles)).div_ceil(6).max(1);
+    base + m.dp(54.0) + add_rows as f32 * (m.dp(32.0) + m.dp(24.0)) + m.dp(22.0)
+}
 
 /// The size a tile's word is set at, in dp. A quarter of the sheet is narrow,
 /// so the word is set small: at the row title's own size the longer ones --
@@ -1496,56 +1518,92 @@ fn smooth(k: f32) -> f32 {
 }
 
 /// What a finger can press in the control centre.
-///
-/// The first twelve are the tiles, in the order they are laid out: three
-/// rows of four, the ones that turn something on or off above the ones that
-/// open a page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ShadeHit {
-    Wlan,
-    Vibrate,
-    Transfer,
-    UsbDrive,
-    Files,
-    Modules,
-    Partitions,
-    Terminal,
-    Sleep,
-    Screenshot,
-    Reboot,
-    Settings,
+    /// One of the tiles laid out, named by which kind it is.
+    Tile(Tile),
+    /// The small cross at a tile's upper right while editing: take this one
+    /// off.
+    TileRemove(Tile),
+    /// One of the tiles offered under the editor: lay it out.
+    TileAdd(Tile),
+    /// The editing is done: put it away.
+    TilesDone,
+    /// The pencil at the top right: open the editor. It is the only way in;
+    /// a tile is not held down for it.
+    TilesEdit,
     Brightness,
     Vibration,
 }
 
-impl ShadeHit {
-    /// The tiles, in the order the sheet lays them out.
-    const TILES: [ShadeHit; 12] = [
-        ShadeHit::Wlan,
-        ShadeHit::Vibrate,
-        ShadeHit::Transfer,
-        ShadeHit::UsbDrive,
-        ShadeHit::Files,
-        ShadeHit::Modules,
-        ShadeHit::Partitions,
-        ShadeHit::Terminal,
-        ShadeHit::Sleep,
-        ShadeHit::Screenshot,
-        ShadeHit::Reboot,
-        ShadeHit::Settings,
-    ];
+/// Where the control centre's tiles stand: how wide a cell is, how wide a
+/// tile's disc is, how tall a row is, and where the first row starts.
+///
+/// Both the drawing and the answering come from it, so the two agree: the
+/// time the answering rectangles all landed in the first row was the time
+/// each worked it out for itself.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TileGrid {
+    pub left: f32,
+    pub top: f32,
+    pub cell: f32,
+    pub dia: f32,
+    pub row_h: f32,
+}
 
-    /// Whether the tile turns something on and off rather than opening a
-    /// page, and so shows lit while it is on.
-    fn lit(self, state: &State) -> bool {
-        match self {
-            ShadeHit::Wlan => state.wlan.as_ref().is_some_and(|w| w.power == Power::On),
-            ShadeHit::Vibrate => state.vibrate,
-            ShadeHit::Transfer => state.file_transfer,
-            ShadeHit::UsbDrive => matches!(state.usb_drive, Some(UsbDrive::Shown)),
-            _ => false,
+impl TileGrid {
+    /// Where the tiles start with the sheet pulled down to `sheet_top`.
+    pub(crate) fn of(t: &Theme, sheet_top: f32) -> Self {
+        let m = &t.m;
+        let dia = m.dp(48.0);
+        TileGrid {
+            left: m.margin,
+            top: sheet_top + m.dp(128.0),
+            cell: (m.w as f32 - m.margin * 2.0) / 4.0,
+            dia,
+            row_h: dia + m.dp(26.0),
         }
     }
+
+    /// The middle of the disc of the tile in place `i`.
+    pub(crate) fn centre(&self, i: usize) -> (f32, f32) {
+        let (col, line) = (i % 4, i / 4);
+        (self.left + self.cell * (col as f32 + 0.5), self.top + line as f32 * self.row_h + self.dia / 2.0)
+    }
+
+    /// The place that answers a touch for the tile in place `i`.
+    pub(crate) fn rect(&self, i: usize) -> Rect {
+        let (col, line) = (i % 4, i / 4);
+        Rect::new(self.left + col as f32 * self.cell, self.top + line as f32 * self.row_h, self.cell, self.row_h)
+    }
+
+    /// The visible right edge of the last column's discs: a cell is wider than
+    /// a disc and the disc is centred in it, so it sits half of the difference
+    /// inside the cell's edge. Anything that lines up with the tiles, such as
+    /// the done button, lines up with this rather than with the cell.
+    pub(crate) fn right_edge(&self) -> f32 {
+        self.left + self.cell * 4.0 - (self.cell - self.dia) / 2.0
+    }
+
+    /// The place among `n` that the point on the screen is nearest to.
+    pub(crate) fn slot(&self, x: f32, y: f32, n: usize) -> usize {
+        if n == 0 {
+            return 0;
+        }
+        let col = (((x - self.left) / self.cell).floor().max(0.0) as usize).min(3);
+        let line = ((y - self.top) / self.row_h).floor().max(0.0) as usize;
+        (line * 4 + col).min(n - 1)
+    }
+}
+
+/// The tile a finger is dragging: which one, where the finger is, and the
+/// place in the row it would land in.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TileDrag {
+    pub(crate) tile: Tile,
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) at: usize,
 }
 
 /// A name in the control centre's WLAN tile, longer than the tile shows,
@@ -1627,6 +1685,13 @@ pub struct App {
     shade_speed: f32,
     shade_press: Option<(ShadeHit, f32)>,
     shade_hits: Vec<(Rect, ShadeHit)>,
+    /// Whether the panel is being put in order: the tiles then carry a cross
+    /// and the ones not laid out are offered below, and a tile touched does
+    /// nothing but be dragged.
+    shade_editing: bool,
+    /// The tile a finger has picked up in the editor, and where it has carried
+    /// it to.
+    shade_drag: Option<TileDrag>,
     /// The name in the WLAN tile rolling, while it is longer than its tile.
     shade_roll: Option<Roll>,
     /// When to take the screenshot a tile asked for, once the page under the
@@ -1797,6 +1862,8 @@ impl App {
             shade_speed: 0.0,
             shade_press: None,
             shade_hits: Vec::new(),
+            shade_editing: false,
+            shade_drag: None,
             shade_roll: None,
             shot_when: None,
             frame: None,
@@ -1963,6 +2030,15 @@ impl App {
     /// the loop asks for a frame a turn while.
     pub fn shade_busy(&self) -> bool {
         self.shade > 0.0 || self.shade_settle.is_some() || matches!(self.drag, Drag::Shade { .. })
+    }
+
+    /// The sheet's top edge on the screen: 0 with it all the way down, and
+    /// negative while it is part way. The tiles start below it, and both the
+    /// drawing and the answering count from it.
+    pub(crate) fn shade_top(&self) -> f32 {
+        let t = self.theme();
+        let tall = shade_height(&t, self.state.tiles.len(), self.shade_editing);
+        tall * self.shade - tall
     }
 
     /// Whether a text field's cursor shows at `now`, and when it next turns;

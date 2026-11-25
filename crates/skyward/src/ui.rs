@@ -1784,6 +1784,10 @@ impl<'a> Pages<'a> {
             self.app.state.sort_desc = desc;
             self.app.state.folders_first = folders;
         }
+        // The tiles the control centre lays out, kept from the starts before.
+        if let Some(tiles) = crate::tilesmem::read() {
+            self.app.state.tiles = tiles;
+        }
         let wlan_kept = crate::wlanmem::read();
         self.wlan_saved = wlan_kept.saved.clone();
         self.app.state.wlan_auto = wlan_kept.auto;
@@ -3570,6 +3574,13 @@ impl Pages<'_> {
                 match crate::sortmem::write(key, desc, folders) {
                     Ok(()) => skyward_sys::kmsg("the file order is kept for the starts that follow")?,
                     Err(e) => skyward_sys::kmsg(&format!("the file order is not kept: {e:#}"))?,
+                }
+            }
+            Effect::KeepTiles(tiles) => {
+                self.app.state.tiles = tiles.clone();
+                match crate::tilesmem::write(&tiles) {
+                    Ok(()) => skyward_sys::kmsg("the control centre's tiles are kept for the starts that follow")?,
+                    Err(e) => skyward_sys::kmsg(&format!("the control centre's tiles are not kept: {e:#}"))?,
                 }
             }
             Effect::Remember(on) => {

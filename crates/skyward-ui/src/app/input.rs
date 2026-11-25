@@ -688,7 +688,7 @@ impl App {
                 self.shade_last = None;
                 // A finger anywhere the sheet does not reach puts it away:
                 // the page under it was being touched, not the sheet.
-                let sheet = t.m.dp(SHADE_HEIGHT_DP) * self.shade;
+                let sheet = shade_height(&t, self.state.tiles.len(), self.shade_editing) * self.shade;
                 if self.shade > 0.0 && y > sheet {
                     self.close_shade();
                     self.drag = Drag::Idle;
@@ -703,6 +703,14 @@ impl App {
                             self.shade_slider(which, rect, x);
                             self.drag = Drag::Slider(which, rect);
                         }
+                        // A tile held in the editor is picked up where it stands,
+                        // so that a finger that moves carries it rather than
+                        // pulling the sheet.
+                        ShadeHit::Tile(tile) if self.shade_editing => {
+                            let at = self.state.tiles.iter().position(|&t| t == tile).unwrap_or(0);
+                            self.shade_drag = Some(TileDrag { tile, x, y, at });
+                            self.dirty = true;
+                        }
                         _ => self.shade_press = Some((hit, y)),
                     }
                     return Vec::new();
@@ -713,6 +721,17 @@ impl App {
             Touch::Move(x, y) => {
                 if let Drag::Slider(which, track) = self.drag {
                     self.shade_slider(which, track, x);
+                    return Vec::new();
+                }
+                // A tile carried in the editor follows the finger, and the place
+                // it would land in is the one the finger is nearest to.
+                if let Some(mut drag) = self.shade_drag {
+                    let grid = TileGrid::of(&t, self.shade_top());
+                    drag.x = x;
+                    drag.y = y;
+                    drag.at = grid.slot(x, y, self.state.tiles.len());
+                    self.shade_drag = Some(drag);
+                    self.dirty = true;
                     return Vec::new();
                 }
                 // A finger that came down on a tile and then moved was pulling
@@ -741,49 +760,70 @@ impl App {
             }
             Touch::Up => {
                 let mut fx = Vec::new();
+                // A tile let go in the editor lands in the place the finger
+                // reached, and the order is kept for the starts that follow.
+                if let Some(drag) = self.shade_drag.take() {
+                    let to = drag.at.min(self.state.tiles.len().saturating_sub(1));
+                    if let Some(from) = self.state.tiles.iter().position(|&t| t == drag.tile)
+                        && from != to
+                    {
+                        let tile = self.state.tiles.remove(from);
+                        self.state.tiles.insert(to, tile);
+                    }
+                    self.dirty = true;
+                    return vec![Effect::KeepTiles(self.state.tiles.clone())];
+                }
                 if let Some((hit, _)) = self.shade_press.take() {
                     match hit {
-                        ShadeHit::Wlan => {
-                            let on = self.state.wlan.as_ref().is_some_and(|w| w.power == Power::On);
-                            fx.push(Effect::Wlan(!on));
+                        ShadeHit::Tile(tile) => {
+                            // A tile touched while the panel is being put in
+                            // order runs nothing: the editor is not the place to
+                            // open a page from.
+                            if self.shade_editing {
+                                return fx;
+                            }
+                            match tile {
+                                Tile::Wlan => {
+                                    let on = self.state.wlan.as_ref().is_some_and(|w| w.power == Power::On);
+                                    fx.push(Effect::Wlan(!on));
+                                }
+                                Tile::Vibrate => fx.extend(self.act(Action::Toggle(Switch::Vibrate), now)),
+                                Tile::FileTransfer => fx.extend(self.act(Action::Toggle(Switch::FileTransfer), now)),
+                                Tile::Screenshot => {
+                                    self.close_shade();
+                                    self.shot_when = Some(now + 130);
+                                }
+                                // The rest open their own page; the sheet goes
+                                // away first, so the page comes up over the one
+                                // underneath rather than over the panel.
+                                other => {
+                                    if let Some(screen) = other.screen() {
+                                        self.close_shade();
+                                        fx.extend(self.act(Action::Open(screen), now));
+                                    }
+                                }
+                            }
                         }
-                        ShadeHit::Vibrate => fx.extend(self.act(Action::Toggle(Switch::Vibrate), now)),
-                        ShadeHit::Transfer => fx.extend(self.act(Action::Toggle(Switch::FileTransfer), now)),
-                        ShadeHit::UsbDrive => {
-                            self.close_shade();
-                            fx.extend(self.act(Action::FilesOtg, now));
+                        ShadeHit::TileRemove(tile) => {
+                            if self.state.tile_remove(tile) {
+                                self.dirty = true;
+                                return vec![Effect::KeepTiles(self.state.tiles.clone())];
+                            }
                         }
-                        ShadeHit::Files => {
-                            self.close_shade();
-                            fx.extend(self.act(Action::Open(Screen::Files), now));
+                        ShadeHit::TileAdd(tile) => {
+                            if self.state.tile_add(tile) {
+                                self.dirty = true;
+                                return vec![Effect::KeepTiles(self.state.tiles.clone())];
+                            }
                         }
-                        ShadeHit::Modules => {
-                            self.close_shade();
-                            fx.extend(self.act(Action::Open(Screen::Modules), now));
+                        ShadeHit::TilesEdit => {
+                            self.shade_editing = true;
+                            self.dirty = true;
+                            return vec![Effect::Haptic];
                         }
-                        ShadeHit::Partitions => {
-                            self.close_shade();
-                            fx.extend(self.act(Action::Open(Screen::Filesystems), now));
-                        }
-                        ShadeHit::Terminal => {
-                            self.close_shade();
-                            fx.extend(self.act(Action::Open(Screen::Terminal), now));
-                        }
-                        ShadeHit::Screenshot => {
-                            self.close_shade();
-                            self.shot_when = Some(now + 130);
-                        }
-                        ShadeHit::Reboot => {
-                            self.close_shade();
-                            fx.extend(self.act(Action::Open(Screen::Reboot), now));
-                        }
-                        ShadeHit::Settings => {
-                            self.close_shade();
-                            fx.extend(self.act(Action::Open(Screen::Settings), now));
-                        }
-                        ShadeHit::Sleep => {
-                            self.close_shade();
-                            self.sleep(now);
+                        ShadeHit::TilesDone => {
+                            self.shade_editing = false;
+                            self.dirty = true;
                         }
                         ShadeHit::Brightness | ShadeHit::Vibration => {}
                     }
@@ -834,6 +874,10 @@ impl App {
         self.shade_settle = None;
         self.shade_last = None;
         self.shade_speed = 0.0;
+        // The sheet comes down as it always was: the editor ends with it, and
+        // a tile half carried is put down.
+        self.shade_editing = false;
+        self.shade_drag = None;
         self.dirty = true;
     }
 

@@ -334,6 +334,9 @@ pub struct State {
     /// manager: it is another screen of that page rather than a page of its
     /// own, so going back closes it rather than leaving the file manager.
     pub sort_panel: bool,
+    /// The tiles the control centre lays out, in the order they stand in,
+    /// kept between starts.
+    pub tiles: Vec<Tile>,
     /// The folder of internal storage a file to install is chosen in, its
     /// path from the top of the storage.
     pub storage: Folder,
@@ -557,6 +560,7 @@ impl Default for State {
             sort_desc: false,
             folders_first: true,
             sort_panel: false,
+            tiles: DEFAULT.to_vec(),
             storage: Folder::new(""),
             usb_drive: None,
             drive: Folder::new(""),

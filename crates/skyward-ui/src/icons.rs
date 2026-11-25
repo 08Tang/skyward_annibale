@@ -72,6 +72,12 @@ pub enum Icon {
     Sort,
     /// A box with a tick in it: choosing more than one entry.
     Choose,
+    /// A camera, its body, the hump over its viewfinder and its lens: what
+    /// the control centre takes a screenshot with.
+    Camera,
+    /// A pencil held at an angle, its point sharpened: the control centre's
+    /// way into putting its tiles in order.
+    Pencil,
 }
 
 /// The stock icons' box: every outline here is laid out in it.
@@ -345,6 +351,26 @@ const BATTERY: &[Part] = &[add(Shape::EvenOdd(
      C22.747,11.536 22.613,11.536 22.345,11.536C22.077,11.536 21.943,11.536 21.838,11.583C21.719,11.637 21.624,11.732 21.571,11.851Z",
 ))];
 
+/// A camera: its body, the hump over its viewfinder, and its lens cut out of
+/// the body.
+const CAMERA: &[Part] = &[
+    add(Shape::Fill(
+        "M3.6,10.2C3.6,8.82 4.72,7.7 6.1,7.7H8.2L9.3,6.1C9.62,5.62 10.16,5.33 10.73,5.33H17.27\
+         C17.84,5.33 18.38,5.62 18.7,6.1L19.8,7.7H21.9C23.28,7.7 24.4,8.82 24.4,10.2V18.6\
+         C24.4,19.98 23.28,21.1 21.9,21.1H6.1C4.72,21.1 3.6,19.98 3.6,18.6V10.2Z\
+         M14,11.6A3.85,3.85 0 1 0 14,19.3A3.85,3.85 0 1 0 14,11.6Z",
+    )),
+    cut(Shape::Line("M20.4,10.2H22.4", 1.7)),
+];
+/// A pencil held at an angle, its point sharpened at the lower left and its
+/// cap a short way past the upper right.
+const PENCIL: &[Part] = &[
+    add(Shape::Fill("M3.5,20.125V24.5h4.375L20.778,11.597l-4.375,-4.375L3.5,20.125z")),
+    add(Shape::Fill(
+        "M24.162,8.213c0.455,-0.455 0.455,-1.19 0,-1.645l-2.73,-2.73c-0.455,-0.455 -1.19,-0.455 -1.645,0l-2.135,2.135 4.375,4.375l2.135,-2.135z",
+    )),
+];
+
 /// A magnifying glass: a ring, and its handle through the ring's lower right.
 const SEARCH: &[Part] = &[add(Shape::EvenOdd(
     "M12,4.2 A7.8,7.8 0 1,1 11.99,4.2 Z\
@@ -403,6 +429,8 @@ fn outline(icon: Icon) -> (&'static [Part], f32) {
         Icon::Search => (SEARCH, 1.0),
         Icon::Sort => (SORT, 1.0),
         Icon::Choose => (CHOOSE, 1.0),
+        Icon::Camera => (CAMERA, 1.0),
+        Icon::Pencil => (PENCIL, 1.0),
     }
 }
 
