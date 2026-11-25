@@ -1577,14 +1577,6 @@ impl TileGrid {
         Rect::new(self.left + col as f32 * self.cell, self.top + line as f32 * self.row_h, self.cell, self.row_h)
     }
 
-    /// The visible right edge of the last column's discs: a cell is wider than
-    /// a disc and the disc is centred in it, so it sits half of the difference
-    /// inside the cell's edge. Anything that lines up with the tiles, such as
-    /// the done button, lines up with this rather than with the cell.
-    pub(crate) fn right_edge(&self) -> f32 {
-        self.left + self.cell * 4.0 - (self.cell - self.dia) / 2.0
-    }
-
     /// The place among `n` that the point on the screen is nearest to.
     pub(crate) fn slot(&self, x: f32, y: f32, n: usize) -> usize {
         if n == 0 {
