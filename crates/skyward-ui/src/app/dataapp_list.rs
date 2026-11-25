@@ -246,6 +246,48 @@ mod tests {
     }
 
     #[test]
+    fn two_taps_on_a_system_app_leave_it_where_it_was() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::SystemApps, W, H, PPD);
+        // An app the system says is on, and the page has been told so.
+        app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
+        app.state.app_disabled = Some([("com.android.settings".to_string(), false)].into_iter().collect());
+        app.refresh();
+        assert_eq!(
+            tap(&mut app, &f, &i, Action::SysAppToggle(0)),
+            vec![Effect::QueueAppState { package: "com.android.settings".into(), disable: true }],
+            "the first tap asks for it off"
+        );
+        // The effect is carried out: the change is queued and the page says so.
+        app.app_state_queued("com.android.settings", true);
+        assert_eq!(
+            tap(&mut app, &f, &i, Action::SysAppToggle(0)),
+            vec![Effect::QueueAppState { package: "com.android.settings".into(), disable: false }],
+            "the second tap asks for it back on, rather than for off again"
+        );
+    }
+
+    #[test]
+    fn a_queued_change_is_still_queued_after_the_page_reads_the_states_again() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::SystemApps, W, H, PPD);
+        app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
+        app.state.app_disabled = Some([("com.android.settings".to_string(), false)].into_iter().collect());
+        app.refresh();
+        tap(&mut app, &f, &i, Action::SysAppToggle(0));
+        app.app_state_queued("com.android.settings", true);
+        // The states are read again -- the page asks every time it opens --
+        // and the queue is what the script has not run yet, so it still says
+        // the change is waiting.
+        app.set_app_disabled([("com.android.settings".to_string(), false)].into_iter().collect());
+        assert_eq!(
+            tap(&mut app, &f, &i, Action::SysAppToggle(0)),
+            vec![Effect::QueueAppState { package: "com.android.settings".into(), disable: false }],
+            "reading the states does not lose the change that is waiting"
+        );
+    }
+
+    #[test]
     fn the_state_a_system_app_is_in_is_shown_where_the_system_said_so() {
         let (f, i) = (fonts(), info());
         let mut app = App::new(Screen::SystemApps, W, H, PPD);
