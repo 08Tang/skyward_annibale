@@ -193,12 +193,18 @@ mod tests {
     }
 
     #[test]
-    fn the_system_apps_page_lists_them_and_opens_nothing() {
+    fn the_system_apps_page_lists_them_and_offers_nothing_to_do() {
         let (f, i) = (fonts(), info());
         let mut app = App::new(Screen::SystemApps, W, H, PPD);
         app.state.sys_apps = Some(vec![one_app("com.android.settings", "Settings", true)]);
         app.refresh();
-        assert!(app.frame(&f, &i).hits.iter().all(|h| !matches!(h.action, Action::DataAppOpen(_))), "a system app opens nothing");
+        // The rows are for reading: no app opens, and nothing is switched off
+        // or taken away. A system app's folder is read-only, and the record of
+        // what is disabled is the package manager's own, which the recovery
+        // cannot reach.
+        let hits = &app.frame(&f, &i).hits;
+        assert!(hits.iter().all(|h| !matches!(h.action, Action::DataAppOpen(_))), "a system app opens nothing");
+        assert!(hits.iter().all(|h| !matches!(h.action, Action::DataAppRemove(_))), "a system app is not taken away");
     }
 
     #[test]
