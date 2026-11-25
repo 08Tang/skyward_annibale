@@ -367,7 +367,7 @@ fn shrink(src: &[u8], sw: usize, _sh: usize, xs: &[(u32, u32)], ys: &[(u32, u32)
         // The whole picture: alpha dropped, written by index, which is
         // faster than extending a pixel at a time.
         let mut at = 0;
-        for px in src.chunks_exact(4) {
+        for px in src.as_chunks::<4>().0 {
             out[at] = px[0];
             out[at + 1] = px[1];
             out[at + 2] = px[2];
@@ -404,7 +404,7 @@ fn spans(src: u32, dst: u32) -> Vec<(u32, u32)> {
     (0..dst)
         .map(|d| {
             let a = (d as u64 * src as u64 / dst as u64) as u32;
-            let b = (((d as u64 + 1) * src as u64 + dst as u64 - 1) / dst as u64) as u32;
+            let b = ((d as u64 + 1) * src as u64).div_ceil(dst as u64) as u32;
             let b = b.max(a + 1).min(src);
             (a, b - a)
         })
@@ -431,13 +431,6 @@ impl Sink {
         match self {
             Sink::Avi(a) => a.path(),
             Sink::Mp4(m) => m.path(),
-        }
-    }
-
-    fn bytes(&self) -> u64 {
-        match self {
-            Sink::Avi(a) => a.bytes(),
-            Sink::Mp4(m) => m.bytes(),
         }
     }
 
@@ -878,15 +871,15 @@ mod tests {
     #[test]
     fn shrinking_averages_whole_blocks() {
         // 4×2 all red, shrunk to 2×1: four to a cell, still red.
-        let src = vec![255u8, 0, 0, 255].repeat(8);
+        let src = [255u8, 0, 0, 255].repeat(8);
         let (xs, ys) = (spans(4, 2), spans(2, 1));
         let mut out = Vec::new();
         shrink(&src, 4, 2, &xs, &ys, &mut out);
         assert_eq!(out, vec![255, 0, 0, 255, 0, 0]);
         // Black on the left and white on the right, shrunk to 1×1: half
         // grey.
-        let mut src = vec![0u8, 0, 0, 255].repeat(4);
-        src.extend(vec![255u8, 255, 255, 255].repeat(4));
+        let mut src = [0u8, 0, 0, 255].repeat(4);
+        src.extend([255u8, 255, 255, 255].repeat(4));
         let mut out = Vec::new();
         shrink(&src, 4, 2, &spans(4, 1), &spans(2, 1), &mut out);
         assert_eq!(out, vec![127, 127, 127]);
