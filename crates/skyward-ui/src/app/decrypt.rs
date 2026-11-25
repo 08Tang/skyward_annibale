@@ -92,6 +92,14 @@ impl App {
         // The partition is open, so the decrypt page has done its work: the
         // menu is what to show, whether or not it was this page that opened it
         // — a start that kept the lock opens it with nobody looking at one.
+        self.show_menu();
+    }
+
+    /// The menu is the page that belongs on screen: nobody has a question to
+    /// answer about the partition (it is not encrypted), or everyone who had
+    /// one has answered it. Any other page makes way, the decrypt page
+    /// included; on the menu already, it is only drawn again.
+    pub fn show_menu(&mut self) {
         if self.screen() == Screen::Home {
             self.refresh();
             return;
@@ -103,6 +111,20 @@ impl App {
         *self.top_mut() = (Screen::Home, 0.0, Focus::Unset);
         self.settle_page();
         self.refresh();
+    }
+
+    /// Bring the decrypt page to the front: on a start that shows the menu
+    /// while the partition opens, it is the page that answers a user's screen
+    /// lock, and the one that says why a partition did not open and offers to
+    /// try again. It asks nothing of the runtime here -- the page asks for what
+    /// it needs as it opens -- so a failed opening does not start itself over
+    /// as the page comes forward.
+    pub fn show_decrypt(&mut self) {
+        if self.screen() == Screen::Decrypt {
+            self.refresh();
+            return;
+        }
+        self.open(Screen::Decrypt);
     }
 
     /// The data partition did not open, and why.

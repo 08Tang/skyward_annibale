@@ -2,11 +2,18 @@
 //! user. Among them is which of the protectors the phone keeps for a user
 //! is the one that user's own credential opens.
 
-use anyhow::{Context, Result};
-use std::path::Path;
+use anyhow::{Context, Result, bail};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Where the phone keeps them.
 pub const DATABASE: &str = "/data/system/locksettings.db";
+
+const NAME: &str = "locksettings.db";
+/// SQLite's log and shared memory: a value that was changed may still be only
+/// in these.
+const WAL: &str = "-wal";
+const SHM: &str = "-shm";
 
 /// The name the protector of a user's own secret is recorded under. Its
 /// value is the number that protector's files are named after.
@@ -28,11 +35,16 @@ pub fn current_protector(database: &Path, user: u32) -> Result<Option<String>> {
 }
 
 /// What the lock settings keep for `user` under `name`, where they keep
-/// anything. The database is opened as it lies, without being written to
-/// or waiting on anyone, since the phone it belongs to is not running; it
-/// is written without a log of its own, so what it holds is all of it.
+/// anything.
+///
+/// The phone writes the database in WAL mode, so the newest value may still be
+/// in its log rather than in the database itself -- a screen lock changed since
+/// the last checkpoint is exactly that. It is therefore read from a copy whose
+/// log has been folded in, never from the file itself: opening the file as it
+/// lies would show the protector from before the change.
 fn value(database: &Path, name: &str, user: u32) -> Result<Option<String>> {
-    let at = format!("file:{}?immutable=1", database.display());
+    let copy = Copy::of(database)?;
+    let at = format!("file:{}?immutable=1", copy.db.display());
     let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI;
     let db = rusqlite::Connection::open_with_flags(&at, flags).with_context(|| format!("open {}", database.display()))?;
     let mut query = db
@@ -45,6 +57,66 @@ fn value(database: &Path, name: &str, user: u32) -> Result<Option<String>> {
         return Ok(None);
     };
     row.get(0).with_context(|| format!("read what {name} is for user {user}"))
+}
+
+/// A copy of the database and the files SQLite keeps beside it, made writable
+/// so that opening it folds the log in. A folder of its own, taken away with it.
+struct Copy {
+    folder: PathBuf,
+    db: PathBuf,
+}
+
+impl Copy {
+    fn of(database: &Path) -> Result<Copy> {
+        let folder = scratch_folder()?;
+        let db = folder.join(NAME);
+        fs::copy(database, &db).with_context(|| format!("copy {} to {}", database.display(), db.display()))?;
+        for tail in [WAL, SHM] {
+            let from = beside(database, tail);
+            if from.is_file() {
+                let to = beside(&db, tail);
+                fs::copy(&from, &to).with_context(|| format!("copy {} to {}", from.display(), to.display()))?;
+            }
+        }
+        let copy = Copy { folder, db };
+        copy.fold_the_log_in().with_context(|| format!("fold the log of {} into its copy", database.display()))?;
+        Ok(copy)
+    }
+
+    /// Opened once and closed again: SQLite replays the log as it opens, and
+    /// writes the replayed result back into the database as it closes, so the
+    /// copy holds what the phone last wrote.
+    fn fold_the_log_in(&self) -> Result<()> {
+        let db = rusqlite::Connection::open(&self.db).context("open the copy of the lock settings")?;
+        let _ = db.query_row("SELECT count(*) FROM locksettings", [], |row| row.get::<_, i64>(0));
+        drop(db);
+        Ok(())
+    }
+}
+
+impl Drop for Copy {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.folder);
+    }
+}
+
+fn scratch_folder() -> Result<PathBuf> {
+    let base = std::env::temp_dir();
+    for n in 0..32u32 {
+        let at = base.join(format!("skyward-locksettings-{}-{n}", std::process::id()));
+        match fs::create_dir(&at) {
+            Ok(()) => return Ok(at),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e).with_context(|| format!("make {}", at.display())),
+        }
+    }
+    bail!("no folder under {} could be made for a copy of the lock settings", base.display())
+}
+
+fn beside(database: &Path, tail: &str) -> PathBuf {
+    let mut name = database.as_os_str().to_os_string();
+    name.push(tail);
+    PathBuf::from(name)
 }
 
 #[cfg(test)]
@@ -91,5 +163,33 @@ mod tests {
         assert!(current_protector(&at, 0).is_err());
         assert!(current_protector(Path::new("/nowhere/locksettings.db"), 0).is_err());
         std::fs::remove_file(&at).unwrap();
+    }
+
+    #[test]
+    fn the_newest_value_is_read_from_the_log_the_phone_keeps_beside_the_database() {
+        // A screen lock changed since the last checkpoint is exactly this: the
+        // database still holds the protector from before, and the one that
+        // opens the user's files now is only in the log. The connection is kept
+        // open so that SQLite does not fold the log in as it closes.
+        let at = std::env::temp_dir().join(format!("skyward-locksettings-wal-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&at);
+        let db = rusqlite::Connection::open(&at).unwrap();
+        db.pragma_update(None, "journal_mode", "wal").unwrap();
+        db.pragma_update(None, "wal_autocheckpoint", 0).unwrap();
+        db.execute("CREATE TABLE locksettings (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, user INTEGER, value TEXT)", ()).unwrap();
+        db.execute("INSERT INTO locksettings (name, user, value) VALUES ('sp-handle', 0, '1')", ()).unwrap();
+        // The change the phone makes when the lock is set again: a new row,
+        // which in WAL mode lives in the log until something checkpoints it.
+        db.execute("UPDATE locksettings SET value = '623346955855960006' WHERE name = 'sp-handle' AND user = 0", ()).unwrap();
+        assert!(beside(&at, WAL).is_file(), "the log is there, holding the change");
+        assert_eq!(
+            current_protector(&at, 0).unwrap().as_deref(),
+            Some("08a692c0f39d97c6"),
+            "the protector from the log is the one that opens the files now"
+        );
+        drop(db);
+        for tail in ["", WAL, SHM] {
+            let _ = std::fs::remove_file(beside(&at, tail));
+        }
     }
 }

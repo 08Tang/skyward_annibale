@@ -1249,6 +1249,11 @@ struct Pages<'a> {
     /// service this needs is one of them -- started by the loop once they
     /// are, so that the page is drawn and its ring turns meanwhile.
     pending_open: Option<decrypt::Job>,
+    /// Whether the page a start lands on has been settled once the phone's
+    /// parts came up: the first frame decides it from the partition table, and
+    /// this is the second look that corrects it where the table could not be
+    /// read then.
+    boot_decided: bool,
     closed: Vec<Closed>,
     /// The screen lock kept from before, where one was kept, so that the data
     /// partition opens as the recovery starts rather than waiting to be typed.
@@ -1389,6 +1394,21 @@ impl<'a> Pages<'a> {
             | Work::UnshareBlocks
             | Work::SwitchSystem { .. }
             | Work::SystemStopped => start,
+        };
+        // The partition table is readable by the time the screen comes up: the
+        // partitions are mounted before the display driver is loaded (on a
+        // phone, vendor at 3.09 s and the driver at 4.42 s), so whether the
+        // data partition is encrypted is known before the first frame. A
+        // partition with no encryption has nobody to ask anything, so the menu
+        // is the first frame and the decrypt page is never drawn; an encrypted
+        // one has to be opened before it is known whether anyone has a screen
+        // lock, so the decrypt page is where it waits. When it cannot be read,
+        // the encrypted way is taken and `turn` decides once the phone's parts
+        // are up.
+        let first = match first {
+            Screen::Home if matches!(skyward_crypto::data::keyed(), Ok(false)) => Screen::Home,
+            Screen::Home => Screen::Decrypt,
+            other => other,
         };
         let mut app = App::new(first, w, h, cfg.display.density as f32 / 160.0);
         app.set_screen_corners(cfg.display.corner_radius as f32);
@@ -1541,6 +1561,7 @@ impl<'a> Pages<'a> {
             rescue_erasing: false,
             decryptor: None,
             pending_open: None,
+            boot_decided: false,
             closed: Vec::new(),
             remembered: remembered.clone(),
             tried_remembered: false,
@@ -1595,6 +1616,11 @@ impl<'a> Pages<'a> {
     fn begin(&mut self) -> Result<()> {
         let cfg = self.cfg;
         match &self.request.work {
+            // Nothing is asked of it: the menu is the page it opens on, and the
+            // data partition opens behind it. Nobody's screen lock waits on
+            // that opening, so the menu stays; when someone's does, the
+            // decrypt page comes forward at that moment (`decrypt_told`).
+            Work::Menu => self.start_or_wait(decrypt::Job::Open)?,
             Work::WipeData { reformat } => {
                 self.eraser = Some(factory_reset(&mut self.app, self.request.keep_memtag_mode, true, reformat.clone())?);
                 self.erase_leaves = true;
@@ -1777,6 +1803,32 @@ impl<'a> Pages<'a> {
             }
         }
         self.app.state.prepared = crate::prepared();
+        // The partition table is only readable once the phone's parts are up,
+        // which is after the first frame: a partition with no encryption has
+        // nobody to ask anything, so the menu is the page that belongs there
+        // and the decrypt page is never drawn for it; an encrypted one has to
+        // be opened before it is known whether anyone has a screen lock, so
+        // the decrypt page is where it waits and where the lock is answered.
+        // This is the second look, and it corrects the first either way.
+        if !self.boot_decided && self.app.state.prepared {
+            self.boot_decided = true;
+            let keyed = skyward_crypto::data::keyed();
+            match (&self.request.work, &keyed) {
+                (Work::Menu, Ok(false)) => {
+                    skyward_sys::kmsg("the data partition is not encrypted, so the menu is the page")?;
+                    self.app.show_menu();
+                }
+                (Work::Menu, _) => {
+                    let why = match &keyed {
+                        Ok(true) => "the data partition is encrypted",
+                        _ => "the data partition's encryption is not read",
+                    };
+                    skyward_sys::kmsg(&format!("{why}, so the decrypt page waits for it"))?;
+                    self.app.show_decrypt();
+                }
+                _ => {}
+            }
+        }
         self.tick(now)?;
         // The opening kept back for the phone's own parts starts the turn they
         // are up, rather than the turn the page asked for it.
@@ -2569,18 +2621,27 @@ impl Pages<'_> {
                 }
             }
             // The name the owner gave the phone, and where the settings keep
-            // none, the model the phone calls itself by.
-            match avatar::device_name(Path::new("/data/system/users/0/settings_secure.xml")) {
+            // none, the model the phone calls itself by. The model is what the
+            // settings' own name defaults to, so it is passed in to tell a name
+            // the owner chose from the model left standing.
+            let model = skyward_sys::prop("ro.product.marketname");
+            let model = model.as_deref().map(str::trim).filter(|m| !m.is_empty());
+            let named = avatar::device_name(
+                Path::new("/data/system/users/0/settings_global.xml"),
+                Path::new("/data/system/users/0/settings_secure.xml"),
+                model,
+            );
+            match named {
                 Some(name) => {
                     let _ = skyward_sys::kmsg(&format!("the name the phone goes by is read: {name}"));
                     self.app.set_device_name(name)
                 }
-                None => match skyward_sys::prop("ro.product.marketname") {
-                    Some(model) if !model.trim().is_empty() => {
+                None => match model {
+                    Some(model) => {
                         let _ = skyward_sys::kmsg("the name the phone gives itself is not read; its model is shown instead");
-                        self.app.set_device_name(model.trim().to_string());
+                        self.app.set_device_name(model.to_string());
                     }
-                    _ => {
+                    None => {
                         let _ = skyward_sys::kmsg("the name the phone gives itself is not read");
                     }
                 },
@@ -2647,6 +2708,16 @@ impl Pages<'_> {
                 wlan_worker(&self.wlan)?.send(wlan::Command::On);
                 skyward_sys::kmsg("the WLAN is opened again after it did not come up")?;
             }
+        }
+        // Joined is joined, whether the network was picked by hand or joined on
+        // its own at the start, and whether or not its password is kept. Without
+        // this mark the `wlan_auto` path believes it is still not joined and
+        // sends another join a moment later, and the second DHCP round often
+        // gets no address: on a phone this showed as a network joined at
+        // 32.9 s, joined again at 33.0 s, and "no address" from 40.2 s on.
+        let joined_now = self.app.state.wlan.as_ref().and_then(|w| w.joined.as_ref()).is_some_and(|j| matches!(j.stage, Joining::Connected(_)));
+        if joined_now && !self.wlan_joined {
+            self.wlan_joined = true;
         }
         // A network joined with a password the recovery has is kept for the
         // starts that follow, or forgotten where the access point refused it.
@@ -2943,17 +3014,40 @@ impl Pages<'_> {
                 // one, which is read here: the data partition is open, and the
                 // properties init keeps are on it.
                 follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info)?;
+                // With the partition open, look at whether anyone's screen lock
+                // is still waiting on an answer: if not (the partition was
+                // never encrypted, or nobody ever set a lock), the decrypt page
+                // has nothing to do and the menu stays where it is, without the
+                // detour through "opening" and a tap on "done". If someone's
+                // is, the page comes forward now, and its control is the answer
+                // that lock wants.
+                match &self.app.state.data {
+                    Data::Open if self.pending.is_none() => {
+                        skyward_sys::kmsg("the data partition needs no screen lock, so the menu stays")?;
+                        self.app.decrypted();
+                    }
+                    Data::Locked { .. } => self.app.show_decrypt(),
+                    _ => {}
+                }
             }
             decrypt::Ended::Opened(Err(why)) => {
                 skyward_sys::kmsg(&format!("the data partition stays closed: {why}"))?;
                 // The update the system asked for cannot be read, and
                 // is done with.
-                if self.pending.take().is_some() {
+                let asked = self.pending.take().is_some();
+                if asked {
                     let failed = skyward_install::Outcome::Failed(skyward_install::Failure::Unreadable(why.clone()));
                     self.app.install(skyward_install::Event::Finished(failed), now);
                     self.done_with_request()?;
                 }
                 self.app.data_failed(why);
+                // A start that began on the menu can only say why the partition
+                // did not open on the decrypt page, which also carries a retry;
+                // while an update waits, the install page says it, and the page
+                // does not come forward.
+                if !asked {
+                    self.app.show_decrypt();
+                }
             }
             decrypt::Ended::Unlocked(Ok(still)) => {
                 self.closed = still;
@@ -3272,8 +3366,13 @@ impl Pages<'_> {
             // The decrypt page shows meanwhile that the work is
             // under way, and takes nothing more until it is done.
             Effect::OpenData => {
-                ensure!(self.decryptor.is_none() && self.pending_open.is_none(), "the data partition is being opened already");
-                self.start_or_wait(decrypt::Job::Open)?;
+                // The opening is asked for twice on a start that shows the menu
+                // while the partition opens -- once by the start itself and
+                // once by the page's own button -- and the second is not a
+                // mistake to stop on.
+                if self.decryptor.is_none() && self.pending_open.is_none() {
+                    self.start_or_wait(decrypt::Job::Open)?;
+                }
             }
             Effect::Unlock { user, code } => {
                 ensure!(self.decryptor.is_none(), "the data partition is being opened already");
