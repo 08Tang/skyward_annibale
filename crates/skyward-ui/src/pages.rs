@@ -4280,13 +4280,13 @@ pub fn system_apps(cx: &Ctx) -> Frame {
     // A change that could not be written says so here, where it stays: a tap
     // that leaves the row as it was looks like a tap that did nothing.
     let bottom = match &s.app_state_failed {
-        Some(why) => widgets::footnote(&mut c, t, f, bottom + m.dp(8.0), why),
+        Some(why) => widgets::footnote(&mut c, t, f, bottom + t.m.dp(8.0), why),
         None => bottom,
     };
     // What the two files say, in full: an app whose row will not turn over is
     // accounted for by one of them, and there is no other way to see them from
     // the recovery.
-    let bottom = widgets::footnote(&mut c, t, f, bottom + m.dp(8.0), &s.app_state_report);
+    let bottom = widgets::footnote(&mut c, t, f, bottom + t.m.dp(8.0), &s.app_state_report);
     Frame::new(t, fit(c, t, bottom), out, l.pick(SYSTEM_APPS), top)
 }
 
