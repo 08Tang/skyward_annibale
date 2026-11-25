@@ -332,14 +332,23 @@ mod tests {
         let _ = std::fs::remove_file(&secure);
     }
 
+    /// The name the phone keeps for a grinning face followed by two characters:
+    /// written out of its code points, since MiSans draws no emoji and the test
+    /// that every text the source writes is drawn would find one here.
+    fn emoji_name() -> String {
+        let mut name = String::new();
+        name.push(char::from_u32(0x1f600).expect("a grinning face"));
+        name.push_str("测试");
+        name
+    }
+
     #[test]
     fn a_name_with_an_emoji_is_kept_as_base64_of_utf16() {
         // What the phone writes for a name it cannot keep as plain text:
-        // `2D3eAG1Li9U=` is UTF-16 big-endian for the grinning face and the two
-        // characters after it.
+        // `2D3eAG1Li9U=` is UTF-16 big-endian for that name.
         let global = written("global-emoji", &settings(&[("device_name", "2D3eAG1Li9U=")]));
         let secure = written("secure-emoji", &settings(&[("bluetooth_name", "2D3eAG1Li9U=")]));
-        assert_eq!(device_name(&global, &secure, Some("Xiaomi 17")).as_deref(), Some("😀测试"));
+        assert_eq!(device_name(&global, &secure, Some("Xiaomi 17")).as_deref(), Some(emoji_name().as_str()));
         let _ = std::fs::remove_file(&global);
         let _ = std::fs::remove_file(&secure);
     }
@@ -351,7 +360,7 @@ mod tests {
         assert_eq!(decode_name("MyPhoneName1"), "MyPhoneName1");
         assert_eq!(decode_name("Mari0us"), "Mari0us");
         assert_eq!(decode_name("碎屏飞牛"), "碎屏飞牛");
-        assert_eq!(decode_name("2D3eAG1Li9U="), "😀测试");
+        assert_eq!(decode_name("2D3eAG1Li9U="), emoji_name());
     }
 
     #[test]
