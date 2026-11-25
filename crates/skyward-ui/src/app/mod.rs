@@ -46,6 +46,7 @@ mod feedback;
 mod filesystem;
 mod frame;
 mod image;
+mod ime;
 mod input;
 mod install;
 mod keys;

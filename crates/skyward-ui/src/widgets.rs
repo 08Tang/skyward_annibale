@@ -2977,7 +2977,7 @@ pub fn keyboard_height(t: &Theme) -> f32 {
 /// key answers a touch, the gaps between keys shared out among their
 /// neighbours.
 #[allow(clippy::too_many_arguments)]
-pub fn keyboard(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, top: f32, layer: Layer, pressed: Option<Cap>, enter: &str) -> Vec<(Rect, Cap)> {
+pub fn keyboard(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, top: f32, layer: Layer, pressed: Option<Cap>, enter: &str, chinese: bool) -> Vec<(Rect, Cap)> {
     let m = &t.m;
     let w = m.w as f32;
     let (panel, key, side, ink, shadow) = if t.dark {
@@ -3051,7 +3051,8 @@ pub fn keyboard(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, top: f32, layer: 
         let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
         match cap {
             Cap::Char(ch) => {
-                let label = if layer == Layer::Shifted { ch.to_ascii_uppercase() } else { ch };
+                let upper = layer == Layer::Shifted || (chinese && ch.is_ascii_lowercase());
+                let label = if upper { ch.to_ascii_uppercase() } else { ch };
                 c.text_center(&f.heading, &label.to_string(), cx, cy, glyph_px, ink);
             }
             Cap::Space => c.text_center_in(&f.body, l.pick(texts::keyboard::SPACE), cx, cy, m.sub_px, ink, r.w - inset * 2.0),

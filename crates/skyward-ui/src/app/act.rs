@@ -590,6 +590,12 @@ impl App {
                 self.state.next_slot = Some(slot);
                 self.refresh();
             }
+            // The spelling bar takes a letter before any field does: it is
+            // the bar that turns the letters into characters.
+            Action::Type(cap) if self.ime_key(cap) => {}
+            Action::ImeToggle | Action::ImePick(_) | Action::ImePage(_) => {
+                self.ime_action(action);
+            }
             Action::Type(cap) if self.screen() == Screen::Terminal => return self.term_typed(cap),
             Action::Type(cap) if self.screen() == Screen::Editor => self.edit_typed(cap),
             Action::Type(cap) => return self.type_key(cap, now),

@@ -28,6 +28,8 @@ jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-
 png = "0.17.16"
 # The picture the phone shows for its owner is kept as a JPEG.
 zune-jpeg = { version = "0.4.19", default-features = false }
+# The pinyin decoder writes its dictionaries into a temporary directory.
+tempfile = "3.27.0"
 # The settings are kept between starts as a JSON file.
 serde = { workspace = true }
 serde_json = "1.0.154"
@@ -48,7 +50,16 @@ unicode-script = "0.5.9"
 unicode-width = "0.2.2"
 vt100 = "0.18.1"
 
+[features]
+default = ["pinyin-input"]
+# Chinese input: AOSP's pinyin engine, its dictionary built at compile time
+# and carried inside the binary.
+pinyin-input = []
+
 [build-dependencies]
+# The pinyin dictionary is built with cc; the languages' texts use what
+# follows.
+cc = "1.8.0"
 # The texts of each language are read from its file in `locales`, held to
 # the others', and written out as code.
 icu_locale_core = { version = "2.4.0", features = ["alloc"] }

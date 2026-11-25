@@ -337,6 +337,9 @@ pub struct State {
     /// The tiles the control centre lays out, in the order they stand in,
     /// kept between starts.
     pub tiles: Vec<Tile>,
+    /// The spelling bar above the keyboard: the letters typed so far and the
+    /// characters they may be, or nothing where no field is open.
+    pub ime: crate::pinyin::Composition,
     /// The folder of internal storage a file to install is chosen in, its
     /// path from the top of the storage.
     pub storage: Folder,
@@ -561,6 +564,7 @@ impl Default for State {
             folders_first: true,
             sort_panel: false,
             tiles: DEFAULT.to_vec(),
+            ime: crate::pinyin::Composition::default(),
             storage: Folder::new(""),
             usb_drive: None,
             drive: Folder::new(""),

@@ -904,7 +904,8 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
     let bottom = match keys {
         Keys::Letters => {
             let top = m.h as f32 - widgets::keyboard_height(t);
-            let caps = widgets::keyboard(&mut c, t, f, l, top, s.layer, s.key_held(), l.pick(texts::page::DECRYPT));
+            out.extend(crate::ime::bar(&mut c, t, f, &s.ime, text_floor(t)));
+            let caps = widgets::keyboard(&mut c, t, f, l, top, s.layer, s.key_held(), l.pick(texts::page::DECRYPT), s.ime.enabled);
             if !checking {
                 out.extend(caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }));
             }
@@ -2234,9 +2235,21 @@ pub fn wipe(cx: &Ctx) -> Frame {
 /// is, and its keys as touch targets.
 fn keyboard_hits(c: &mut Canvas, t: &Theme, f: &Fonts, s: &State, enter: &str, out: &mut Vec<Hit>) -> f32 {
     let top = t.m.h as f32 - widgets::keyboard_height(t);
-    let keys = widgets::keyboard(c, t, f, s.lang, top, s.layer, s.key_held(), enter);
+    out.extend(crate::ime::bar(c, t, f, &s.ime, text_floor(t)));
+    let keys = widgets::keyboard(c, t, f, s.lang, top, s.layer, s.key_held(), enter, s.ime.enabled);
     out.extend(keys.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }));
     top
+}
+
+/// Where the keyboard's top edge is on this theme's screen.
+fn kb_top(t: &Theme) -> f32 {
+    t.m.h as f32 - widgets::keyboard_height(t)
+}
+
+/// The lowest line a page's content may use: the keyboard's top edge less the
+/// strip the spelling bar takes.
+fn text_floor(t: &Theme) -> f32 {
+    kb_top(t) - crate::ime::height(t)
 }
 
 /// Finding a feature or partition: the field where the title would be, the
@@ -2331,7 +2344,7 @@ pub fn search(cx: &Ctx) -> Frame {
     // page: a page that scrolls would take the keys with it.
     let keys = widgets::keyboard_height(t);
     let mut key_canvas = Canvas::new(m.w, keys.ceil() as u32);
-    let held = widgets::keyboard(&mut key_canvas, t, f, s.lang, 0.0, s.layer, s.key_held(), find);
+    let held = widgets::keyboard(&mut key_canvas, t, f, s.lang, 0.0, s.layer, s.key_held(), find, s.ime.enabled);
     let dock = Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect() };
     // The field's clear button is on the strip too, in the strip's own
     // coordinates.
@@ -5387,7 +5400,7 @@ pub fn feedback(cx: &Ctx) -> Frame {
     let dock = if matches!(fb.report, Report::Writing) {
         let keys = widgets::keyboard_height(t);
         let mut key_canvas = Canvas::new(m.w, keys.ceil() as u32);
-        let held = widgets::keyboard(&mut key_canvas, t, f, l, 0.0, s.layer, s.key_held(), l.pick(["换行", "換行", "Return"]));
+        let held = widgets::keyboard(&mut key_canvas, t, f, l, 0.0, s.layer, s.key_held(), l.pick(["换行", "換行", "Return"]), s.ime.enabled);
         Some(Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect() })
     } else {
         None
