@@ -2262,6 +2262,7 @@ pub fn search(cx: &Ctx) -> Frame {
     let hint = match s.search_scope {
         SearchScope::Apps => l.pick(["搜索应用", "搜尋應用程式", "Search apps"]),
         SearchScope::Modules => l.pick(["搜索模块", "搜尋模組", "Search modules"]),
+        SearchScope::Files => l.pick(["搜索文件", "搜尋檔案", "Search files"]),
         SearchScope::Features => l.pick(SEARCH_HINT),
     };
     // The field and the button that leaves the search are held at the top of
@@ -2280,6 +2281,9 @@ pub fn search(cx: &Ctx) -> Frame {
         let how = match s.search_scope {
             SearchScope::Apps => l.pick(["输入应用名称或包名筛选，例如输入 chrome 可找到 Chrome。", "輸入應用程式名稱或套件名稱篩選，例如輸入 chrome 可找到 Chrome。", "Type an app's name or package, such as chrome to find Chrome."]),
             SearchScope::Modules => l.pick(["输入模块名称或目录名筛选。", "輸入模組名稱或目錄名篩選。", "Type a module's name or folder to filter them."]),
+            // The file manager filters its own folder as the name is typed, so
+            // there is nothing to say here beyond how to get back to it.
+            SearchScope::Files => l.pick(["在这个文件夹里找，输入名称的一部分即可。", "在這個資料夾裡找，輸入名稱的一部分即可。", "Find a name in this folder: part of it is enough."]),
             SearchScope::Features => l.pick([
                 "输入功能或分区名称，支持拼音全拼和首字母，例如输入 bf 可找到「备份」。",
                 "輸入功能或分割區名稱，支援英文和漢語拼音的全拼與首字母，例如輸入 bf 可找到「備份」。",
@@ -3119,8 +3123,9 @@ fn filtered<'a>(s: &'a State, scope: SearchScope, query: &str) -> (Vec<Row<'a>>,
             }
         }
         // The whole of what the phone offers is searched by the page itself,
-        // which has the names of the features to look through.
-        SearchScope::Features => {}
+        // which has the names of the features to look through; the file
+        // manager filters its own folder, which this page does not hold.
+        SearchScope::Features | SearchScope::Files => {}
     }
     (rows, acts)
 }

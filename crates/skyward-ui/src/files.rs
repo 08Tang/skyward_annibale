@@ -24,8 +24,7 @@ const STRIP_DP: f32 = 51.0;
 /// Where the list of entries starts: under the strip, so the first entry is
 /// covered by neither the pills nor the bar.
 pub const LIST_TOP_DP: f32 = STRIP_TOP_DP + STRIP_DP;
-/// The three labels of the sort row, as the tests give them.
-#[cfg(test)]
+/// Where the pills sit inside the strip.
 const PILL_TOP_DP: f32 = 13.0;
 const PILL_DP: f32 = 33.0;
 const PILL_PAD_DP: f32 = 14.0;

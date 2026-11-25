@@ -388,7 +388,7 @@ mod tests {
             offsets.push(pool.len() as u32);
             pool.push(text.len() as u8);
             pool.push(text.encode_utf16().count() as u8);
-            pool.push_str(text);
+            pool.extend_from_slice(text.as_bytes());
             pool.push(0);
         }
         let pool_header = 28usize;
