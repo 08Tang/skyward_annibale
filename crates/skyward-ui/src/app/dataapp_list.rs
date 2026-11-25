@@ -202,9 +202,13 @@ mod tests {
         // or taken away. A system app's folder is read-only, and the record of
         // what is disabled is the package manager's own, which the recovery
         // cannot reach.
+        // The rows are for reading: an app opens nothing, and nothing about an
+        // app is asked for. A system app's folder is read-only, and the record
+        // of what is disabled is the package manager's own, which the recovery
+        // cannot reach.
         let hits = &app.frame(&f, &i).hits;
         assert!(hits.iter().all(|h| !matches!(h.action, Action::DataAppOpen(_))), "a system app opens nothing");
-        assert!(hits.iter().all(|h| !matches!(h.action, Action::DataAppRemove(_))), "a system app is not taken away");
+        assert!(hits.iter().all(|h| !matches!(h.action, Action::Unavailable(_))), "a system app is not taken away");
     }
 
     #[test]
