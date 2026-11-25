@@ -419,6 +419,9 @@ impl App {
                 Drag::Shade { start, from } => self.drag = Drag::Shade { start, from },
                 Drag::Waking => self.drag = Drag::Waking,
                 Drag::Held => self.drag = Drag::Held,
+                // A finger on the capsule is the capsule's own handler's:
+                // it saw the touch before this match did, and moved it there.
+                Drag::RecordPill { .. } => {}
                 Drag::Idle => {}
             },
             Touch::Up => match std::mem::replace(&mut self.drag, Drag::Idle) {

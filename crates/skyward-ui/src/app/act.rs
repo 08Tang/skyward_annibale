@@ -6,7 +6,7 @@ use crate::tr;
 impl App {
     /// Start a take, or stop the one running. A take is written into internal
     /// storage, which has to be open first.
-    fn record_toggle(&mut self, now: u64) -> Vec<Effect> {
+    pub(super) fn record_toggle(&mut self, now: u64) -> Vec<Effect> {
         if self.state.record.on {
             return vec![Effect::RecordStop];
         }
