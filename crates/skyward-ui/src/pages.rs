@@ -3076,9 +3076,9 @@ pub fn search(cx: &Ctx) -> Frame {
     held.extend(
         widgets::keyboard(&mut key_canvas, t, f, s.lang, bar, s.layer, s.key_held(), find, s.ime.enabled)
             .into_iter()
-            .map(|(rect, cap)| (rect, Action::Type(cap))),
+            .map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }),
     );
-    let dock = Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, action)| Hit { rect, action }).collect() };
+    let dock = Dock { canvas: key_canvas, hits: held };
     // The field's clear button is on the strip too, in the strip's own
     // coordinates.
     let mut pinned = pinned;
