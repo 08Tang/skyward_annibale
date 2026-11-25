@@ -232,6 +232,15 @@ impl App {
         {
             self.compose_lock(out, f, info, clock, lock.drag);
         }
+        // The recording's timer is drawn last: over the sheet, over the lock
+        // and over any card asking something, so a take is always seen to be
+        // running. With no take, its rectangles are cleared -- otherwise that
+        // part of the screen would still take a finger.
+        if self.state.record.on {
+            self.compose_record_pill(out, f);
+        } else {
+            self.record_pill = None;
+        }
         out.dim(self.curtain.level(now));
     }
 
@@ -325,6 +334,91 @@ impl App {
         let note = l.pick(["点别处取消", "點別處取消", "Tap elsewhere to cancel"]);
         out.text_center(&f.body, note, w / 2.0, y + ph + m.dp(24.0), m.sub_px, t.pal.subtitle);
         self.place_hits = hits;
+    }
+
+    /// The capsule that shows a take running, drawn over everything: over the
+    /// sheet, the lock and any card asking something, so it is always seen.
+    ///
+    /// Its left cell pauses or carries on, its right one ends the take, and a
+    /// finger may drag the whole of it anywhere. The rectangles are kept as it
+    /// is drawn, since a finger finds it where it is, not where it started.
+    pub(super) fn compose_record_pill(&mut self, out: &mut Canvas, f: &Fonts) {
+        let t = self.theme();
+        let m = &t.m;
+        let l = self.state.lang;
+        let paused = self.state.record.paused;
+        let busy = if self.state.record.elapsed.is_empty() { "0:00" } else { self.state.record.elapsed.as_str() };
+        let px = m.dp(13.5);
+        let dot = m.dp(6.5);
+        let pad = m.dp(11.0);
+        let gap = m.dp(8.0);
+        let h = m.dp(27.0);
+        let label = if paused { Some(l.pick(["已暂停", "已暫停", "Paused"])) } else { None };
+        let label_px = m.dp(11.5);
+        let wide = out.text_width(&f.strong, busy, px)
+            + label.map_or(0.0, |said| gap * 0.6 + out.text_width(&f.value, said, label_px));
+        // The right cell: a thin rule, and a white square -- the box a camera
+        // stops recording with.
+        let btn = dot * 2.0;
+        let sep = gap * 0.9;
+        let w = pad * 2.0 + dot * 2.0 + gap + wide + sep * 2.0 + btn;
+        // Its usual place is the upper right; dragged, it stands where it was
+        // put, and a drag past the screen's edge is pushed back inside.
+        //
+        // Over the sheet it moves above the clock's line, where nothing is in
+        // its way: the sheet's own pencil is at the upper right, and the
+        // capsule must not cover it while the take still has to be seen. Its
+        // left edge follows the date's, so it reads as part of that line.
+        let (x, y) = if self.shade > 0.0 {
+            let top = self.shade_top();
+            let clock_x = m.margin + m.dp(15.0);
+            let clock_px = m.dp(44.0);
+            let clock_y = top + m.dp(88.0);
+            let (tt, _) = f.heading.ink(clock_px);
+            let clock_wide = out.text_width(&f.heading, "00:00", clock_px);
+            let fallback = (clock_x + clock_wide + m.dp(12.0), clock_y + tt);
+            let (left, date_top) = self.shade_date.unwrap_or(fallback);
+            let left = left.min(m.w as f32 - m.margin - w).max(m.margin);
+            // Its foot stands 8 dp above the date's ink, and never above the
+            // sheet's own top edge.
+            let y = (date_top - h - m.dp(8.0)).max(top + m.dp(4.0));
+            (left, y)
+        } else {
+            match self.state.record.pill {
+                Some((x, y)) => ((x.min(m.w as f32 - w)).max(0.0), (y.min(m.h as f32 - h)).max(0.0)),
+                None => (m.w as f32 - m.margin - w, m.dp(46.0)),
+            }
+        };
+        let ink = Rgba::rgb(255, 255, 255);
+        out.shadow_round_rect(x, y, w, h, h / 2.0, m.dp(7.0), Rgba::rgb(0, 0, 0).with_alpha(72));
+        out.fill_round_rect(x, y, w, h, h / 2.0, Rgba::rgb(16, 16, 18).with_alpha(if paused { 196 } else { 226 }));
+        let cx = x + pad + dot;
+        let cy = y + h / 2.0;
+        if paused {
+            // A play triangle: paused, the red dot gives way to the way back
+            // into recording.
+            out.fill_convex(&[(cx - dot * 0.66, cy - dot), (cx + dot * 0.9, cy), (cx - dot * 0.66, cy + dot)], ink);
+        } else {
+            out.fill_circle(cx, cy, dot, Rgba::rgb(240, 64, 64));
+        }
+        let mut left = x + pad + dot * 2.0 + gap;
+        out.text_vc(&f.strong, busy, left, cy, px, if paused { ink.with_alpha(190) } else { ink }, None);
+        left += out.text_width(&f.strong, busy, px);
+        if let Some(said) = label {
+            left += gap * 0.6;
+            out.text_vc(&f.value, said, left, cy, label_px, ink.with_alpha(150), None);
+        }
+        // The end of it: a rule between the time and the box, and the box set
+        // half a cell to the right of it.
+        let cut = x + w - pad - btn - sep * 2.0;
+        out.fill_round_rect(cut, cy - m.dp(7.0), m.dp(0.7), m.dp(14.0), m.dp(0.35), ink.with_alpha(56));
+        let side = dot * 1.45;
+        out.fill_round_rect(cut + sep * 2.0 + (btn - side) / 2.0, cy - side / 2.0, side, side, m.dp(2.0), ink.with_alpha(232));
+        self.record_pill = Some(Pill {
+            body: crate::geom::Rect::new(x, y, w, h),
+            dot: crate::geom::Rect::new(x, y, pad + dot * 2.0 + gap * 0.5, h),
+            stop: crate::geom::Rect::new(cut, y, x + w - cut, h),
+        });
     }
 
     pub(super) fn compose_asking(&mut self, out: &mut Canvas, f: &Fonts) {
@@ -423,9 +517,17 @@ impl App {
         let time_px = m.dp(44.0);
         out.text(&f.heading, clock, m.margin + inset, top + m.dp(88.0), time_px, white, None);
         let date = self.state.date.as_str();
+        self.shade_date = None;
         if !date.is_empty() {
             let wide = out.text_width(&f.heading, clock, time_px);
-            out.text(&f.body, date, m.margin + inset + wide + m.dp(12.0), top + m.dp(86.0), m.dp(19.0), white.with_alpha(170), None);
+            let date_x = m.margin + inset + wide + m.dp(12.0);
+            let date_y = top + m.dp(86.0);
+            out.text(&f.body, date, date_x, date_y, m.dp(19.0), white.with_alpha(170), None);
+            // Where the date begins and where its ink reaches: the recording
+            // capsule is set over it, its left edge to the date's and its foot
+            // on the date's ink.
+            let (dt, _) = f.body.ink(m.dp(19.0));
+            self.shade_date = Some((date_x, date_y + dt));
         }
         // The tiles the owner has laid out, four to a row, as many rows as
         // there are: a tile is a disc with its mark in it and its word under

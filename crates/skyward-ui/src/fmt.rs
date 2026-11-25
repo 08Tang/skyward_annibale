@@ -1416,6 +1416,22 @@ pub fn screenshot_name(unix_ms: i64, zone: &TimeZone) -> String {
     format!("Screenshot_{:04}-{:02}-{:02}-{:02}-{:02}-{:02}-{:03}_Skyward.png", t.year(), t.month(), t.day(), t.hour(), t.minute(), t.second(), unix_ms.rem_euclid(1000))
 }
 
+/// The name a take begun `unix_ms` milliseconds into Unix time is saved
+/// under, in `zone`, with `ext` for its container:
+/// `Screenrecord_2026-11-21-04-30-00.avi`.
+pub fn record_name_in(unix_ms: i64, zone: &TimeZone, ext: &str) -> String {
+    let t = local(unix_ms.div_euclid(1000), zone);
+    format!(
+        "Screenrecord_{:04}-{:02}-{:02}-{:02}-{:02}-{:02}.{ext}",
+        t.year(),
+        t.month(),
+        t.day(),
+        t.hour(),
+        t.minute(),
+        t.second()
+    )
+}
+
 /// What the terminal is told while a command it runs holds it.
 pub const TERMINAL_BUSY: Text = texts::terminal::BUSY;
 

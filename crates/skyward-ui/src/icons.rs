@@ -72,6 +72,9 @@ pub enum Icon {
     Sort,
     /// A box with a tick in it: choosing more than one entry.
     Choose,
+    /// A film camera: its body and the lens triangle that juts out to its
+    /// right. The recording's tile and page use it.
+    Record,
     /// A camera, its body, the hump over its viewfinder and its lens: what
     /// the control centre takes a screenshot with.
     Camera,
@@ -353,6 +356,12 @@ const BATTERY: &[Part] = &[add(Shape::EvenOdd(
 
 /// A camera: its body, the hump over its viewfinder, and its lens cut out of
 /// the body.
+const RECORD: &[Part] = &[add(Shape::Fill(
+    "M3,7.5C3,6.12 4.12,5 5.5,5H15.5C16.88,5 18,6.12 18,7.5V9.2L23.1,6.2C23.77,5.8 24.6,6.28 24.6,7.06V16.94C24.6,17.72 23.77,18.2 23.1,17.8L18,14.8V16.5C18,17.88 16.88,19 15.5,19H5.5C4.12,19 3,17.88 3,16.5V7.5Z",
+))];
+
+/// A camera: its body, the hump over its viewfinder and its lens, drawn as the
+/// one the control centre has.
 const CAMERA: &[Part] = &[
     add(Shape::Fill(
         "M3.6,10.2C3.6,8.82 4.72,7.7 6.1,7.7H8.2L9.3,6.1C9.62,5.62 10.16,5.33 10.73,5.33H17.27\
@@ -429,6 +438,7 @@ fn outline(icon: Icon) -> (&'static [Part], f32) {
         Icon::Search => (SEARCH, 1.0),
         Icon::Sort => (SORT, 1.0),
         Icon::Choose => (CHOOSE, 1.0),
+        Icon::Record => (RECORD, 1.0),
         Icon::Camera => (CAMERA, 1.0),
         Icon::Pencil => (PENCIL, 1.0),
     }

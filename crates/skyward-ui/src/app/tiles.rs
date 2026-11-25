@@ -23,6 +23,8 @@ pub enum Tile {
     Partitions,
     Terminal,
     Screenshot,
+    /// A take of the screen, which the capsule shows while it runs.
+    Record,
     Reboot,
     Settings,
     // Added once the pages that were only reachable from their own lists
@@ -43,7 +45,7 @@ pub enum Tile {
 
 /// What a phone that has kept no order lays out: the twelve the sheet always
 /// had, four to a row and three rows.
-pub const DEFAULT: [Tile; 11] = [
+pub const DEFAULT: [Tile; 12] = [
     Tile::Wlan,
     Tile::Vibrate,
     Tile::FileTransfer,
@@ -52,6 +54,7 @@ pub const DEFAULT: [Tile; 11] = [
     Tile::Modules,
     Tile::Partitions,
     Tile::Terminal,
+    Tile::Record,
     Tile::Screenshot,
     Tile::Reboot,
     Tile::Settings,
@@ -59,7 +62,7 @@ pub const DEFAULT: [Tile; 11] = [
 
 /// Every tile, in the order a phone that has kept none shows them: the first
 /// twelve are [`DEFAULT`], the rest come after.
-pub const TILES: [Tile; 23] = [
+pub const TILES: [Tile; 24] = [
     Tile::Wlan,
     Tile::Vibrate,
     Tile::FileTransfer,
@@ -68,6 +71,7 @@ pub const TILES: [Tile; 23] = [
     Tile::Modules,
     Tile::Partitions,
     Tile::Terminal,
+    Tile::Record,
     Tile::Screenshot,
     Tile::Reboot,
     Tile::Settings,
@@ -98,6 +102,7 @@ impl Tile {
             Tile::Partitions => "partitions",
             Tile::Terminal => "terminal",
             Tile::Screenshot => "screenshot",
+            Tile::Record => "record",
             Tile::Reboot => "reboot",
             Tile::Settings => "settings",
             Tile::Backup => "backup",
@@ -132,6 +137,7 @@ impl Tile {
             Tile::Partitions => l.pick(["分区管理", "分割區管理", "Partitions"]),
             Tile::Terminal => l.pick(["终端", "終端機", "Terminal"]),
             Tile::Screenshot => l.pick(["截图", "截圖", "Screenshot"]),
+            Tile::Record => l.pick(["录屏", "錄影", "Record"]),
             Tile::Reboot => l.pick(["重启", "重新啟動", "Reboot"]),
             Tile::Settings => l.pick(["设置", "設定", "Settings"]),
             Tile::Backup => l.pick(["备份", "備份", "Backup"]),
@@ -168,6 +174,7 @@ impl Tile {
             Tile::Partitions => Icon::Mount,
             Tile::Terminal => Icon::Terminal,
             Tile::Screenshot => Icon::Camera,
+            Tile::Record => Icon::Record,
             Tile::Reboot => Icon::Restore,
             Tile::Settings => Icon::Gear,
             Tile::Backup => Icon::Backup,
@@ -190,7 +197,7 @@ impl Tile {
     /// and answer `None`.
     pub fn screen(self) -> Option<Screen> {
         match self {
-            Tile::Wlan | Tile::Vibrate | Tile::FileTransfer | Tile::Screenshot => None,
+            Tile::Wlan | Tile::Vibrate | Tile::FileTransfer | Tile::Screenshot | Tile::Record => None,
             Tile::Usb => Some(Screen::FilesOtg),
             Tile::Files => Some(Screen::Files),
             Tile::Modules => Some(Screen::Modules),
@@ -220,6 +227,7 @@ impl Tile {
             Tile::Wlan => s.wlan.as_ref().is_some_and(|w| w.power == Power::On),
             Tile::Vibrate => s.vibrate,
             Tile::FileTransfer => s.file_transfer,
+            Tile::Record => s.record.on,
             _ => false,
         }
     }

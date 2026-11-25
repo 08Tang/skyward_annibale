@@ -28,6 +28,8 @@ jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-
 png = "0.17.16"
 # The picture the phone shows for its owner is kept as a JPEG.
 zune-jpeg = { version = "0.4.19", default-features = false }
+# A recorded frame is encoded as a JPEG; this is the only encoder in the tree.
+image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
 # The pinyin decoder writes its dictionaries into a temporary directory.
 tempfile = "3.27.0"
 # The settings are kept between starts as a JSON file.

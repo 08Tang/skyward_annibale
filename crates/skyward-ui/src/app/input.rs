@@ -5,6 +5,72 @@ use super::*;
 
 impl App {
     pub fn touch(&mut self, ev: Touch, f: &Fonts, now: u64) -> Vec<Effect> {
+        /// A finger on the recording's capsule: dragged, it moves the capsule,
+    /// and tapped, the left cell pauses or carries on while the right one
+    /// ends the take. `None` where the touch is not the capsule's.
+    ///
+    /// Where the capsule is comes from the frame last drawn, so it stands
+    /// where it was dragged to, and a drag past the screen's edge is pushed
+    /// back inside.
+    fn record_touch(&mut self, ev: Touch, now: u64) -> Option<Vec<Effect>> {
+        let pill = self.record_pill?;
+        let m = self.theme().m;
+        match ev {
+            Touch::Down(x, y) if pill.body.contains(x, y) => {
+                self.drag = Drag::RecordPill {
+                    grab: (x - pill.body.x, y - pill.body.y),
+                    moved: false,
+                    dot: pill.dot.contains(x, y),
+                    stop: pill.stop.contains(x, y),
+                };
+                Some(Vec::new())
+            }
+            Touch::Move(x, y) if matches!(self.drag, Drag::RecordPill { .. }) => {
+                let Drag::RecordPill { grab, moved, dot, stop } = self.drag else { unreachable!() };
+                let (nx, ny) = (x - grab.0, y - grab.1);
+                let far = (nx - pill.body.x).abs() + (ny - pill.body.y).abs() > m.dp(4.0);
+                // Over the sheet the capsule stands where the sheet puts it:
+                // dragging it there would remember a place that means nothing
+                // once the sheet is away.
+                if self.shade <= 0.0 {
+                    let (w, h) = (m.w as f32, m.h as f32);
+                    self.state.record.pill =
+                        Some(((nx.min(w - pill.body.w)).max(0.0), (ny.min(h - pill.body.h)).max(0.0)));
+                }
+                self.drag = Drag::RecordPill { grab, moved: moved || far, dot, stop };
+                self.dirty = true;
+                Some(Vec::new())
+            }
+            Touch::Up if matches!(self.drag, Drag::RecordPill { .. }) => {
+                let Drag::RecordPill { moved, dot, stop, .. } = self.drag else { unreachable!() };
+                self.drag = Drag::Idle;
+                if moved {
+                    return Some(vec![Effect::Haptic]);
+                }
+                // The right cell ends the take, as the page's own stop does.
+                if stop {
+                    let mut effects = self.record_toggle(now);
+                    effects.push(Effect::Haptic);
+                    return Some(effects);
+                }
+                match dot {
+                    true => Some(self.record_paused(now)),
+                    false => Some(vec![Effect::Haptic]),
+                }
+            }
+            _ => None,
+        }
+    }
+
+    // A finger on the recording's capsule is the capsule's: dragged, it
+        // moves the capsule, and tapped, it pauses or ends the take. It is
+        // read before anything else, since the capsule is drawn over
+        // everything and so is over everything for a finger too.
+        if self.display_on
+            && let Some(effects) = self.record_touch(ev, now)
+        {
+            return effects;
+        }
         // 复制/移动先问一句到哪儿去：两个格子吃掉这一下，点别处就收起。
         if self.state.place_ask.is_some() && self.display_on {
             if let Touch::Down(x, y) = ev {

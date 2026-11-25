@@ -65,6 +65,7 @@ mod systems;
 mod terminal;
 mod tiles;
 #[cfg(test)]
+mod record_tests;
 mod testing;
 mod update;
 mod wipe;
@@ -181,6 +182,9 @@ pub enum Screen {
     /// the owner sets with a guard of their own.
     Charge,
     Language,
+    /// Recording the screen: whether a take is running, how it is recorded,
+    /// and the way to start or stop one.
+    Record,
     /// Whether the clock keeps the installed system's time zone, and the
     /// parts of the world to choose one from.
     TimeZone,
@@ -354,6 +358,14 @@ pub enum Action {
     Confirm(Confirm),
     /// The pattern grid on the unlock page.
     Pattern,
+    /// Begin a take of the screen at the settings the recording page holds,
+    /// telling how it went with [App::record_started] or
+    /// [App::record_failed].
+    RecordStart,
+    /// End the take running, telling of it with [App::record_stopped].
+    RecordStop,
+    /// Pause the take running, or carry it on.
+    RecordPause(bool),
     /// Start receiving a package over USB.
     Sideload,
     /// Send the image to one of the partitions it fits.
@@ -564,6 +576,16 @@ pub enum Action {
     BackupVbmeta,
     /// Restore the saved vbmeta image.
     RestoreVbmeta,
+    /// Start a take, or stop the one running.
+    Record,
+    /// Start a take.
+    RecordStart,
+    /// Stop the take running.
+    RecordStop,
+    /// Pause or resume the take running.
+    RecordPause(bool),
+    /// Change how the next take is recorded.
+    RecordSetting(crate::app::state::RecordSetting),
     /// Turn Chinese input on or off on the spelling bar.
     ImeToggle,
     /// Write the candidate at this place in the bar into the field.
@@ -964,6 +986,15 @@ enum Drag {
     /// A finger that landed just after the panel lit; nothing it does
     /// counts until it lifts.
     Waking,
+    /// A finger on the recording's capsule: taken by its body where the
+    /// finger took it, whether it has moved since, and which of its two cells
+    /// was pressed.
+    RecordPill {
+        grab: (f32, f32),
+        moved: bool,
+        dot: bool,
+        stop: bool,
+    },
 }
 
 /// Where the keys are on a page.
@@ -1651,6 +1682,16 @@ const POWER_HOLD_MS: u64 = 3000;
 /// How close together two taps on the dark panel have to be for it to light.
 const DOUBLE_TAP_MS: u64 = 600;
 
+/// Where the recording capsule's parts were last drawn: the whole of it, the
+/// pause or resume on its left, and the stop on its right. A finger pressed
+/// down is read against these; a drag against the whole of it only.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Pill {
+    pub body: Rect,
+    pub dot: Rect,
+    pub stop: Rect,
+}
+
 pub struct App {
     /// The two answers the place question offers, where they were drawn.
     pub(super) place_hits: Vec<(crate::geom::Rect, Action)>,
@@ -1684,6 +1725,14 @@ pub struct App {
     shade_speed: f32,
     shade_press: Option<(ShadeHit, f32)>,
     shade_hits: Vec<(Rect, ShadeHit)>,
+    /// The recording capsule, as it was last drawn, or none where nothing is
+    /// being recorded.
+    pub(super) record_pill: Option<Pill>,
+    /// Where the date's ink begins under the sheet, and where its top stands:
+    /// the capsule is set over it, its left edge to the date's and its foot on
+    /// the date's ink. `None` where the sheet is not drawn or the date is
+    /// empty.
+    pub(super) shade_date: Option<(f32, f32)>,
     /// Whether the panel is being put in order: the tiles then carry a cross
     /// and the ones not laid out are offered below, and a tile touched does
     /// nothing but be dragged.
@@ -1861,6 +1910,8 @@ impl App {
             shade_speed: 0.0,
             shade_press: None,
             shade_hits: Vec::new(),
+            record_pill: None,
+            shade_date: None,
             shade_editing: false,
             shade_drag: None,
             shade_roll: None,
@@ -2064,6 +2115,23 @@ impl App {
     /// deadline goes away.
     pub fn tick(&mut self, now: u64) -> Vec<Effect> {
         let mut fx = Vec::new();
+        // A take running turns over its elapsed time once a second. The pages
+        // and the capsule both read this one string rather than each working
+        // it out; a paused take does not count the pause, so its seconds stand
+        // still while it is held.
+        if self.state.record.on {
+            let (since, held, paused_at, paused) = {
+                let r = &self.state.record;
+                (r.since, r.held, r.paused_at, r.paused)
+            };
+            let up_to = if paused { paused_at } else { now };
+            let secs = up_to.saturating_sub(since).saturating_sub(held) / 1000;
+            let text = format!("{}:{:02}", secs / 60, secs % 60);
+            if text != self.state.record.elapsed {
+                self.state.record.elapsed = text;
+                self.dirty = true;
+            }
+        }
         // The control centre, let go, settles into place in one move, easing
         // out rather than swinging about where it is headed for.
         if let Some((at, from, _speed, period, target)) = self.shade_settle {

@@ -148,9 +148,79 @@ pub struct ModuleRow {
     pub removing: bool,
 }
 
+/// One take, as the pages see it: whether it is running, what it writes, and
+/// how it was set up.
+///
+/// The capsule's place is a pair of `f32`, so this is only `PartialEq`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Record {
+    /// Whether a take is running.
+    pub on: bool,
+    /// When this take began, in milliseconds.
+    pub since: u64,
+    /// The file written, for the page to name.
+    pub file: String,
+    /// What it records at, such as `600×1304 · 30 帧`.
+    pub spec: String,
+    /// How long it has been recording, as `0:42`, turned over by `tick` once
+    /// a second.
+    pub elapsed: String,
+    /// The frames written, reported back when the take ends.
+    pub frames: u64,
+    /// The size, as a place in [`crate::record::SCALES`].
+    pub scale: usize,
+    /// The quality, as a place in [`crate::record::QUALITIES`].
+    pub quality: usize,
+    /// The frame rate, as a place in [`crate::record::RATES`].
+    pub fps: usize,
+    /// The container: 0 is AVI, 1 is MP4.
+    pub format: usize,
+    /// Where the timer's capsule stands, as dp from the upper left; `None` is
+    /// its usual place at the upper right.
+    pub pill: Option<(f32, f32)>,
+    /// Paused, and the take is held there.
+    pub paused: bool,
+    /// When it was paused, in milliseconds.
+    pub paused_at: u64,
+    /// How long this take has been paused in all, in milliseconds: the
+    /// elapsed time is this much shorter.
+    pub held: u64,
+}
+
+impl Default for Record {
+    /// The standard choice to begin with: half the panel, medium quality, 30
+    /// frames -- which leaves the encoders room and the picture moving.
+    fn default() -> Self {
+        Record {
+            on: false,
+            since: 0,
+            file: String::new(),
+            spec: String::new(),
+            elapsed: String::new(),
+            frames: 0,
+            scale: crate::record::DEFAULT_SCALE,
+            quality: crate::record::DEFAULT_QUALITY,
+            fps: crate::record::DEFAULT_FPS,
+            format: 0,
+            pill: None,
+            paused: false,
+            paused_at: 0,
+            held: 0,
+        }
+    }
+}
+
+/// The three things the recording page changes, and the container it writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecordSetting {
+    Scale,
+    Quality,
+    Fps,
+    Format,
+}
+
 /// Choices the pages show and the user changes, and where installing
 /// stands.
-#[derive(Clone, Debug, PartialEq)]
 pub struct State {
     /// The language the pages speak.
     pub lang: Lang,
@@ -337,6 +407,8 @@ pub struct State {
     /// The tiles the control centre lays out, in the order they stand in,
     /// kept between starts.
     pub tiles: Vec<Tile>,
+    /// The screen recording, as the pages and the capsule see it.
+    pub record: Record,
     /// The spelling bar above the keyboard: the letters typed so far and the
     /// characters they may be, or nothing where no field is open.
     pub ime: crate::pinyin::Composition,
@@ -564,6 +636,7 @@ impl Default for State {
             folders_first: true,
             sort_panel: false,
             tiles: DEFAULT.to_vec(),
+            record: Record::default(),
             ime: crate::pinyin::Composition::default(),
             storage: Folder::new(""),
             usb_drive: None,

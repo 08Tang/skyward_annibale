@@ -13,6 +13,7 @@ use crate::font::Fonts;
 use crate::geom::Rect;
 use crate::icons::{self, Icon};
 use crate::lang::{Lang, Text, same};
+use crate::app::state::RecordSetting;
 use crate::search;
 use crate::term::{self, Term};
 use crate::texts;
@@ -100,6 +101,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::Filesystem => filesystem(cx),
         Screen::PartWork => part_work(cx),
         Screen::Language => language(cx),
+        Screen::Record => record(cx),
         Screen::TimeZone => time_zone(cx),
         Screen::TimeZones(region) => time_zones(cx, region),
         Screen::Logs => logs(cx),
@@ -5162,6 +5164,135 @@ pub fn editor(cx: &Ctx) -> Frame {
 }
 
 /// The languages the pages speak, each named in itself, to speak another.
+/// The recording: whether a take is running, how the next one is recorded,
+/// and the way to start or stop one.
+///
+/// The page is a little longer than a screen: the note at its foot used to be
+/// cut in half by the screen's edge, so it is measured by what it holds and
+/// scrolls to the end.
+pub fn record(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let top = t.m.content_top;
+    let y = widgets::section_first(&mut c, t, f, top, l.pick(["这一段", "這一段", "This take"]));
+    let state = match (s.record.on, s.record.paused) {
+        (true, true) => l.pick(["已暂停", "已暫停", "Paused"]),
+        (true, false) => l.pick(["正在录制", "正在錄影", "Recording"]),
+        _ => l.pick(["没有在录", "沒有在錄", "Not recording"]),
+    };
+    let length = if s.record.on { s.record.elapsed.clone() } else { "—".to_string() };
+    let file = if s.record.file.is_empty() {
+        l.pick(["还没有录过", "還沒有錄過", "None yet"]).to_string()
+    } else {
+        s.record.file.clone()
+    };
+    let spec = if s.record.spec.is_empty() { "—".to_string() } else { s.record.spec.clone() };
+    let rows = [
+        (l.pick(["状态", "狀態", "State"]), state.to_string()),
+        (l.pick(["已录", "已錄", "Length"]), length),
+        (l.pick(["文件", "檔案", "File"]), file),
+        (l.pick(["规格", "規格", "Format"]), spec),
+    ];
+    let y = widgets::info_card(&mut c, t, f, y, &rows);
+
+    // How it records: each of the four changes a notch on a tap. Nothing
+    // changes while a take runs -- a different size would begin the encoders
+    // and the file's header again.
+    let y = widgets::section(&mut c, t, f, y, l.pick(["录成什么样", "錄成什麼樣", "How it records"]));
+    let panel = (t.m.w, t.m.h);
+    let scale_names = [
+        l.pick(["原画", "原畫", "Full"]),
+        l.pick(["高清", "高清", "Sharp"]),
+        l.pick(["标准", "標準", "Std"]),
+        l.pick(["流畅", "流暢", "Smooth"]),
+    ];
+    let quality_names = [l.pick(["高", "高", "High"]), l.pick(["中", "中", "Mid"]), l.pick(["低", "低", "Low"])];
+    let sizes: Vec<String> = (0..crate::record::SCALES.len())
+        .map(|k| {
+            let z = crate::record::Settings::of(panel, k, s.record.quality, s.record.fps);
+            format!("{}×{}", z.width, z.height)
+        })
+        .collect();
+    let chosen = crate::record::Settings::of(panel, s.record.scale, s.record.quality, s.record.fps);
+    let per_minute = chosen.per_frame() as f64 * chosen.fps as f64 * 60.0 / 1e6;
+    let values = [
+        format!("{} {}", scale_names[s.record.scale.min(3)], sizes[s.record.scale.min(3)]),
+        quality_names[s.record.quality.min(2)].to_string(),
+        format!("{:.0} fps", crate::record::RATES[s.record.fps.min(3)]),
+    ];
+    let sized = format!("{}×{} · 每分钟约 {per_minute:.0} MB", chosen.width, chosen.height);
+    let locked = l.pick(["正在录制，停下这一段才能改", "正在錄影，停下這一段才能改", "Recording: stop this take to change it"]);
+    let rows = [
+        Row::new(l.pick(["分辨率", "解析度", "Size"]))
+            .icon(BLUE, Icon::Record)
+            .subtitle(if s.record.on { locked } else { sized.as_str() })
+            .trail(Trail::Value(values[0].as_str())),
+        Row::new(l.pick(["画质", "畫質", "Quality"]))
+            .icon(ORANGE, Icon::Record)
+            .subtitle(if s.record.on {
+                locked
+            } else {
+                l.pick(["画质越高越清楚，文件也越大", "畫質越高越清楚，檔案也越大", "Higher quality is sharper and bigger"])
+            })
+            .trail(Trail::Value(values[1].as_str())),
+        Row::new(l.pick(["帧率", "幀率", "Frame rate"]))
+            .icon(GREEN, Icon::Record)
+            .subtitle(if s.record.on {
+                locked
+            } else {
+                l.pick([
+                    "60 帧最顺，15 帧最省；太高会补帧",
+                    "60 幀最順，15 幀最省；太高會補幀",
+                    "60 is smoothest, 15 the lightest; too high and frames repeat",
+                ])
+            })
+            .trail(Trail::Value(values[2].as_str())),
+        Row::new(l.pick(["容器", "容器", "Container"]))
+            .icon(SLATE, Icon::Record)
+            .subtitle(if s.record.on {
+                locked
+            } else {
+                l.pick([
+                    "AVI 到处都能放；MP4 相册更认，但断电那份打不开",
+                    "AVI 到處都能放；MP4 相簿更認，但斷電那份打不開",
+                    "AVI plays anywhere; MP4 suits galleries, but a cut file has no index",
+                ])
+            })
+            .trail(Trail::Value(if s.record.format == 0 { "AVI" } else { "MP4" })),
+    ];
+    let list = widgets::list(&mut c, t, f, y, &rows);
+    let mut out = hits(
+        &list.rows,
+        &[
+            Action::RecordSetting(RecordSetting::Scale),
+            Action::RecordSetting(RecordSetting::Quality),
+            Action::RecordSetting(RecordSetting::Fps),
+            Action::RecordSetting(RecordSetting::Format),
+        ],
+    );
+
+    let doing = if s.record.on {
+        l.pick(["停止录制", "停止錄影", "Stop recording"])
+    } else {
+        l.pick(["开始录制", "開始錄影", "Start recording"])
+    };
+    let rows = [Row::new(doing).icon(RED, Icon::Record).trail(Trail::None)];
+    let list = widgets::list(&mut c, t, f, list.bottom + t.m.dp(10.0), &rows);
+    out.extend(hits(&list.rows, &[Action::Record]));
+    let bottom = widgets::footnote(
+        &mut c,
+        t,
+        f,
+        list.bottom,
+        l.pick([
+            "录好的文件在内部存储的 DCIM/Screenrecords，边录边写：断电最多丢最后一秒。录的时候那枚胶囊可以拖到任意位置：点左边的红点是暂停或继续，点右边的方块是结束这一段。",
+            "錄好的檔案在內部儲存的 DCIM/Screenrecords，邊錄邊寫：斷電最多丟最後一秒。錄的時候那枚膠囊可以拖到任意位置：點左邊的紅點是暫停或繼續，點右邊的方塊是結束這一段。",
+            "Takes go to DCIM/Screenrecords on internal storage and are written as they are recorded: a power cut loses the last second at most. Drag the pill anywhere while it runs; tap its dot to pause or carry on, tap its square to end the take.",
+        ]),
+    );
+    Frame::new(t, fit(c, t, bottom), out, l.pick(["录屏", "錄影", "Screen recording"]), top)
+}
+
 pub fn language(cx: &Ctx) -> Frame {
     let (t, f, l) = (cx.t, cx.f, cx.state.lang);
     let mut c = long_page(cx);

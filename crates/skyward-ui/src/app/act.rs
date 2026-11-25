@@ -4,6 +4,121 @@ use super::*;
 use crate::tr;
 
 impl App {
+    /// Start a take, or stop the one running. A take is written into internal
+    /// storage, which has to be open first.
+    fn record_toggle(&mut self, now: u64) -> Vec<Effect> {
+        if self.state.record.on {
+            return vec![Effect::RecordStop];
+        }
+        if !self.state.place_open(Place::Storage) {
+            let text = match self.state.lang {
+                Lang::Hans => "录屏写在内部存储里：先完成「解密」。",
+                Lang::Hant => "錄影寫在內部儲存裡：先完成「解密」。",
+                Lang::En => "Recordings go to internal storage: unlock it first.",
+            };
+            self.say(text, now);
+            return Vec::new();
+        }
+        vec![Effect::RecordStart]
+    }
+
+    /// Change one of the four things a take is recorded by. Nothing changes
+    /// while a take runs: a different size would begin the encoders and the
+    /// file's header again.
+    fn record_cycle(&mut self, which: RecordSetting, now: u64) -> Vec<Effect> {
+        if self.state.record.on {
+            let text = match self.state.lang {
+                Lang::Hans => "正在录制：停下这一段再改。",
+                Lang::Hant => "正在錄影：停下這一段再改。",
+                Lang::En => "Recording: stop this take before changing it.",
+            };
+            self.say(text, now);
+            return Vec::new();
+        }
+        let r = &mut self.state.record;
+        match which {
+            RecordSetting::Scale => r.scale = (r.scale + 1) % crate::record::SCALES.len(),
+            RecordSetting::Quality => r.quality = (r.quality + 1) % crate::record::QUALITIES.len(),
+            RecordSetting::Fps => r.fps = (r.fps + 1) % crate::record::RATES.len(),
+            RecordSetting::Format => r.format = (r.format + 1) % 2,
+        }
+        self.dirty = true;
+        self.refresh();
+        Vec::new()
+    }
+
+    /// A take has begun, writing `file` at `spec`.
+    pub fn record_started(&mut self, file: String, spec: String, now: u64) {
+        let chosen = (self.state.record.scale, self.state.record.quality, self.state.record.fps, self.state.record.format);
+        self.state.record = Record {
+            on: true,
+            since: now,
+            file,
+            spec,
+            elapsed: "0:00".into(),
+            frames: 0,
+            scale: chosen.0,
+            quality: chosen.1,
+            fps: chosen.2,
+            format: chosen.3,
+            // Where the last take's capsule was dragged to is where this
+            // one's begins.
+            pill: self.state.record.pill,
+            paused: false,
+            paused_at: 0,
+            held: 0,
+        };
+        self.dirty = true;
+        self.refresh();
+    }
+
+    /// A take could not begin.
+    pub fn record_failed(&mut self, why: &str, now: u64) {
+        let text = match self.state.lang {
+            Lang::Hans => format!("没能开始录屏：{why}"),
+            Lang::Hant => format!("沒能開始錄影：{why}"),
+            Lang::En => format!("Recording did not start: {why}"),
+        };
+        self.say(&text, now);
+    }
+
+    /// A take has ended, its file holding `secs` seconds.
+    pub fn record_stopped(&mut self, file: &str, secs: u64, now: u64) {
+        self.state.record.on = false;
+        self.state.record.elapsed.clear();
+        self.state.record.paused = false;
+        self.state.record.paused_at = 0;
+        self.state.record.held = 0;
+        let text = match self.state.lang {
+            Lang::Hans => format!("已保存：{file}（{secs} 秒）"),
+            Lang::Hant => format!("已儲存：{file}（{secs} 秒）"),
+            Lang::En => format!("Saved: {file} ({secs} s)"),
+        };
+        self.say(&text, now);
+        self.dirty = true;
+        self.refresh();
+    }
+
+    /// Pause the take running, or carry it on: the time held still is not
+    /// counted into what has been recorded.
+    pub fn record_paused(&mut self, now: u64) -> Vec<Effect> {
+        let r = &mut self.state.record;
+        if !r.on {
+            return Vec::new();
+        }
+        if r.paused {
+            r.held += now.saturating_sub(r.paused_at);
+            r.paused = false;
+        } else {
+            r.paused = true;
+            r.paused_at = now;
+        }
+        let paused = r.paused;
+        self.dirty = true;
+        self.refresh();
+        vec![Effect::RecordPause(paused), Effect::Haptic]
+    }
+
     /// Carry out a tapped control.
     pub(super) fn act(&mut self, action: Action, now: u64) -> Vec<Effect> {
         let l = self.state.lang;
@@ -39,6 +154,14 @@ impl App {
                 return self.arrive_at(s);
             }
             Action::OpenData => return self.open_data(),
+            // The recording: a tile or the page starts and stops a take, the
+            // page's four rows change how the next one is recorded, and the
+            // capsule pauses or ends the one running.
+            Action::Record => return self.record_toggle(now),
+            Action::RecordStart => return vec![Effect::RecordStart],
+            Action::RecordStop => return vec![Effect::RecordStop],
+            Action::RecordPause(on) => return vec![Effect::RecordPause(on)],
+            Action::RecordSetting(which) => return self.record_cycle(which, now),
             // The order the file manager shows entries in: the key cycles, the
             // side turns, and the folders stay on top or mix in.
             Action::CycleSort => {

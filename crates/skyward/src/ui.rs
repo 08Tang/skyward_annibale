@@ -100,6 +100,10 @@ const STORAGE_LOGS: &str = "Skyward/logs";
 const SCREENSHOTS: &str = "DCIM/Screenshots";
 const HELD_SCREENSHOTS: &str = "/skyward/run/screenshots";
 
+/// The folder of internal storage takes are written into, as the system's own
+/// recorder writes them: `DCIM/Screenrecords`.
+const RECORDINGS: &str = "DCIM/Screenrecords";
+
 /// The panel backlight under /sys/class/backlight.
 struct Backlight {
     path: PathBuf,
@@ -403,6 +407,44 @@ fn export_logs(recovery: bool, kernel: bool, into: &Path, zone: &TimeZone) -> Re
         save("kernel.log", skyward_sys::kernel_log()?.as_bytes())?;
     }
     Ok(folder)
+}
+
+/// Begin a take: the folder made, the file opened, and the threads that
+/// shrink, encode and write the frames started. Gives the recorder, the
+/// file's name and what it records at, for the page to show.
+fn start_recording(panel: (u32, u32), r: &skyward_ui::app::state::Record, zone: &TimeZone) -> Result<(skyward_ui::record::Recorder, String, String)> {
+    let (w, h) = panel;
+    anyhow::ensure!(w > 0 && h > 0, "the panel has no size");
+    let folder = Path::new(skyward_crypto::data::SDCARD).join(RECORDINGS);
+    let there = folder.ancestors().find(|p| p.exists()).context("the root is always there")?;
+    let ownership = ownership(there)?;
+    skyward_files::make_folders(&folder, ownership)?;
+    // The container is the one the page settled on: AVI or MP4.
+    let format = if r.format == 0 {
+        skyward_ui::record::Format::Avi
+    } else {
+        skyward_ui::record::Format::Mp4
+    };
+    let name = skyward_ui::fmt::record_name_in(unix_ms_now()?, zone, format.ext());
+    let path = folder.join(&name);
+    let file = skyward_files::make_file(&path, ownership)?;
+    // How big, how sharp and how many frames a second are the page's to say.
+    // The shrinking and the encoding happen on the encoder threads, and the
+    // page only copies its canvas away.
+    let settings = skyward_ui::record::Settings::of((w, h), r.scale, r.quality, r.fps).with_format(format);
+    let rec = skyward_ui::record::Recorder::start(file, path, (w, h), settings)?;
+    let spec = format!(
+        "{}×{} · q{} · {} fps · {}",
+        settings.width,
+        settings.height,
+        settings.quality,
+        settings.fps,
+        match format {
+            skyward_ui::record::Format::Avi => "AVI/MJPEG",
+            skyward_ui::record::Format::Mp4 => "MP4/MJPEG",
+        }
+    );
+    Ok((rec, name, spec))
 }
 
 /// Save `frame`, what the panel shows, as a picture named for when it was
@@ -1235,6 +1277,9 @@ struct Pages<'a> {
     leave: Target,
     leave_at: Option<u64>,
     installer: Option<Installer>,
+    /// The take being recorded, while one is: its threads write the frames the
+    /// loop hands it, and it is finished when the take ends.
+    recorder: Option<skyward_ui::record::Recorder>,
     /// The install the system asked for, until the data partition it is in
     /// opens, or the user whose own files hold it unlocks them.
     pending: Option<Pending>,
@@ -1568,6 +1613,7 @@ impl<'a> Pages<'a> {
             leave_at: None,
             request,
             installer: None,
+            recorder: None,
             pending: None,
             rescue_leaves: None,
             eraser: None,
@@ -2072,6 +2118,12 @@ impl<'a> Pages<'a> {
             if self.app.take_dirty() || !self.surface.is_on() {
                 let t0 = Instant::now();
                 self.app.compose(&mut self.screen, &self.fonts, &self.info, &self.shown_clock, now);
+                // A take takes this frame before the panel does: encoding
+                // happens on threads of its own, so a slow one never holds
+                // the page up -- the writer repeats a frame instead.
+                if let Some(rec) = &self.recorder {
+                    rec.push(&self.screen);
+                }
                 self.surface.present(&self.screen)?;
                 eprintln!("frame {:?} in {} ms", self.app.screen(), t0.elapsed().as_millis());
                 if let Some(path) = self.dump {
@@ -3319,6 +3371,46 @@ impl Pages<'_> {
                 let saved = save_screenshot(&self.screen, storage, self.app.state.zone()).map_err(|e| format!("{e:#}"));
                 eprintln!("screenshot {saved:?} in {} ms", t0.elapsed().as_millis());
                 self.app.screenshot_saved(saved, now);
+            }
+            // A take begins: the folder made, the file opened, and the threads
+            // that shrink, encode and write the frames started. Where it
+            // cannot, the page says why and nothing is recorded.
+            Effect::RecordStart => match start_recording(self.surface.size(), &self.app.state.record, self.app.state.zone()) {
+                Ok((rec, name, spec)) => {
+                    self.recorder = Some(rec);
+                    self.app.record_started(name, spec.clone(), now);
+                    skyward_sys::kmsg(&format!("record: started, {spec}"))?;
+                }
+                Err(e) => self.app.record_failed(&format!("{e:#}"), now),
+            },
+            Effect::RecordStop => {
+                if let Some(rec) = self.recorder.take() {
+                    match rec.finish() {
+                        Ok(done) => {
+                            let name = done.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                            let secs = (done.millis + 500) / 1000;
+                            skyward_sys::kmsg(&format!(
+                                "record: stopped after {} frames, {} bytes in {}",
+                                done.frames,
+                                done.bytes,
+                                done.path.display()
+                            ))?;
+                            self.app.record_stopped(&name, secs, now);
+                        }
+                        Err(e) => self.app.record_failed(&format!("{e:#}"), now),
+                    }
+                }
+            }
+            // The capsule's red dot: held, or carried on. The writer keeps
+            // these itself, so the timeline picks up where it stopped.
+            Effect::RecordPause(paused) => {
+                if let Some(rec) = &self.recorder {
+                    rec.set_paused(paused);
+                }
+                skyward_sys::kmsg(match paused {
+                    true => "record: paused",
+                    false => "record: carried on",
+                })?;
             }
             Effect::Sideload => {
                 if self.may_install(now)? {
