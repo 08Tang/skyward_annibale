@@ -154,8 +154,8 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
         // 锁屏自己画它，这张只给按住电源键时的滑块用。
         Confirm::Unlock => (&["滑动解锁", "滑動解鎖", "Slide to unlock"][..], false),
         Confirm::Filesystem => match s.fs_action {
-            FsAction::Repair => (confirm::REPAIR, true),
-            FsAction::Remake(_) => (confirm::CHANGE, true),
+            FsAction::Repair => (&confirm::REPAIR[..], true),
+            FsAction::Remake(_) => (&confirm::CHANGE[..], true),
         },
         Confirm::Reboot => (&["滑动以重启", "滑動以重新啟動", "Slide to reboot"][..], false),
         Confirm::PowerOff => (&["滑动以关机", "滑動以關機", "Slide to power off"][..], true),
@@ -1924,7 +1924,7 @@ pub fn charge(cx: &Ctx) -> Frame {
         let steps: [(ChargeMode, Text, Text); 3] = [
             (
                 ChargeMode::Plain,
-                ["默认", "預設", "Default"],
+                ["默认", "預設", "Default", "Default", "Default", "Default", "Default", "Default", "Default", "Default", "Default", "Default", "Default", "Default", "Default"],
                 [
                     "不启动充电服务，内核把电流限在它给未认证电池的上限，5W+。",
                     "不啟動充電服務，核心把電流限在它給未認證電池的上限，5W+。",
@@ -1933,7 +1933,7 @@ pub fn charge(cx: &Ctx) -> Frame {
             ),
             (
                 ChargeMode::Fast,
-                ["快充", "快充", "Fast"],
+                ["快充", "快充", "Fast", "Fast", "Fast", "Fast", "Fast", "Fast", "Fast", "Fast", "Fast", "Fast", "Fast", "Fast", "Fast"],
                 [
                     "启动小米充电服务，内核被告知电池已通过认证，10W+。",
                     "啟動小米充電服務，核心被告知電池已通過認證，10W+。",
@@ -1942,7 +1942,7 @@ pub fn charge(cx: &Ctx) -> Frame {
             ),
             (
                 ChargeMode::Fastest,
-                ["超快充", "超快充", "Fastest"],
+                ["超快充", "超快充", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest", "Fastest"],
                 [
                     "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，40W+。",
                     "再啟動小米的認證行程，充電器通過校驗後可升壓到 PPS 檔，40W+。",
@@ -3305,8 +3305,8 @@ impl Pass {
 /// each language.
 fn job_words(restore: bool) -> (Text, Text) {
     match restore {
-        true => (&["已恢复", "已還原", "Restored"][..], ["正在恢复", "正在還原", "Restoring"]),
-        false => (&["已备份", "已備份", "Backed up"][..], ["正在备份", "正在備份", "Backing up"]),
+        true => (&["已恢复", "已還原", "Restored"][..], &["正在恢复", "正在還原", "Restoring"][..]),
+        false => (&["已备份", "已備份", "Backed up"][..], &["正在备份", "正在備份", "Backing up"][..]),
     }
 }
 /// Where part `k` of a backup or restore stands, as its row says it.
@@ -3322,7 +3322,7 @@ fn part_state(l: Lang, job: &BackupJob, k: usize) -> String {
         }
         (Some(BackupEnd::Restored { .. }), _) => return l.pick(did).to_string(),
         (_, None) => {
-            return l.pick(if ended { ["未开始", "未開始", "Not started"] } else { WAITING_TURN }).to_string();
+            return l.pick(if ended { ["未开始", "未開始", "Not started"] } else { &WAITING_TURN[..] }).to_string();
         }
         (_, Some(a)) => a,
     };
@@ -3379,7 +3379,7 @@ pub fn backup_job(cx: &Ctx) -> Frame {
             } else {
                 ["未保存任何备份。", "未儲存任何備份。", "No backup was saved."]
             });
-            let failed = l.pick(if job.restore { RESTORE_FAILED } else { ["备份失败", "備份失敗", "Backup failed"] });
+            let failed = l.pick(if job.restore { &RESTORE_FAILED[..] } else { ["备份失败", "備份失敗", "Backup failed"] });
             let (title, color, detail) = match end {
                 BackupEnd::Saved(name) => {
                     let saved = match job.place {
@@ -6768,7 +6768,7 @@ const AFTERWARDS: [(Text, Action); 3] = [
 /// chose in the recovery goes back to its home page, rather than into it.
 fn afterwards(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, y: f32, asked: bool, out: &mut Vec<Hit>) -> f32 {
     let rows: Vec<Row> =
-        AFTERWARDS.iter().map(|&(title, action)| Row::new(l.pick(if action == Action::Dismiss && !asked { ["返回主页", "返回主頁", "Back to home"] } else { title })).trail(Trail::None)).collect();
+        AFTERWARDS.iter().map(|&(title, action)| Row::new(l.pick(if action == Action::Dismiss && !asked { &["返回主页", "返回主頁", "Back to home"][..] } else { &title })).trail(Trail::None)).collect();
     let choices = widgets::list(c, t, f, y, &rows);
     out.extend(hits(&choices.rows, &AFTERWARDS.map(|(_, action)| action)));
     choices.bottom

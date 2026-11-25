@@ -557,7 +557,7 @@ pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
             (what, None)
         }
         EraseStop::Failed(p, why) => {
-            let what = said(match p {
+            let what = l.pick(match p {
                 Part::Data => failed::DATA,
                 Part::Cache => failed::CACHE,
                 Part::Metadata => failed::METADATA,
@@ -568,7 +568,8 @@ pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
                 Part::Art => failed::ART,
                 Part::Logs => failed::LOGS,
                 Part::Updates => failed::UPDATES,
-            });
+            })
+            .to_string();
             (what, Some(why.clone()))
         }
     }
@@ -1239,7 +1240,7 @@ pub fn failure(l: Lang, f: &Failure, source: Source) -> (String, Option<String>)
                 (said(["文件在读取过程中被修改，请重新选择。", "檔案在讀取過程中被修改，請重新選擇。", "The file changed while it was read. Choose it again."]), None)
             }
         },
-        Failure::Error(detail) => (said(texts::common::UNEXPECTED), Some(detail.clone())),
+        Failure::Error(detail) => (l.pick(texts::common::UNEXPECTED).to_string(), Some(detail.clone())),
     }
 }
 

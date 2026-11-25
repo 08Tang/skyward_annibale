@@ -248,4 +248,20 @@ mod tests {
     fn strips_paths_to_basenames() {
         assert_eq!(basename("kernel/drivers/foo/bar.ko"), "bar.ko");
     }
+
+    #[test]
+    fn takes_out_what_it_put_in_last() {
+        // The order `unload` walks is the reverse of `load`'s, so the module
+        // named comes out after the ones it brought with it. Nothing is
+        // removed on a computer, so what is checked is the order it would go
+        // in: the graph it reads, and the names it derives from it.
+        let mut deps = BTreeMap::new();
+        deps.insert("a.ko".to_string(), vec!["b.ko".to_string()]);
+        deps.insert("b.ko".to_string(), vec!["c.ko".to_string()]);
+        deps.insert("c.ko".to_string(), vec![]);
+        let g = ModuleGraph { base: PathBuf::new(), deps };
+        let order = g.load_order(&["a.ko".to_string()]);
+        let removed: Vec<String> = order.iter().rev().map(|f| f.trim_end_matches(".ko").replace('-', "_")).collect();
+        assert_eq!(removed, vec!["a", "b", "c"], "the named module leaves first, its dependency last");
+    }
 }

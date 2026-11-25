@@ -3346,6 +3346,13 @@ impl Pages<'_> {
             // still kept in misc asked.
             Effect::Reboot(target) => {
                 self.done_with_request()?;
+                // The radio goes back before the phone does: the installed
+                // system's own driver cold-starts the chip, and finding it
+                // left on and its driver still in the kernel makes that start
+                // fail.
+                if let Some(wlan) = self.wlan.take() {
+                    wlan.stop();
+                }
                 power(target)?
             }
             Effect::Dismiss => self.done_with_request()?,
