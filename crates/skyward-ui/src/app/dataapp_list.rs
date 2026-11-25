@@ -71,7 +71,20 @@ impl App {
     /// out is gone from the queue by then, and the state it wrote back is what
     /// says so.
     pub fn set_app_disabled(&mut self, states: std::collections::BTreeMap<String, bool>, queued: std::collections::BTreeMap<String, bool>) {
+        // A change the system has carried out is what its state now says: the
+        // queue holds only what has not run, so a package whose state already
+        // matches what was asked for -- and which the queue no longer names --
+        // is not waiting for anything. The queue file is what decides that,
+        // since it is emptied as the script runs each line.
+        for (package, disabled) in &states {
+            if !queued.contains_key(package) && self.state.app_state_queued.get(package) == Some(disabled) {
+                self.state.app_state_queued.remove(package);
+            }
+        }
         self.state.app_disabled = Some(states);
+        // What the file holds is added, and what the page already knows is
+        // kept: the file is read when the page opens, and every visit opens it
+        // again, so a read must not undo a tap that came before.
         for (package, disable) in queued {
             self.state.app_state_queued.insert(package, disable);
         }
