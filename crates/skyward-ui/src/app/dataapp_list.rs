@@ -74,12 +74,28 @@ impl App {
         self.refresh();
     }
 
+    /// What the queue and the state file hold, written out for the page's foot:
+    /// the recovery shows no files, and an app whose row will not turn over is
+    /// accounted for by one of these two.
+    pub fn set_app_state_report(&mut self, report: String) {
+        self.state.app_state_report = report;
+        self.refresh();
+    }
+
     /// A change was asked for and queued: the page shows that app as waiting
     /// rather than as changed, since only the system itself can change it, and
     /// only at the next start. A second tap on the same app undoes the first,
     /// so what is kept is the state the app is headed for.
     pub fn app_state_queued(&mut self, package: &str, disable: bool) {
         self.state.app_state_queued.insert(package.to_string(), disable);
+        self.state.app_state_failed = None;
+        self.refresh();
+    }
+
+    /// A change could not be queued, and why: the page says so under the list,
+    /// since a tap that leaves no trace looks like a tap that did nothing.
+    pub fn app_state_failed(&mut self, why: &str) {
+        self.state.app_state_failed = Some(why.to_string());
         self.refresh();
     }
 

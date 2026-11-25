@@ -430,9 +430,12 @@ impl Font {
             });
         }
         let _ = (left, bottom);
-        // The advance is the picture's own width, so the letter beside it is
-        // not crowded.
-        Some(Art { canvas, dx: -ox.round() as i32, dy: -oy.round() as i32, advance: fw })
+        // The advance is one em, not the picture's width: the picture is wider
+        // than that on each side to hold what a layer paints past the advance,
+        // and charging the whole of it would push the letter beside the emoji
+        // a margin away from it and crowd it off the end of a name. The picture
+        // is centred on the advance, so `dx` takes back the left margin.
+        Some(Art { canvas, dx: -ox.round() as i32, dy: -oy.round() as i32, advance: ppem as f32 })
     }
 
     /// The bitmap one (the flags): the glyph is a PNG, decoded and scaled to
@@ -467,15 +470,16 @@ impl Font {
                 png::ColorType::Indexed => return None,
             })
         };
-        let (fw, fh) = (ppem as f32 * 1.05, ppem as f32 * 1.2);
+        let (fw, fh) = (ppem as f32 * 1.24, ppem as f32 * 1.2);
         let (w, h) = (fw.ceil() as u32, fh.ceil() as u32);
         let mut canvas = Canvas::new(w, h);
         // The bitmap is laid at 0.95 em, centred across, with 0.11 em left
         // above it so that it lines up with what the vector one draws -- a
         // flag standing taller than the emoji beside it was a flag laid too
-        // high (2026-11-24).
+        // high (2026-11-24). The margin either side is the vector picture's:
+        // the two kinds stand beside each other on one line.
         let side = ppem as f32 * 0.95;
-        let (ox, oy) = (ppem as f32 * 0.05, ppem as f32 * 0.11);
+        let (ox, oy) = (ppem as f32 * 0.145, ppem as f32 * 0.11);
         for y in 0..side as u32 {
             for x in 0..side as u32 {
                 let sx = ((x as f32 / side) * iw as f32) as usize;

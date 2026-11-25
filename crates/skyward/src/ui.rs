@@ -3453,6 +3453,7 @@ impl Pages<'_> {
             }
             Effect::ReadAppStates => {
                 self.app.set_app_disabled(crate::appstate::states(), crate::appstate::queued());
+                self.app.set_app_state_report(crate::appstate::report());
             }
             // A change to a system app is queued rather than made: only the
             // system itself can change its package manager's state, so the
@@ -3462,9 +3463,11 @@ impl Pages<'_> {
                 Ok(()) => {
                     skyward_sys::kmsg(&format!("{package} is queued to be {} at the next start", if disable { "disabled" } else { "enabled" }))?;
                     self.app.app_state_queued(&package, disable);
+                    self.app.set_app_state_report(crate::appstate::report());
                 }
                 Err(e) => {
                     skyward_sys::kmsg(&format!("{package} is not queued: {e:#}"))?;
+                    self.app.app_state_failed(&format!("{e:#}"));
                     self.app.report(&format!("not queued: {e:#}"), monotonic_ms());
                 }
             },

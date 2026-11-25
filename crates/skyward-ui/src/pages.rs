@@ -3608,7 +3608,9 @@ pub fn fetch(cx: &Ctx) -> Frame {
     let mut c = long_page(cx);
     let mut out = Vec::new();
     let wide = m.w as f32 - m.margin * 2.0;
-    let top = m.content_top;
+    // A little air under the title: the page's content starts at the title's
+    // own edge, and a field laid on that edge looks joined to it.
+    let top = m.content_top + m.dp(12.0);
     let hint = l.pick(["粘贴或输入完整网址", "貼上或輸入完整網址", "Type or paste a full address"]);
     let field = widgets::search_field(&mut c, t, f, m.margin, wide, top, &s.fetch_url, hint);
     let running = matches!(s.fetch, Fetch::Running { .. });
@@ -4275,6 +4277,16 @@ pub fn system_apps(cx: &Ctx) -> Frame {
     let listed = widgets::list(&mut c, t, f, top, &rows);
     out.extend(hits(&listed.rows, &acts));
     let bottom = widgets::footnote(&mut c, t, f, listed.bottom, l.pick(["点一下停用或启用，下次开机由系统执行", "點一下停用或啟用，下次開機由系統執行", "Tap to disable or enable; the system does it at the next start"]));
+    // A change that could not be written says so here, where it stays: a tap
+    // that leaves the row as it was looks like a tap that did nothing.
+    let bottom = match &s.app_state_failed {
+        Some(why) => widgets::footnote(&mut c, t, f, bottom + m.dp(8.0), why),
+        None => bottom,
+    };
+    // What the two files say, in full: an app whose row will not turn over is
+    // accounted for by one of them, and there is no other way to see them from
+    // the recovery.
+    let bottom = widgets::footnote(&mut c, t, f, bottom + m.dp(8.0), &s.app_state_report);
     Frame::new(t, fit(c, t, bottom), out, l.pick(SYSTEM_APPS), top)
 }
 

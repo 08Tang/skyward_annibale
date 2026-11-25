@@ -343,6 +343,15 @@ pub struct State {
     /// shows one as waiting rather than as done, since only the system itself
     /// can change it, at the next start.
     pub app_state_queued: std::collections::BTreeMap<String, bool>,
+    /// Why the last change asked for was not queued, if it was not. A change
+    /// is written to the data partition, which may not be open, and the page
+    /// says so under the list rather than only for the moment a message shows:
+    /// a tap that appears to do nothing is otherwise unaccountable.
+    pub app_state_failed: Option<String>,
+    /// What the queue and the state file hold, as the page shows them at its
+    /// foot: an app whose row will not turn over is accounted for by one of the
+    /// two, and the recovery offers no other way to see them.
+    pub app_state_report: String,
     /// How many screens of apps the page has been turned by: a screen holds
     /// what fits, and the list is read a screen at a time.
     pub app_page: usize,
@@ -612,6 +621,8 @@ impl Default for State {
             sys_apps: None,
             app_disabled: None,
             app_state_queued: std::collections::BTreeMap::new(),
+            app_state_failed: None,
+            app_state_report: String::new(),
             app_page: 0,
             sys_page: 0,
             search_scope: SearchScope::Features,

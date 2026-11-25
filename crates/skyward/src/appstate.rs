@@ -200,6 +200,17 @@ pub fn queued() -> BTreeMap<String, bool> {
     out
 }
 
+/// 队列和状态两个文件的原样内容，给页面末尾看：recovery 里没有别的办法看它们，
+/// 而一个点不动的应用只能由这两份文件里的某一行解释。
+pub fn report() -> String {
+    let read = |path: &str| match fs::read_to_string(path) {
+        Ok(text) if !text.trim().is_empty() => text.trim().replace('\n', " | "),
+        Ok(_) => "（空）".to_string(),
+        Err(e) => format!("（读不到：{e}）"),
+    };
+    format!("排队：{} ／ 状态：{}", read(QUEUE), read(STATE))
+}
+
 /// 把一个停用/启用请求排进队列，并把启动脚本装上（已经有了就覆盖成最新
 /// 那份）。data 分区没打开时这里会失败，页面据此说一句。
 pub fn queue(package: &str, disable: bool) -> Result<()> {
