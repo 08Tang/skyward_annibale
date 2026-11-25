@@ -375,11 +375,11 @@ impl Font {
         // ppem..0 up from the baseline -- stands where the line expects it,
         // with the painted shape laid inside that. The y axis points up in the
         // typeface and down on the canvas, so the topmost point of the shape
-        // is what goes one pad below the canvas's top edge. Across, what the
-        // advance has beyond the em is shared out either side, so the em
-        // stands in the middle of the room it was given.
-        let slack = (advance - ppem as f32) / 2.0;
-        let ox = -x0 + pad + slack;
+        // is what goes one pad below the canvas's top edge. Across, the shape's
+        // own left edge is what goes one pad in from the picture's left edge:
+        // the em box is where the typeface puts it, and the room the line gives
+        // the glyph is the font's own advance, not the picture's width.
+        let ox = -x0 + pad;
         let oy = y1 + pad;
         let (w, h) = (((x1 - x0) + pad * 2.0).ceil().max(1.0) as u32, ((y1 - y0) + pad * 2.0).ceil().max(1.0) as u32);
         let mut canvas = Canvas::new(w, h);
