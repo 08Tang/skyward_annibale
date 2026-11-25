@@ -3358,14 +3358,14 @@ fn part_state(l: Lang, job: &BackupJob, k: usize) -> String {
         }
         (Some(BackupEnd::Restored { .. }), _) => return l.pick(did).to_string(),
         (_, None) => {
-            return l.pick(if ended { ["未开始", "未開始", "Not started"] } else { &WAITING_TURN[..] }).to_string();
+            return l.pick(if ended { ["未开始", "未開始", "Not started", "Not started", "Not started", "Not started", "Not started", "Not started", "Not started", "Not started", "Not started", "Not started", "Not started", "Not started", "Not started"] } else { &WAITING_TURN[..] }).to_string();
         }
         (_, Some(a)) => a,
     };
     let state = match k.cmp(&a.item) {
         Ordering::Less if a.checking => VERIFIED,
         Ordering::Less => did,
-        Ordering::Equal if ended => ["未完成", "未完成", "Unfinished"],
+        Ordering::Equal if ended => ["未完成", "未完成", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished", "Unfinished"],
         Ordering::Equal => {
             return format!("{} {}%", l.pick(if a.checking { VERIFYING } else { doing }), percent(part_share(&a)));
         }
@@ -3415,7 +3415,7 @@ pub fn backup_job(cx: &Ctx) -> Frame {
             } else {
                 ["未保存任何备份。", "未儲存任何備份。", "No backup was saved."]
             });
-            let failed = l.pick(if job.restore { &RESTORE_FAILED[..] } else { ["备份失败", "備份失敗", "Backup failed"] });
+            let failed = l.pick(if job.restore { &RESTORE_FAILED[..] } else { ["备份失败", "備份失敗", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed", "Backup failed"] });
             let (title, color, detail) = match end {
                 BackupEnd::Saved(name) => {
                     let saved = match job.place {

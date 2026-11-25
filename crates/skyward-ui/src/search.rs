@@ -135,19 +135,19 @@ pub const ENTRIES: &[Entry] = &[
     ),
     entry(
         ["全部参数与信息", "全部規格與資訊", "All specs", "All specs", "All specs", "All specs", "All specs", "All specs", "All specs", "All specs", "All specs", "All specs", "All specs", "All specs", "All specs"],
-        ["设置 > 关于本机", "設定 > 關於手機", "Settings > About phone"],
+        ["设置 > 关于本机", "設定 > 關於手機", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone", "Settings > About phone"],
         Screen::Specs,
         &["quanbucanshuyuxinxi", "qbcsyxx", "canshu", "specs"],
     ),
     entry(
         ["开源许可", "開放原始碼授權", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses", "Open source licenses"],
-        ["设置 > 关于本机 > 全部参数与信息", "設定 > 關於手機 > 全部規格與資訊", "Settings > About phone > All specs"],
+        ["设置 > 关于本机 > 全部参数与信息", "設定 > 關於手機 > 全部規格與資訊", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs"],
         Screen::License,
         &["kaiyuanxuke", "kyxk", "license", "gpl"],
     ),
     entry(
         ["界面字体", "介面字型", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts", "UI fonts"],
-        ["设置 > 关于本机 > 全部参数与信息", "設定 > 關於手機 > 全部規格與資訊", "Settings > About phone > All specs"],
+        ["设置 > 关于本机 > 全部参数与信息", "設定 > 關於手機 > 全部規格與資訊", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs", "Settings > About phone > All specs"],
         Screen::FontLicense,
         &["jiemianziti", "jmzt", "ziti", "font", "misans", "kirkmono", "dengkuan"],
     ),

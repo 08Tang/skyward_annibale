@@ -994,15 +994,17 @@ pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Generic } => (&BOOT[..], &["包含内核和通用 ramdisk", "包含核心和通用 ramdisk", "Holds a kernel and a generic ramdisk"]),
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::None } => (&BOOT[..], &["仅包含内核", "僅包含核心", "Holds a kernel alone"]),
         ImageKind::Boot { kernel: false, .. } => (&BOOT[..], &["仅包含通用 ramdisk", "僅包含通用 ramdisk", "Holds a generic ramdisk alone"]),
-        ImageKind::VendorBoot => {
-            (&["vendor_boot 镜像", "vendor_boot 映像檔", "vendor_boot image"][..], &["包含厂商 ramdisk 和设备树", "包含廠商 ramdisk 和裝置樹", "Holds the vendor ramdisk and device tree"][..])
-        }
+        ImageKind::VendorBoot => (
+            &["vendor_boot 镜像", "vendor_boot 映像檔", "vendor_boot image"][..],
+            &["包含厂商 ramdisk 和设备树", "包含廠商 ramdisk 和裝置樹", "Holds the vendor ramdisk and device tree"][..],
+        ),
         ImageKind::Dtbo => (&["dtbo 镜像", "dtbo 映像檔", "dtbo image"][..], &["包含设备树叠加层", "包含裝置樹疊加層", "Holds device tree overlays"]),
         ImageKind::Vbmeta => (&["vbmeta 镜像", "vbmeta 映像檔", "vbmeta image"][..], &["包含启动验证数据", "包含啟動驗證資料", "Holds verified boot data"]),
         ImageKind::Super => (&["super 镜像", "super 映像檔", "super image"][..], &["包含全部逻辑分区", "包含全部邏輯分割區", "Holds every logical partition"]),
         ImageKind::Filesystem(filesystem) => {
             return (l.pick(PARTITION), texts::image::holds::filesystem(l, filesystem.name()));
-        }        ImageKind::Other => (&PARTITION[..], &["内容不明", "內容不明", "Holds what couldn't be identified"][..]),
+        }
+        ImageKind::Other => (&PARTITION[..], &["内容不明", "內容不明", "Holds what couldn't be identified"][..]),
     };
     (l.pick(name), l.pick(holds).into())
 }
