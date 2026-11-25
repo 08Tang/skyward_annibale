@@ -152,33 +152,33 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
     ];
     let (label, danger) = match which {
         // 锁屏自己画它，这张只给按住电源键时的滑块用。
-        Confirm::Unlock => (["滑动解锁", "滑動解鎖", "Slide to unlock"], false),
+        Confirm::Unlock => (&["滑动解锁", "滑動解鎖", "Slide to unlock"][..], false),
         Confirm::Filesystem => match s.fs_action {
             FsAction::Repair => (confirm::REPAIR, true),
             FsAction::Remake(_) => (confirm::CHANGE, true),
         },
-        Confirm::Reboot => (["滑动以重启", "滑動以重新啟動", "Slide to reboot"], false),
-        Confirm::PowerOff => (["滑动以关机", "滑動以關機", "Slide to power off"], true),
-        Confirm::Wipe => (["滑动以清除", "滑動以清除", "Slide to wipe"], true),
-        Confirm::Flash => (["滑动以刷入", "滑動以刷入", "Slide to flash"], true),
-        Confirm::Backup => (["滑动以备份", "滑動以備份", "Slide to back up"], false),
-        Confirm::Restore => (["滑动以恢复", "滑動以還原", "Slide to restore"], true),
-        Confirm::Slot => (["滑动以切换", "滑動以切換", "Slide to switch"], true),
-        Confirm::FactoryReset => (["滑动以恢复出厂设置", "滑動以恢復原廠設定", "Slide to factory reset"], true),
-        Confirm::DeleteEntry | Confirm::DeleteBackup => (["滑动以删除", "滑動以刪除", "Slide to delete"], true),
-        Confirm::KeepLock => (["滑动以开启", "滑動以開啟", "Slide to turn on"], true),
+        Confirm::Reboot => (&["滑动以重启", "滑動以重新啟動", "Slide to reboot"][..], false),
+        Confirm::PowerOff => (&["滑动以关机", "滑動以關機", "Slide to power off"][..], true),
+        Confirm::Wipe => (&["滑动以清除", "滑動以清除", "Slide to wipe"][..], true),
+        Confirm::Flash => (&["滑动以刷入", "滑動以刷入", "Slide to flash"][..], true),
+        Confirm::Backup => (&["滑动以备份", "滑動以備份", "Slide to back up"][..], false),
+        Confirm::Restore => (&["滑动以恢复", "滑動以還原", "Slide to restore"][..], true),
+        Confirm::Slot => (&["滑动以切换", "滑動以切換", "Slide to switch"][..], true),
+        Confirm::FactoryReset => (&["滑动以恢复出厂设置", "滑動以恢復原廠設定", "Slide to factory reset"][..], true),
+        Confirm::DeleteEntry | Confirm::DeleteBackup => (&["滑动以删除", "滑動以刪除", "Slide to delete"][..], true),
+        Confirm::KeepLock => (&["滑动以开启", "滑動以開啟", "Slide to turn on"][..], true),
         Confirm::Install => (INSTALL, false),
-        Confirm::InstallWipe => (["滑动以安装并清除", "滑動以安裝並清除", "Slide to install and wipe"], true),
+        Confirm::InstallWipe => (&["滑动以安装并清除", "滑動以安裝並清除", "Slide to install and wipe"][..], true),
         Confirm::RunScript => (INSTALL, true),
-        Confirm::Merge => (["滑动以合并", "滑動以合併", "Slide to merge"], true),
-        Confirm::Relabel => (["滑动以修复", "滑動以修復", "Slide to fix"], true),
-        Confirm::SwitchSystem => (["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"], false),
-        Confirm::RemoveSystem => (["滑动以删除", "滑動以刪除", "Slide to remove"], true),
-        Confirm::DeleteApp => (["滑动以卸载", "滑動以卸載", "Slide to uninstall"], true),
+        Confirm::Merge => (&["滑动以合并", "滑動以合併", "Slide to merge"][..], true),
+        Confirm::Relabel => (&["滑动以修复", "滑動以修復", "Slide to fix"][..], true),
+        Confirm::SwitchSystem => (&["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"][..], false),
+        Confirm::RemoveSystem => (&["滑动以删除", "滑動以刪除", "Slide to remove"][..], true),
+        Confirm::DeleteApp => (&["滑动以卸载", "滑動以卸載", "Slide to uninstall"][..], true),
         Confirm::InstallSystem => (INSTALL, false),
-        Confirm::ExportImage(_) => (["滑动以备份", "滑動以備份", "Slide to back up"], false),
-        Confirm::ImportImage(_) => (["滑动以写回", "滑動以寫回", "Slide to write back"], true),
-        Confirm::DeleteImage(_) => (["滑动以删除", "滑動以刪除", "Slide to delete"], true),
+        Confirm::ExportImage(_) => (&["滑动以备份", "滑動以備份", "Slide to back up"][..], false),
+        Confirm::ImportImage(_) => (&["滑动以写回", "滑動以寫回", "Slide to write back"][..], true),
+        Confirm::DeleteImage(_) => (&["滑动以删除", "滑動以刪除", "Slide to delete"][..], true),
     };
     (s.lang.pick(label), danger)
 }
@@ -2130,7 +2130,7 @@ pub fn install(cx: &Ctx) -> Frame {
     // page opens or tells why it does not.
     let data = &cx.state.data;
     let (storage, from_storage) = if data.storage_open() {
-        (["选择内部存储中的更新包或镜像", "選擇內部儲存空間中的更新檔或映像檔", "Choose a package or image in internal storage"], Action::Open(Screen::Choose(Place::Storage)))
+        (&["选择内部存储中的更新包或镜像", "選擇內部儲存空間中的更新檔或映像檔", "Choose a package or image in internal storage"][..], Action::Open(Screen::Choose(Place::Storage)))
     } else if *data == Data::Erased {
         (texts::data::ERASED, Action::Open(Screen::Decrypt))
     } else {
@@ -2803,7 +2803,7 @@ fn afterwards_of(c: &mut Canvas, cx: &Ctx, y: f32, installed: bool) -> f32 {
 /// What the wipe page lists of [`WIPES`] beyond everything, under the
 /// partition each is in.
 const WIPE_GROUPS: [(Text, &[Wipe]); 2] =
-    [(DATA_PART_NAME, &[Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates]), (["cache 分区", "cache 分割區", "cache partition"], &[Wipe::Cache])];
+    [(DATA_PART_NAME, &[Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates]), (&["cache 分区", "cache 分割區", "cache partition"][..], &[Wipe::Cache])];
 
 /// What a factory reset erases, as the wipe page tells it of its first
 /// choice, and the page that carries one out for the system tells it.
@@ -2819,9 +2819,9 @@ fn factory_reset(s: &State) -> &'static str {
 fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
     let l = s.lang;
     let (title, what): (Text, String) = match w {
-        Wipe::All => (["全部数据", "全部資料", "All data"], capitalized(l, factory_reset(s))),
+        Wipe::All => (&["全部数据", "全部資料", "All data"][..], capitalized(l, factory_reset(s))),
         Wipe::AppData => (
-            ["应用数据", "應用程式資料", "App data"],
+            &["应用数据", "應用程式資料", "App data"][..],
             l.pick([
                 "/data/data、/data/user、/data/user_de，以及内部存储中的 Android/data、Android/media，应用将恢复到初始状态",
                 "/data/data、/data/user、/data/user_de，以及內部儲存空間中的 Android/data、Android/media，應用程式將恢復到初始狀態",
@@ -2830,11 +2830,11 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
             .into(),
         ),
         Wipe::Media => (
-            ["内部存储", "內部儲存空間", "Internal storage"],
+            &["内部存储", "內部儲存空間", "Internal storage"][..],
             l.pick(["/data/media，即 /sdcard 中的照片、视频和文件", "/data/media，即 /sdcard 中的相片、影片和檔案", "/data/media: the photos, videos and files in /sdcard"]).into(),
         ),
         Wipe::AppCaches => (
-            ["应用缓存", "應用程式快取", "App caches"],
+            &["应用缓存", "應用程式快取", "App caches"][..],
             l.pick([
                 "各应用数据中的 cache、code_cache，以及 Android/data 中的 cache，应用将按需重新生成",
                 "各應用程式資料中的 cache、code_cache，以及 Android/data 中的 cache，應用程式將視需要重新產生",
@@ -2843,7 +2843,7 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
             .into(),
         ),
         Wipe::SystemCaches => (
-            ["系统缓存", "系統快取", "System caches"],
+            &["系统缓存", "系統快取", "System caches"][..],
             l.pick([
                 "/data/system/package_cache、/data/resource-cache、/data/cache，下次开机时重新生成",
                 "/data/system/package_cache、/data/resource-cache、/data/cache，下次開機時重新產生",
@@ -2852,7 +2852,7 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
             .into(),
         ),
         Wipe::Art => (
-            ["ART 缓存", "ART 快取", "ART cache"],
+            &["ART 缓存", "ART 快取", "ART cache"][..],
             l.pick([
                 "/data/dalvik-cache、/data/misc/apexdata/com.android.art/dalvik-cache、/data/ota，下次开机时重新编译，启动时间较长",
                 "/data/dalvik-cache、/data/misc/apexdata/com.android.art/dalvik-cache、/data/ota，下次開機時重新編譯，啟動時間較長",
@@ -2872,14 +2872,14 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
                 "/data/tombstones、/data/anr、/data/system/dropbox、/data/misc/logd 等系統記錄和當機記錄，各使用者的錯誤報告{own}",
                 "System logs and crash records, such as /data/tombstones, /data/anr, /data/system/dropbox and /data/misc/logd, each user's bug reports{own}"
             );
-            (["日志", "記錄", "Logs"], what)
+            (&["日志", "記錄", "Logs"][..], what)
         }
         Wipe::Updates => (
-            ["下载的更新包", "下載的更新檔", "Downloaded updates"],
+            &["下载的更新包", "下載的更新檔", "Downloaded updates"][..],
             l.pick(["/data/ota_package 中的系统更新包", "/data/ota_package 中的系統更新檔", "System update packages in /data/ota_package"]).into(),
         ),
         Wipe::Cache => (
-            ["全部内容", "全部內容", "Everything"],
+            &["全部内容", "全部內容", "Everything"][..],
             l.pick(["格式化 cache 分区，保留 recovery 文件夹中的日志", "格式化 cache 分割區，保留 recovery 資料夾中的記錄", "Formats the cache partition, keeping the logs in its recovery folder"])
                 .into(),
         ),
@@ -3305,8 +3305,8 @@ impl Pass {
 /// each language.
 fn job_words(restore: bool) -> (Text, Text) {
     match restore {
-        true => (["已恢复", "已還原", "Restored"], ["正在恢复", "正在還原", "Restoring"]),
-        false => (["已备份", "已備份", "Backed up"], ["正在备份", "正在備份", "Backing up"]),
+        true => (&["已恢复", "已還原", "Restored"][..], ["正在恢复", "正在還原", "Restoring"]),
+        false => (&["已备份", "已備份", "Backed up"][..], ["正在备份", "正在備份", "Backing up"]),
     }
 }
 /// Where part `k` of a backup or restore stands, as its row says it.
@@ -5484,6 +5484,10 @@ pub fn files_otg(cx: &Ctx) -> Frame {
         Action::OpenOtgEntry,
         top,
         Some((l.pick(["内部存储", "內部儲存空間", "Internal storage"]), Action::Open(Screen::Files))),
+        // The card is not a step below the drive: the drive's own files are
+        // what this page is for, and the way back is the pill beside the
+        // trail.
+        None,
     );
     Frame { dock, ..frame }
 }
@@ -5526,6 +5530,16 @@ pub fn files(cx: &Ctx) -> Frame {
     let button = Some((widgets::Glyph::Terminal, Action::TerminalHere));
     let root = l.pick(["内部存储", "內部儲存空間", "Internal storage"]);
     let other = l.pick(["U 盘", "USB 隨身碟", "USB drive"]);
+    // The card is one more step below the folder shown, not another place
+    // beside it: a phone's files are all under /sdcard, and this is the way
+    // back up to the top of it from anywhere below. It is not drawn while
+    // that is where the page already is, since it would lead nowhere.
+    let on_card = s.files.path.trim_end_matches('/') == "/sdcard";
+    let card_place: Option<(&str, Action)> = if on_card {
+        None
+    } else {
+        Some((l.pick(["sdcard", "sdcard", "sdcard"]), Action::FilesSdCard))
+    };
     // A name is looked for in the folder shown: what it holds is filtered as
     // the name is typed, so the page itself answers the search.
     let shown = filter_folder(s);
@@ -5539,6 +5553,7 @@ pub fn files(cx: &Ctx) -> Frame {
         entry_action,
         l.pick(FILES),
         Some((other, Action::FilesOtg)),
+        card_place,
     );
     // The controls sit beside the title as four round buttons, all of them
     // icons, rather than as a row of words over the list: the list is what the
@@ -5652,7 +5667,7 @@ pub fn choose(cx: &Ctx, place: Place) -> Frame {
         _ => None,
     };
     let empty = l.pick(["暂无可安装的文件", "沒有可安裝的檔案", "Nothing here to install"]);
-    listing(cx, s.folder(Screen::Choose(place)), place_name(l, place), absent, empty, Action::ChooseEntry, l.pick(["选择文件", "選擇檔案", "Choose a file"]), None)
+    listing(cx, s.folder(Screen::Choose(place)), place_name(l, place), absent, empty, Action::ChooseEntry, l.pick(["选择文件", "選擇檔案", "Choose a file"]), None, None)
 }
 
 /// A folder laid out as the stock file manager lays one out: the path as
@@ -5674,6 +5689,10 @@ fn listing(
     title: &'static str,
     // The other place the files can be shown from, beside the trail.
     places_other: Option<(&str, Action)>,
+    // One more place to go, pinned to the end of the trail: the card, which
+    // reads as one more step below the folder shown rather than as another
+    // strip beside it.
+    card_place: Option<(&str, Action)>,
 ) -> Frame {
     let (t, f) = (cx.t, cx.f);
     let bg = files::page(t);
@@ -5693,8 +5712,7 @@ fn listing(
         }
         (None, Ok(entries)) => Some(files::rows(t, f, entries, action)),
     };
-    let pinned = Some(files::strip_with(t, f, top, &folder.path, places_other, card_place));
-    Frame { bg, rows, pinned, ..Frame::new(t, c, Vec::new(), title, t.m.dp(files::LIST_TOP_DP)) }
+    let pinned = Some(files::strip_with(t, f, top, &folder.path, places_other, card_place));    Frame { bg, rows, pinned, ..Frame::new(t, c, Vec::new(), title, t.m.dp(files::LIST_TOP_DP)) }
 }
 
 /// Row `i` of the page's long list over the whole of `c`, sized for it,

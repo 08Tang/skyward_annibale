@@ -455,6 +455,9 @@ pub enum Action {
     DismissPlace,
     /// Look at the files on the OTG drive.
     FilesOtg,
+    /// Go up to /sdcard, the top of the card the file manager reads: the
+    /// pill at the end of the trail, shown wherever the page is below it.
+    FilesSdCard,
     /// Open the OTG entry at this place.
     OpenOtgEntry(usize),
     /// Open the terminal in the folder the file manager shows.

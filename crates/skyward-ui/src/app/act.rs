@@ -1003,6 +1003,13 @@ impl App {
                 self.refresh();
                 return vec![Effect::RestoreVbmeta];
             }
+            // The card's own top: the files every folder under /sdcard is
+            // reached from, listed as any other folder's are.
+            Action::FilesSdCard => {
+                let scroll = self.top().1;
+                self.state.files.leave(scroll);
+                return vec![Effect::ReadDir("/sdcard".to_string())];
+            }
             // The OTG drive's files: listed on a page of their own, and an
             // entry in it opens as any other folder's does.
             Action::FilesOtg => {
