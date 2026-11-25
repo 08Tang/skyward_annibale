@@ -1,4 +1,5 @@
 pub mod app;
+pub mod aod;
 pub mod avatar;
 pub mod canvas;
 pub mod charge;

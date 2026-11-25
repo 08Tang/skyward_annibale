@@ -141,6 +141,16 @@ pub struct Wlan {
     /// The page the stock system asks over plain HTTP to tell whether a
     /// network reaches the internet, which answers 204 with nothing.
     pub probe: String,
+    /// What is written to put the chip's switches back where the installed
+    /// system expects to find them, before the driver is unloaded on the way
+    /// out of the recovery. A phone that names none is left as it was: the
+    /// recovery never touched anything it has to give back.
+    ///
+    /// Leaving the radio on and the driver in the kernel is what makes the
+    /// system's own driver fail its cold start, so this is the last thing done
+    /// before the phone restarts.
+    #[serde(default)]
+    pub release: Vec<Write>,
 }
 
 /// A value written to a file, such as a switch in sysfs.

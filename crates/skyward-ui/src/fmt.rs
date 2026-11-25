@@ -374,7 +374,7 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
 /// where the boot control could tell.
 pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Option<String>) {
     use texts::update::standing;
-    let line = |text: Text| Some(l.pick(text).to_string());
+    let line = |text| Some(l.pick(text).to_string());
     match s {
         Standing::None => (l.pick(["暂无待合并的更新", "沒有待合併的更新", "No update waiting to merge"]), None),
         Standing::Unknown => (
@@ -493,7 +493,7 @@ pub fn users(l: Lang, users: &[u32]) -> String {
 /// it when there is that.
 pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
     use texts::wipe::failed;
-    let said = |text: Text| l.pick(text).to_string();
+    let said = |text| l.pick(text).to_string();
     match s {
         EraseStop::Update(Hold::Unconfirmed) => (
             said([
@@ -758,12 +758,40 @@ pub fn slots(l: Lang, slots: &[Slot]) -> String {
     }
 }
 
-const UNEXPECTED: Text = ["发生意外错误。", "發生未預期的錯誤。", "Something went wrong."];
+const UNEXPECTED: Text = [
+    "发生意外错误。",
+    "發生未預期的錯誤。",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    "Something went wrong.",
+    ];
 const LOGIN: Text = [
     "需要先在网页上登录才能访问互联网，Skyward 无法打开网页登录。可以改用无需登录的网络，例如手机热点。",
     "需要先在網頁上登入才能連上網際網路，Skyward 無法開啟網頁登入。可以改用無需登入的網路，例如手機熱點。",
-    "needs a sign-in in a browser before it reaches the internet, and Skyward has no browser to sign in with. Use a network that needs no sign-in instead, such as a phone's hotspot.",
-];
+    "needs a sign-in in a browser before it reaches the internet,
+    and Skyward has no browser to sign in with. Use a network that needs no sign-in instead,
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    such as a phone's hotspot.",
+    ];
 
 /// The rules of each of [`TIME_ZONES`], read once from the ones the
 /// recovery carries.
@@ -918,8 +946,40 @@ pub fn parts(l: Lang, held: &[bool; 5]) -> String {
 
 /// What an image is, and what it holds.
 pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
-    const RECOVERY: Text = ["恢复模式镜像", "復原模式映像檔", "Recovery image"];
-    const BOOT: Text = ["启动镜像", "啟動映像檔", "Boot image"];
+    const RECOVERY: Text = [
+    "恢复模式镜像",
+    "復原模式映像檔",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    "Recovery image",
+    ];
+    const BOOT: Text = [
+    "启动镜像",
+    "啟動映像檔",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    "Boot image",
+    ];
     let (name, holds) = match kind {
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["包含内核和恢复模式 ramdisk", "包含核心和復原模式 ramdisk", "Holds a kernel and a recovery ramdisk"]),
         ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery } => (RECOVERY, ["仅包含恢复模式 ramdisk", "僅包含復原模式 ramdisk", "Holds a recovery ramdisk alone"]),
@@ -940,7 +1000,23 @@ pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
     (l.pick(name), l.pick(holds).into())
 }
 
-const PARTITION: Text = ["分区镜像", "分割區映像檔", "Partition image"];
+const PARTITION: Text = [
+    "分区镜像",
+    "分割區映像檔",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    "Partition image",
+    ];
 
 /// What a partition an image can go to is for.
 pub fn partition_role(l: Lang, partition: &FlashTarget) -> &'static str {
@@ -1112,7 +1188,7 @@ pub fn erase_request_refusal(l: Lang, r: &Refusal, codename: &str) -> String {
 /// What went wrong installing a package from `source`, and the details
 /// behind it when there are any.
 pub fn failure(l: Lang, f: &Failure, source: Source) -> (String, Option<String>) {
-    let said = |text: Text| l.pick(text).to_string();
+    let said = |text| l.pick(text).to_string();
     match f {
         Failure::Engine(code) => {
             let what = match (Trouble::of(*code), source) {

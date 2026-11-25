@@ -133,7 +133,23 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
 /// page's as `s` says what it is to do.
 pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
     use texts::confirm;
-    const INSTALL: Text = ["滑动以安装", "滑動以安裝", "Slide to install"];
+    const INSTALL: Text = [
+    "滑动以安装",
+    "滑動以安裝",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    "Slide to install",
+    ];
     let (label, danger) = match which {
         // 锁屏自己画它，这张只给按住电源键时的滑块用。
         Confirm::Unlock => (["滑动解锁", "滑動解鎖", "Slide to unlock"], false),
@@ -169,7 +185,23 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
 
 /// The home page's large title.
 pub const HOME_TITLE: &str = "Skyward";
-pub const SEARCH_HINT: Text = ["搜索功能与分区", "搜尋功能與分割區", "Search features and partitions"];
+pub const SEARCH_HINT: Text = [
+    "搜索功能与分区",
+    "搜尋功能與分割區",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    "Search features and partitions",
+    ];
 
 /// Where the phone can restart to, and what is said under the name of one
 /// that wants it.
@@ -184,55 +216,711 @@ const REBOOT_TARGETS: [(Text, Option<Text>); 6] = [
 
 /// What pages are called both on the rows that open them and in their own
 /// titles.
-const WLAN: Text = ["无线网络", "無線網路", "WLAN"];
+const WLAN: Text = [
+    "无线网络",
+    "無線網路",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    "WLAN",
+    ];
 /// Whether the WLAN opens as the recovery starts.
-const WLAN_AUTO: Text = ["WiFi 自动连接", "WiFi 自動連線", "WLAN on at start"];
+const WLAN_AUTO: Text = [
+    "WiFi 自动连接",
+    "WiFi 自動連線",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    "WLAN on at start",
+    ];
 /// Whether the password of the network joined last is kept with it.
-const WLAN_KEEP: Text = ["记住 WiFi 密码", "記住 WiFi 密碼", "Keep the password"];
-const DECRYPT: Text = ["解密", "解密", "Decrypt"];
-const ADVANCED: Text = ["高级工具", "進階工具", "Advanced"];
-const SETTINGS: Text = ["选项设置", "選項設定", "Options"];
-const REBOOT: Text = ["重启系统", "重新啟動", "Reboot"];
-const LOGS: Text = ["导出日志", "匯出記錄", "Export logs"];
-const UPDATE: Text = ["系统更新", "系統更新", "System update"];
+const WLAN_KEEP: Text = [
+    "记住 WiFi 密码",
+    "記住 WiFi 密碼",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    "Keep the password",
+    ];
+const DECRYPT: Text = [
+    "解密",
+    "解密",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    "Decrypt",
+    ];
+const ADVANCED: Text = [
+    "高级工具",
+    "進階工具",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    "Advanced",
+    ];
+const SETTINGS: Text = [
+    "选项设置",
+    "選項設定",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    "Options",
+    ];
+const REBOOT: Text = [
+    "重启系统",
+    "重新啟動",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    "Reboot",
+    ];
+const LOGS: Text = [
+    "导出日志",
+    "匯出記錄",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    "Export logs",
+    ];
+const UPDATE: Text = [
+    "系统更新",
+    "系統更新",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    "System update",
+    ];
 
-const MODEL: Text = ["设备型号", "裝置型號", "Model"];
-const DATA_PART_NAME: Text = ["data 分区", "data 分割區", "data partition"];
-const UNREADABLE: Text = ["无法读取", "無法讀取", "Unreadable"];
-const REFLASHING: Text = ["正在重新刷入 Skyward", "正在重新刷入 Skyward", "Flashing Skyward again"];
-const READING_FILE: Text = ["正在读取文件", "正在讀取檔案", "Reading the file"];
-const RUN_ON_COMPUTER: Text = ["在电脑上运行", "在電腦上執行", "Run on the computer"];
-const GETTING_READY: Text = ["正在准备", "正在準備", "Getting ready"];
-const WIPING: Text = ["正在清除", "正在清除", "Wiping"];
-const KEEP_POWER: Text = ["清除完成前，请不要关机。", "清除完成前，請不要關機。", "Don't power off until it's wiped."];
-const VERIFIED: Text = ["已校验", "已驗證", "Verified"];
-const VERIFYING: Text = ["正在校验", "正在驗證", "Verifying"];
-const WAITING_TURN: Text = ["等待中", "等待中", "Waiting"];
-const RESTORE_FAILED: Text = ["恢复失败", "還原失敗", "Restore failed"];
-const ACTIONS: Text = ["操作", "操作", "Actions"];
-const CHECKING: Text = ["正在检查更新", "正在檢查更新", "Checking for updates"];
-const DOWNLOADING: Text = ["正在下载", "正在下載", "Downloading"];
-const CHECKING_PART: Text = ["正在校验已下载的部分", "正在驗證已下載的部分", "Verifying what was downloaded"];
-const NOTES: Text = ["注意事项", "注意事項", "Notes"];
-const CANCEL: Text = ["取消", "取消", "Cancel"];
-const RENAME: Text = ["重命名", "重新命名", "Rename"];
-const LICENSE_TERMS: Text = ["许可证", "授權條款", "License"];
-const POWERS_OFF_WHEN_DONE: Text = ["完成后将自动关机。", "完成後將自動關機。", "Powers off on its own once done."];
-const REBOOTS_WHEN_DONE: Text = ["完成后将自动重启。", "完成後將自動重新啟動。", "Reboots on its own once done."];
-const SKYWARD_UPDATE: Text = ["版本更新", "版本更新", "Version update"];
+const MODEL: Text = [
+    "设备型号",
+    "裝置型號",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    "Model",
+    ];
+const DATA_PART_NAME: Text = [
+    "data 分区",
+    "data 分割區",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    "data partition",
+    ];
+const UNREADABLE: Text = [
+    "无法读取",
+    "無法讀取",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    "Unreadable",
+    ];
+const REFLASHING: Text = [
+    "正在重新刷入 Skyward",
+    "正在重新刷入 Skyward",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    "Flashing Skyward again",
+    ];
+const READING_FILE: Text = [
+    "正在读取文件",
+    "正在讀取檔案",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    "Reading the file",
+    ];
+const RUN_ON_COMPUTER: Text = [
+    "在电脑上运行",
+    "在電腦上執行",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    "Run on the computer",
+    ];
+const GETTING_READY: Text = [
+    "正在准备",
+    "正在準備",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    "Getting ready",
+    ];
+const WIPING: Text = [
+    "正在清除",
+    "正在清除",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    "Wiping",
+    ];
+const KEEP_POWER: Text = [
+    "清除完成前，请不要关机。",
+    "清除完成前，請不要關機。",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    "Don't power off until it's wiped.",
+    ];
+const VERIFIED: Text = [
+    "已校验",
+    "已驗證",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    "Verified",
+    ];
+const VERIFYING: Text = [
+    "正在校验",
+    "正在驗證",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    "Verifying",
+    ];
+const WAITING_TURN: Text = [
+    "等待中",
+    "等待中",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    "Waiting",
+    ];
+const RESTORE_FAILED: Text = [
+    "恢复失败",
+    "還原失敗",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    "Restore failed",
+    ];
+const ACTIONS: Text = [
+    "操作",
+    "操作",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    "Actions",
+    ];
+const CHECKING: Text = [
+    "正在检查更新",
+    "正在檢查更新",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    "Checking for updates",
+    ];
+const DOWNLOADING: Text = [
+    "正在下载",
+    "正在下載",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    "Downloading",
+    ];
+const CHECKING_PART: Text = [
+    "正在校验已下载的部分",
+    "正在驗證已下載的部分",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    "Verifying what was downloaded",
+    ];
+const NOTES: Text = [
+    "注意事项",
+    "注意事項",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    "Notes",
+    ];
+const CANCEL: Text = [
+    "取消",
+    "取消",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    "Cancel",
+    ];
+const RENAME: Text = [
+    "重命名",
+    "重新命名",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    "Rename",
+    ];
+const LICENSE_TERMS: Text = [
+    "许可证",
+    "授權條款",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    "License",
+    ];
+const POWERS_OFF_WHEN_DONE: Text = [
+    "完成后将自动关机。",
+    "完成後將自動關機。",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    "Powers off on its own once done.",
+    ];
+const REBOOTS_WHEN_DONE: Text = [
+    "完成后将自动重启。",
+    "完成後將自動重新啟動。",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    "Reboots on its own once done.",
+    ];
+const SKYWARD_UPDATE: Text = [
+    "版本更新",
+    "版本更新",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    "Version update",
+    ];
 /// Reporting a bug to the author, with the logs that show it.
-const FEEDBACK: Text = ["问题反馈", "問題回報", "Report a bug"];
+const FEEDBACK: Text = [
+    "问题反馈",
+    "問題回報",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    "Report a bug",
+    ];
 
 /// How many lines of a bug report the field shows at once: more than a
 /// sentence, and few enough that the page under it is still read.
 const WORDS_LINES: usize = 5;
-const FILES: Text = ["文件管理", "檔案管理", "File manager"];
-const TERMINAL: Text = ["终端", "終端機", "Terminal"];
-const LANGUAGE: Text = ["语言", "語言", "Language"];
-const TIME_ZONE: Text = ["时区", "時區", "Time zone"];
-const LICENSE: Text = ["开源许可", "開放原始碼授權", "Open source licenses"];
-const FONTS: Text = ["界面字体", "介面字型", "UI fonts"];
-const DUAL_BOOT: Text = ["第二系统", "第二系統", "Dual boot"];
+const FILES: Text = [
+    "文件管理",
+    "檔案管理",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    "File manager",
+    ];
+const TERMINAL: Text = [
+    "终端",
+    "終端機",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    "Terminal",
+    ];
+const LANGUAGE: Text = [
+    "语言",
+    "語言",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    "Language",
+    ];
+const TIME_ZONE: Text = [
+    "时区",
+    "時區",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    "Time zone",
+    ];
+const LICENSE: Text = [
+    "开源许可",
+    "開放原始碼授權",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    "Open source licenses",
+    ];
+const FONTS: Text = [
+    "界面字体",
+    "介面字型",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    "UI fonts",
+    ];
+const DUAL_BOOT: Text = [
+    "第二系统",
+    "第二系統",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    "Dual boot",
+    ];
 
 /// A canvas for a page `h` tall in the colour `bg`, holding the rows `cx`
 /// asks to be drawn.
@@ -2812,8 +3500,40 @@ pub fn serve(cx: &Ctx) -> Frame {
     Frame::new(t, c, out, l.pick(SERVE), m.content_top)
 }
 
-const SERVE: Text = ["无线传输", "無線傳輸", "Wireless transfer"];
-const FETCH: Text = ["网络下载", "網路下載", "Download"];
+const SERVE: Text = [
+    "无线传输",
+    "無線傳輸",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    "Wireless transfer",
+    ];
+const FETCH: Text = [
+    "网络下载",
+    "網路下載",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    "Download",
+    ];
 /// A length of bytes in the units the pages speak.
 fn mb(bytes: u64) -> String {
     match bytes {
@@ -3086,17 +3806,193 @@ pub fn module_info(cx: &Ctx) -> Frame {
     Frame::new(t, fit(c, t, bottom), out, l.pick(MODULES), top)
 }
 
-const MODULES: Text = ["模块管理", "模組管理", "Modules"];
-const DATA_APPS: Text = ["应用管理", "應用程式管理", "Apps"];
-const SYSTEM_APPS: Text = ["系统应用", "系統應用程式", "System apps"];
-const RELABEL: Text = ["修复 SELinux 上下文", "修復 SELinux 上下文", "Fix SELinux contexts"];
-const FILESYSTEMS: Text = ["文件系统", "檔案系統", "Filesystems"];
-const PARTITIONS: Text = ["分区管理", "分割區管理", "Partitions"];
-const IMAGE_BACKUP: Text = ["镜像备份", "映像檔備份", "Image backup"];
-const POWER_OFF: Text = ["关机", "關機", "Power off"];
-const TASKS: Text = ["任务", "任務", "Tasks"];
-const CHARGE: Text = ["充电设置", "充電設定", "Charging"];
-const AVB: Text = ["AVB 校验", "AVB 驗證", "AVB verification"];
+const MODULES: Text = [
+    "模块管理",
+    "模組管理",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    "Modules",
+    ];
+const DATA_APPS: Text = [
+    "应用管理",
+    "應用程式管理",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    "Apps",
+    ];
+const SYSTEM_APPS: Text = [
+    "系统应用",
+    "系統應用程式",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    "System apps",
+    ];
+const RELABEL: Text = [
+    "修复 SELinux 上下文",
+    "修復 SELinux 上下文",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    "Fix SELinux contexts",
+    ];
+const FILESYSTEMS: Text = [
+    "文件系统",
+    "檔案系統",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    "Filesystems",
+    ];
+const PARTITIONS: Text = [
+    "分区管理",
+    "分割區管理",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    "Partitions",
+    ];
+const IMAGE_BACKUP: Text = [
+    "镜像备份",
+    "映像檔備份",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    "Image backup",
+    ];
+const POWER_OFF: Text = [
+    "关机",
+    "關機",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    "Power off",
+    ];
+const TASKS: Text = [
+    "任务",
+    "任務",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    "Tasks",
+    ];
+const CHARGE: Text = [
+    "充电设置",
+    "充電設定",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    "Charging",
+    ];
+const AVB: Text = [
+    "AVB 校验",
+    "AVB 驗證",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    "AVB verification",
+    ];
 /// A pill's tap target: the pill and a little about it, so that a finger that
 /// lands beside it still finds it.
 fn pill_hit(t: &Theme, x: f32, y: f32, w: f32, h: f32, action: Action) -> Hit {

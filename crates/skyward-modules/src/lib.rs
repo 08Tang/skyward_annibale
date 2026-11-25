@@ -43,6 +43,68 @@ pub fn load(dirs: &[PathBuf], names: &[String]) -> Result<Vec<PathBuf>> {
     Ok(loaded)
 }
 
+/// Unload `names` (module names without `.ko`), dependencies last: what was
+/// loaded first goes last, so nothing is asked to leave while something it
+/// brought with it still needs it.
+///
+/// This is the way out of the recovery, not a way to make room: the installed
+/// system's own driver cold-starts the chip, and a driver left in the kernel
+/// with the radio on makes that start fail. Returns the modules that left,
+/// as the kernel names them. A module that was never loaded, and one
+/// something else still holds, is not an error: the first has nothing to do,
+/// and the second is reported by what is left rather than by a failure.
+pub fn unload(dirs: &[PathBuf], names: &[String]) -> Result<Vec<String>> {
+    let mut gone = Vec::new();
+    // Every module the directories know of, so that a dependency loaded along
+    // with the one named is taken out too: the reverse of the order `load`
+    // put them in.
+    let mut order: Vec<String> = Vec::new();
+    for dir in dirs {
+        let Ok(graph) = parse_dep(dir) else { continue };
+        for name in names {
+            let file = format!("{name}.ko");
+            if !dir.join(&file).is_file() {
+                continue;
+            }
+            for m in graph.load_order(std::slice::from_ref(&file)) {
+                if !order.contains(&m) {
+                    order.push(m);
+                }
+            }
+        }
+    }
+    for file in order.iter().rev() {
+        let module = file.trim_end_matches(".ko").replace('-', "_");
+        match remove(&module) {
+            Ok(()) => gone.push(module),
+            // Still held by something that has not gone yet, or never there:
+            // neither is this one's to fix.
+            Err(e) if matches!(e.raw_os_error(), Some(libc::ENOENT) | Some(libc::EBUSY) | Some(libc::EINVAL)) => {}
+            Err(e) => return Err(e).with_context(|| format!("remove {module}")),
+        }
+    }
+    Ok(gone)
+}
+
+#[cfg(target_os = "android")]
+fn remove(module: &str) -> std::io::Result<()> {
+    let name = std::ffi::CString::new(module).map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+    // `delete_module` with O_NONBLOCK asks the kernel not to wait for the
+    // module to stop being used; O_TRUNC is what it wants for a module it may
+    // remove even where the kernel would rather keep it.
+    let flags = libc::O_NONBLOCK | libc::O_TRUNC;
+    let rc = unsafe { libc::syscall(libc::SYS_delete_module, name.as_ptr(), flags) };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "android"))]
+fn remove(_module: &str) -> std::io::Result<()> {
+    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "modules are unloaded only on the phone"))
+}
+
 /// A `modules.dep` graph: each module file mapped to the module files it
 /// depends on. Keys and values are reduced to bare file names so the graph is
 /// independent of where the modules were sourced from (GKI devices keep them

@@ -17,7 +17,7 @@ impl App {
                 "錄影寫在內部儲存裡：先完成「解密」。",
                 "Recordings go to internal storage: unlock it first."
             );
-            self.say(text, now);
+            self.say(&text, now);
             return Vec::new();
         }
         vec![Effect::RecordStart]
@@ -34,7 +34,7 @@ impl App {
                 "正在錄影：停下這一段再改。",
                 "Recording: stop this take before changing it."
             );
-            self.say(text, now);
+            self.say(&text, now);
             return Vec::new();
         }
         let r = &mut self.state.record;
