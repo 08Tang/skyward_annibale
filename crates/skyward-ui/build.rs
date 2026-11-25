@@ -19,11 +19,25 @@ const fn language(variant: &'static str, tag: &'static str, doc: &'static str) -
     Language { variant, tag, doc }
 }
 
-/// The languages, in the order the language page lists them.
+/// The languages, in the order the language page lists them: the two Chinese
+/// ones first, since this phone is sold where they are read, then English,
+/// then the rest by their tags.
 const LANGUAGES: &[Language] = &[
     language("Hans", "zh-Hans", "Chinese in simplified characters, as mainland China writes it."),
     language("Hant", "zh-Hant", "Chinese in traditional characters, as Taiwan writes it."),
     language("En", "en", "English."),
+    language("De", "de", "German."),
+    language("Es", "es", "Spanish."),
+    language("Fr", "fr", "French."),
+    language("Id", "id", "Indonesian."),
+    language("It", "it", "Italian."),
+    language("Ja", "ja", "Japanese."),
+    language("Pl", "pl", "Polish."),
+    language("PtBr", "pt-BR", "Portuguese, as Brazil writes it."),
+    language("Ru", "ru", "Russian."),
+    language("Tr", "tr", "Turkish."),
+    language("Uk", "uk", "Ukrainian."),
+    language("Vi", "vi", "Vietnamese."),
 ];
 
 /// The language every other is held to: each has its texts, with the same

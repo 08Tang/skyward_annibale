@@ -11,11 +11,12 @@ impl App {
             return vec![Effect::RecordStop];
         }
         if !self.state.place_open(Place::Storage) {
-            let text = match self.state.lang {
-                Lang::Hans => "录屏写在内部存储里：先完成「解密」。",
-                Lang::Hant => "錄影寫在內部儲存裡：先完成「解密」。",
-                Lang::En => "Recordings go to internal storage: unlock it first.",
-            };
+            let text = tr!(
+                self.state.lang,
+                "录屏写在内部存储里：先完成「解密」。",
+                "錄影寫在內部儲存裡：先完成「解密」。",
+                "Recordings go to internal storage: unlock it first."
+            );
             self.say(text, now);
             return Vec::new();
         }
@@ -27,11 +28,12 @@ impl App {
     /// file's header again.
     fn record_cycle(&mut self, which: RecordSetting, now: u64) -> Vec<Effect> {
         if self.state.record.on {
-            let text = match self.state.lang {
-                Lang::Hans => "正在录制：停下这一段再改。",
-                Lang::Hant => "正在錄影：停下這一段再改。",
-                Lang::En => "Recording: stop this take before changing it.",
-            };
+            let text = tr!(
+                self.state.lang,
+                "正在录制：停下这一段再改。",
+                "正在錄影：停下這一段再改。",
+                "Recording: stop this take before changing it."
+            );
             self.say(text, now);
             return Vec::new();
         }
@@ -74,11 +76,12 @@ impl App {
 
     /// A take could not begin.
     pub fn record_failed(&mut self, why: &str, now: u64) {
-        let text = match self.state.lang {
-            Lang::Hans => format!("没能开始录屏：{why}"),
-            Lang::Hant => format!("沒能開始錄影：{why}"),
-            Lang::En => format!("Recording did not start: {why}"),
-        };
+        let text = tr!(
+            self.state.lang,
+            "没能开始录屏：{why}",
+            "沒能開始錄影：{why}",
+            "Recording did not start: {why}"
+        );
         self.say(&text, now);
     }
 
@@ -89,11 +92,12 @@ impl App {
         self.state.record.paused = false;
         self.state.record.paused_at = 0;
         self.state.record.held = 0;
-        let text = match self.state.lang {
-            Lang::Hans => format!("已保存：{file}（{secs} 秒）"),
-            Lang::Hant => format!("已儲存：{file}（{secs} 秒）"),
-            Lang::En => format!("Saved: {file} ({secs} s)"),
-        };
+        let text = tr!(
+            self.state.lang,
+            "已保存：{file}（{secs} 秒）",
+            "已儲存：{file}（{secs} 秒）",
+            "Saved: {file} ({secs} s)"
+        );
         self.say(&text, now);
         self.dirty = true;
         self.refresh();

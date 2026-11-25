@@ -29,8 +29,12 @@ thread_local! {
 impl Lang {
     /// Of the same thing written in each language, in the order of
     /// [`Lang::ALL`], the one in this language.
-    pub fn pick<T: Copy>(self, each: [T; Lang::COUNT]) -> T {
-        each[self as usize]
+    ///
+    /// A page may write fewer than all of them -- the three this project's own
+    /// pages were written in, say -- and a language past the last reads the
+    /// last, which is why English is kept last of any short list.
+    pub fn pick<T: Copy, const N: usize>(self, each: [T; N]) -> T {
+        each[(self as usize).min(N - 1)]
     }
 
     /// Of something written in the two kinds of Chinese characters and in
@@ -96,15 +100,17 @@ impl Lang {
 /// The pages write their texts through this rather than through `texts`,
 /// which upstream took them from: this project's own pages name their values
 /// where they are written, and a text that names none is a [`Text`] the page
-/// picks from. Only the three languages this project speaks have one, which
-/// is why it is kept beside `pick` rather than in the language files.
+/// picks from. Only the two Chinese ones and English have one written here,
+/// which is why it is kept beside `pick` rather than in the language files:
+/// every other language reads the English, as [`Lang::pick`] does with a list
+/// short of it.
 #[macro_export]
 macro_rules! tr {
     ($l:expr, $hans:literal, $hant:literal, $en:literal $(,)?) => {
         match $l {
             $crate::lang::Lang::Hans => format!($hans),
             $crate::lang::Lang::Hant => format!($hant),
-            $crate::lang::Lang::En => format!($en),
+            _ => format!($en),
         }
     };
 }
@@ -207,9 +213,15 @@ mod tests {
         assert_eq!(of("zh-Hans-HK"), Lang::Hans, "a script named wins over the region");
         assert_eq!(of("en-US"), Lang::En);
         assert_eq!(of("en-GB"), Lang::En);
+        assert_eq!(of("de-DE"), Lang::De);
+        assert_eq!(of("pt-PT"), Lang::PtBr, "Brazil's Portuguese is read in Portugal too");
+        assert_eq!(of("pt-BR"), Lang::PtBr);
+        assert_eq!(of("tr-TR"), Lang::Tr);
+        assert_eq!(of("ja-JP"), Lang::Ja);
+        assert_eq!(of("ru-RU"), Lang::Ru);
+        assert_eq!(of("in-ID"), Lang::Id, "as older systems wrote Indonesian");
         assert_eq!(of("ko-KR"), Lang::En, "a language the pages do not speak");
         assert_eq!(of("ar-EG"), Lang::En);
-        assert_eq!(of("tr-TR"), Lang::En, "and so is one this project used to speak");
         assert!(Lang::for_locale("not a locale").is_err());
     }
 
@@ -224,7 +236,15 @@ mod tests {
     fn each_language_names_itself_and_no_other() {
         let names: BTreeSet<&str> = Lang::ALL.map(Lang::name).into_iter().collect();
         assert_eq!(names.len(), Lang::COUNT);
-        assert_eq!(Lang::ALL.map(Lang::name), ["简体中文", "繁體中文", "English"]);
+        assert_eq!(Lang::COUNT, 15);
+        assert_eq!(
+            Lang::ALL.map(Lang::name),
+            [
+                "简体中文", "繁體中文", "English", "Deutsch", "Español", "Français", "Bahasa Indonesia",
+                "Italiano", "日本語", "Polski", "Português (Brasil)", "Русский", "Türkçe", "Українська",
+                "Tiếng Việt",
+            ]
+        );
     }
 
     #[test]
