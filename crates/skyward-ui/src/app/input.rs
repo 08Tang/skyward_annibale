@@ -862,6 +862,14 @@ impl App {
                                     self.close_shade();
                                     self.shot_when = Some(now + 130);
                                 }
+                                // A take starts and stops from the tile, as
+                                // the screenshot is taken from its own: the
+                                // recording has no page to open, and the tile
+                                // is the whole of its control.
+                                Tile::Record => {
+                                    self.close_shade();
+                                    fx.extend(self.act(Action::Record, now));
+                                }
                                 // The rest open their own page; the sheet goes
                                 // away first, so the page comes up over the one
                                 // underneath rather than over the panel.

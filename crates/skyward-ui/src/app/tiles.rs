@@ -399,6 +399,28 @@ mod tests {
         assert!(app.shade_drag.is_none(), "and picks nothing up");
     }
 
+    /// The recording tile has no page to open, so a touch on it must start a
+    /// take itself: a tile that answered nothing at all would be the whole of
+    /// the recording's control and do nothing.
+    #[test]
+    fn the_recording_tile_starts_a_take() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Home, W, H, PPD);
+        app.state.tiles = vec![Tile::Record];
+        // A take is written to internal storage, so it is only started once
+        // that is open; the page says why when it is not.
+        app.state.data = Data::Open;
+        app.shade = 1.0;
+        app.compose(&mut Canvas::new(W, H), &f, &i, "12:00", 0);
+        let (x, y) = app.shade_hits.iter().find(|(_, h)| *h == ShadeHit::Tile(Tile::Record)).expect("the tile answers a touch").0.centre();
+        app.touch(Touch::Down(x, y), &f, 1000);
+        let fx = app.touch(Touch::Up, &f, 1000);
+        assert!(
+            fx.iter().any(|e| matches!(e, Effect::RecordStart)),
+            "the tile asks for a take: {fx:?}"
+        );
+    }
+
     /// In the editor a tile held down and dragged lands where the finger lets
     /// it go.
     #[test]

@@ -3066,11 +3066,19 @@ pub fn search(cx: &Ctx) -> Frame {
     }
     let find = l.pick(["搜索", "搜尋", "Search"]);
     // The keyboard is held at the foot of the screen rather than drawn on the
-    // page: a page that scrolls would take the keys with it.
+    // page: a page that scrolls would take the keys with it. The spelling bar
+    // is held with it, in the same strip, or a page that drew its keys in a
+    // dock would have no way to type Chinese at all.
     let keys = widgets::keyboard_height(t);
-    let mut key_canvas = Canvas::new(m.w, keys.ceil() as u32);
-    let held = widgets::keyboard(&mut key_canvas, t, f, s.lang, 0.0, s.layer, s.key_held(), find, s.ime.enabled);
-    let dock = Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect() };
+    let bar = crate::ime::height(t);
+    let mut key_canvas = Canvas::new(m.w, (bar + keys).ceil() as u32);
+    let mut held = crate::ime::bar(&mut key_canvas, t, f, &s.ime, 0.0);
+    held.extend(
+        widgets::keyboard(&mut key_canvas, t, f, s.lang, bar, s.layer, s.key_held(), find, s.ime.enabled)
+            .into_iter()
+            .map(|(rect, cap)| (rect, Action::Type(cap))),
+    );
+    let dock = Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, action)| Hit { rect, action }).collect() };
     // The field's clear button is on the strip too, in the strip's own
     // coordinates.
     let mut pinned = pinned;

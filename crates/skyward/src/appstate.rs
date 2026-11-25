@@ -126,7 +126,20 @@ mkdir "$D" 2>/dev/null || exit 0
       if [ "$op" = "disable" ]; then
         out=$("$PM" disable-user --user 0 "$pkg" < /dev/null 2>&1) && { ok=0; break; }
       elif [ "$op" = "enable" ]; then
+        # `disable-user` sets the package's own user state, which `pm enable`
+        # does not always clear: on MIUI it answers 0 and leaves the package
+        # disabled all the same. Clearing the user state is what turns it back
+        # on, and `install-existing` is the fallback for a package whose user
+        # state is gone rather than set.
         out=$("$PM" enable --user 0 "$pkg" < /dev/null 2>&1) && { ok=0; break; }
+        if "$PM" install-existing --user 0 "$pkg" < /dev/null >/dev/null 2>&1; then
+          # `install-existing` answers 0 for a package that is installed and
+          # still disabled, so the state is read back rather than trusted.
+          if ! "$PM" list packages -d < /dev/null 2>/dev/null | grep -qx "package:$pkg"; then
+            ok=0
+            break
+          fi
+        fi
       else
         out="unknown op $op"
         ok=2
@@ -271,6 +284,10 @@ mod tests {
         assert!(SCRIPT.contains("sys.boot_completed"));
         assert!(SCRIPT.contains("pm disable-user --user 0"));
         assert!(SCRIPT.contains("pm enable --user 0"));
+        // `pm enable` answers 0 on MIUI and leaves the package disabled all the
+        // same, so turning one back on is read back rather than trusted.
+        assert!(SCRIPT.contains("install-existing"));
+        assert!(SCRIPT.contains("list packages -d"));
         // 整段在后台跑（`( ... ) &`），否则 root 管理器的 service.d 会被这段
         // sleep 拖住，开机变慢；队列清空仍然是最后一步。
         assert!(SCRIPT.trim_end().ends_with(") &"));
