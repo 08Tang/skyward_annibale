@@ -564,6 +564,12 @@ pub enum Action {
     BackupVbmeta,
     /// Restore the saved vbmeta image.
     RestoreVbmeta,
+    /// Turn Chinese input on or off on the spelling bar.
+    ImeToggle,
+    /// Write the candidate at this place in the bar into the field.
+    ImePick(usize),
+    /// Show the bar's next or previous page of candidates.
+    ImePage(bool),
     /// A control whose work is not wired up yet; touching it says so.
     Unavailable(&'static str),
 }

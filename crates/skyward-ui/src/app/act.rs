@@ -1036,7 +1036,7 @@ impl App {
     }
 
     /// The text the keyboard types into on this page.
-    fn typing(&mut self) -> &mut String {
+    pub(super) fn typing(&mut self) -> &mut String {
         match self.screen() {
             Screen::Search => &mut self.state.search,
             Screen::Decrypt => &mut self.state.code,

@@ -3570,8 +3570,8 @@ mod tests {
         let enter = |keys: &[(Rect, Cap)]| keys.iter().find(|(_, cap)| *cap == Cap::Enter).unwrap().0;
         let space = |keys: &[(Rect, Cap)]| keys.iter().find(|(_, cap)| *cap == Cap::Space).unwrap().0;
         let top = 2608.0 - keyboard_height(&t);
-        let plain = keyboard(&mut c, &t, &f, Lang::En, top, Layer::Letters, None, "Join");
-        let wide = keyboard(&mut c, &t, &f, Lang::En, top, Layer::Letters, None, "Decryption");
+        let plain = keyboard(&mut c, &t, &f, Lang::En, top, Layer::Letters, None, "Join", false);
+        let wide = keyboard(&mut c, &t, &f, Lang::En, top, Layer::Letters, None, "Decryption", false);
         assert!(enter(&wide).w > enter(&plain).w && space(&wide).w < space(&plain).w);
         assert_eq!(enter(&wide).x + enter(&wide).w, enter(&plain).x + enter(&plain).w, "from the same right end");
         assert!(space(&wide).w > enter(&wide).w, "and the space bar stays the widest key");
@@ -3599,7 +3599,7 @@ mod tests {
             let enters =
                 [texts::page::DECRYPT, texts::wlan::CONNECT, texts::common::DONE, texts::search::SEARCH, texts::keyboard::ENTER, texts::keyboard::NEW_LINE];
             for enter in enters {
-                keyboard(&mut c, &t, &f, l, 1000.0, Layer::Letters, None, l.pick(enter));
+                keyboard(&mut c, &t, &f, l, 1000.0, Layer::Letters, None, l.pick(enter), false);
             }
             keypad(&mut c, &t, &f, l, 1000.0, None);
             let slides: Vec<&str> = file["confirm"].as_table().unwrap().values().map(|text| text.as_str().unwrap()).collect();
