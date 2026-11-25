@@ -167,9 +167,9 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
         Confirm::FactoryReset => (&["滑动以恢复出厂设置", "滑動以恢復原廠設定", "Slide to factory reset"][..], true),
         Confirm::DeleteEntry | Confirm::DeleteBackup => (&["滑动以删除", "滑動以刪除", "Slide to delete"][..], true),
         Confirm::KeepLock => (&["滑动以开启", "滑動以開啟", "Slide to turn on"][..], true),
-        Confirm::Install => (INSTALL, false),
+        Confirm::Install => (&INSTALL[..], false),
         Confirm::InstallWipe => (&["滑动以安装并清除", "滑動以安裝並清除", "Slide to install and wipe"][..], true),
-        Confirm::RunScript => (INSTALL, true),
+        Confirm::RunScript => (&INSTALL[..], true),
         Confirm::Merge => (&["滑动以合并", "滑動以合併", "Slide to merge"][..], true),
         Confirm::Relabel => (&["滑动以修复", "滑動以修復", "Slide to fix"][..], true),
         Confirm::SwitchSystem => (&["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"][..], false),
@@ -1947,6 +1947,18 @@ pub fn charge(cx: &Ctx) -> Frame {
                     "再启动小米的认证进程，充电器通过校验后可升压到 PPS 档，40W+。",
                     "再啟動小米的認證行程，充電器通過校驗後可升壓到 PPS 檔，40W+。",
                     "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
+                    "Xiaomi's secret keeper runs as well, so the charger may be verified and the protocol go on to the adjustable kind: 40W+.",
                 ],
             ),
         ];
@@ -2132,9 +2144,9 @@ pub fn install(cx: &Ctx) -> Frame {
     let (storage, from_storage) = if data.storage_open() {
         (&["选择内部存储中的更新包或镜像", "選擇內部儲存空間中的更新檔或映像檔", "Choose a package or image in internal storage"][..], Action::Open(Screen::Choose(Place::Storage)))
     } else if *data == Data::Erased {
-        (texts::data::ERASED, Action::Open(Screen::Decrypt))
+        (&texts::data::ERASED[..], Action::Open(Screen::Decrypt))
     } else {
-        (texts::decrypt::NEEDED, Action::Open(Screen::Decrypt))
+        (&texts::decrypt::NEEDED[..], Action::Open(Screen::Decrypt))
     };
     // The drive's page waits for one to be plugged in, and says why one
     // that is cannot be read.
@@ -2819,9 +2831,9 @@ fn factory_reset(s: &State) -> &'static str {
 fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
     let l = s.lang;
     let (title, what): (Text, String) = match w {
-        Wipe::All => (&["全部数据", "全部資料", "All data"][..], capitalized(l, factory_reset(s))),
+        Wipe::All => (["全部数据", "全部資料", "All data", "All data", "All data", "All data", "All data", "All data", "All data", "All data", "All data", "All data", "All data", "All data", "All data"], capitalized(l, factory_reset(s))),
         Wipe::AppData => (
-            &["应用数据", "應用程式資料", "App data"][..],
+            ["应用数据", "應用程式資料", "App data", "App data", "App data", "App data", "App data", "App data", "App data", "App data", "App data", "App data", "App data", "App data", "App data"],
             l.pick([
                 "/data/data、/data/user、/data/user_de，以及内部存储中的 Android/data、Android/media，应用将恢复到初始状态",
                 "/data/data、/data/user、/data/user_de，以及內部儲存空間中的 Android/data、Android/media，應用程式將恢復到初始狀態",
@@ -2830,11 +2842,11 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
             .into(),
         ),
         Wipe::Media => (
-            &["内部存储", "內部儲存空間", "Internal storage"][..],
+            ["内部存储", "內部儲存空間", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage", "Internal storage"],
             l.pick(["/data/media，即 /sdcard 中的照片、视频和文件", "/data/media，即 /sdcard 中的相片、影片和檔案", "/data/media: the photos, videos and files in /sdcard"]).into(),
         ),
         Wipe::AppCaches => (
-            &["应用缓存", "應用程式快取", "App caches"][..],
+            ["应用缓存", "應用程式快取", "App caches", "App caches", "App caches", "App caches", "App caches", "App caches", "App caches", "App caches", "App caches", "App caches", "App caches", "App caches", "App caches"],
             l.pick([
                 "各应用数据中的 cache、code_cache，以及 Android/data 中的 cache，应用将按需重新生成",
                 "各應用程式資料中的 cache、code_cache，以及 Android/data 中的 cache，應用程式將視需要重新產生",
@@ -2843,7 +2855,7 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
             .into(),
         ),
         Wipe::SystemCaches => (
-            &["系统缓存", "系統快取", "System caches"][..],
+            ["系统缓存", "系統快取", "System caches", "System caches", "System caches", "System caches", "System caches", "System caches", "System caches", "System caches", "System caches", "System caches", "System caches", "System caches", "System caches"],
             l.pick([
                 "/data/system/package_cache、/data/resource-cache、/data/cache，下次开机时重新生成",
                 "/data/system/package_cache、/data/resource-cache、/data/cache，下次開機時重新產生",
@@ -2852,7 +2864,7 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
             .into(),
         ),
         Wipe::Art => (
-            &["ART 缓存", "ART 快取", "ART cache"][..],
+            ["ART 缓存", "ART 快取", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache", "ART cache"],
             l.pick([
                 "/data/dalvik-cache、/data/misc/apexdata/com.android.art/dalvik-cache、/data/ota，下次开机时重新编译，启动时间较长",
                 "/data/dalvik-cache、/data/misc/apexdata/com.android.art/dalvik-cache、/data/ota，下次開機時重新編譯，啟動時間較長",
@@ -2872,14 +2884,14 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
                 "/data/tombstones、/data/anr、/data/system/dropbox、/data/misc/logd 等系統記錄和當機記錄，各使用者的錯誤報告{own}",
                 "System logs and crash records, such as /data/tombstones, /data/anr, /data/system/dropbox and /data/misc/logd, each user's bug reports{own}"
             );
-            (&["日志", "記錄", "Logs"][..], what)
+            (["日志", "記錄", "Logs", "Logs", "Logs", "Logs", "Logs", "Logs", "Logs", "Logs", "Logs", "Logs", "Logs", "Logs", "Logs"], what)
         }
         Wipe::Updates => (
-            &["下载的更新包", "下載的更新檔", "Downloaded updates"][..],
+            ["下载的更新包", "下載的更新檔", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates", "Downloaded updates"],
             l.pick(["/data/ota_package 中的系统更新包", "/data/ota_package 中的系統更新檔", "System update packages in /data/ota_package"]).into(),
         ),
         Wipe::Cache => (
-            &["全部内容", "全部內容", "Everything"][..],
+            ["全部内容", "全部內容", "Everything", "Everything", "Everything", "Everything", "Everything", "Everything", "Everything", "Everything", "Everything", "Everything", "Everything", "Everything", "Everything"],
             l.pick(["格式化 cache 分区，保留 recovery 文件夹中的日志", "格式化 cache 分割區，保留 recovery 資料夾中的記錄", "Formats the cache partition, keeping the logs in its recovery folder"])
                 .into(),
         ),
