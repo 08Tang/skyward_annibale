@@ -3452,7 +3452,7 @@ impl Pages<'_> {
                 self.app_reader = Some(appread::Reader::start_system()?);
             }
             Effect::ReadAppStates => {
-                self.app.set_app_disabled(crate::appstate::states());
+                self.app.set_app_disabled(crate::appstate::states(), crate::appstate::queued());
             }
             // A change to a system app is queued rather than made: only the
             // system itself can change its package manager's state, so the

@@ -60,9 +60,17 @@ impl App {
     }
 
     /// Which system apps the system has disabled, read from what the script
-    /// wrote back after the last start. Redrawn, since the page shows it.
-    pub fn set_app_disabled(&mut self, states: std::collections::BTreeMap<String, bool>) {
+    /// wrote back after the last start, and which changes are still waiting in
+    /// the queue the script has not run. The two are kept apart: one is what
+    /// the app is, the other what it is headed for, and a queued change shows
+    /// as waiting rather than as made. Redrawn, since the page shows both.
+    pub fn set_app_disabled(&mut self, states: std::collections::BTreeMap<String, bool>, queued: std::collections::BTreeMap<String, bool>) {
         self.state.app_disabled = Some(states);
+        // A request the script has already carried out is no longer in the
+        // queue, and the state it wrote back says what happened; a request
+        // still in it is the one thing the page has to show as waiting, so the
+        // queue is what the waiting is kept in.
+        self.state.app_state_queued = queued;
         self.refresh();
     }
 
@@ -279,7 +287,7 @@ mod tests {
         // The states are read again -- the page asks every time it opens --
         // and the queue is what the script has not run yet, so it still says
         // the change is waiting.
-        app.set_app_disabled([("com.android.settings".to_string(), false)].into_iter().collect());
+        app.set_app_disabled([("com.android.settings".to_string(), false)].into_iter().collect(), [("com.android.settings".to_string(), true)].into_iter().collect());
         assert_eq!(
             tap(&mut app, &f, &i, Action::SysAppToggle(0)),
             vec![Effect::QueueAppState { package: "com.android.settings".into(), disable: false }],
