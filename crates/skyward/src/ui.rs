@@ -1709,7 +1709,7 @@ impl<'a> Pages<'a> {
                     self.app.system_stopped(why);
                 }
             }
-            Work::Menu | Work::Exit | Work::Fastboot | Work::PromptWipeData | Work::Unsupported(_) => {}
+            Work::Exit | Work::Fastboot | Work::PromptWipeData | Work::Unsupported(_) => {}
         }
         // A switch asked for finishes one cut off before itself; fastboot leaves
         // /metadata to fastbootd until the recovery's pages come up.
