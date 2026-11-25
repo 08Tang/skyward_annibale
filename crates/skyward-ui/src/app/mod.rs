@@ -308,6 +308,16 @@ pub enum Action {
     CycleSort,
     ToggleSortOrder,
     ToggleFoldersFirst,
+    /// Show or put away the panel that chooses what the list is sorted by and
+    /// which way: the panel is a page of its own, and this says whether to
+    /// show it or leave it.
+    SortPanel(bool),
+    /// Look through the folder the file manager shows for a name.
+    SearchFiles,
+    /// Sort the list by this key, leaving which way it is sorted alone.
+    SortTo(SortKey),
+    /// Sort the list downwards or upwards.
+    SortDesc(bool),
     /// Start the download the address typed is of, and stop the one under way.
     FetchStart,
     FetchStop,
@@ -1664,6 +1674,10 @@ pub struct App {
     /// The chip behind the round button at the right end of the bar, as
     /// for `<`.
     button_chip: Option<(bool, Canvas, i32, i32)>,
+    /// Where the chips beside the title were drawn, on screen, and what each
+    /// does: the page's own hits do not reach them, since they are not drawn
+    /// where the page puts them.
+    bar_chip_rects: Vec<(Rect, Action)>,
     /// The folder the terminal page's shell last started in, where Enter
     /// starts it again once it has ended.
     shell_folder: String,
@@ -1802,6 +1816,7 @@ impl App {
             search_words: None,
             chip: None,
             button_chip: None,
+            bar_chip_rects: Vec::new(),
             shell_folder: "/".into(),
             unsaved_warned: None,
             dither: None,

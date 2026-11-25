@@ -4568,8 +4568,6 @@ pub fn files_otg(cx: &Ctx) -> Frame {
         l.pick(["U 盘为空", "USB 隨身碟是空的", "The drive is empty"]),
         Action::OpenOtgEntry,
         top,
-        None,
-        None,
         Some((l.pick(["内部存储", "內部儲存空間", "Internal storage"]), Action::Open(Screen::Files))),
     );
     Frame { dock, ..frame }
@@ -4577,6 +4575,11 @@ pub fn files_otg(cx: &Ctx) -> Frame {
 
 pub fn files(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    // The sort panel is another screen of this page rather than a page of its
+    // own: going back closes it instead of leaving the file manager.
+    if s.sort_panel {
+        return sort_panel(cx);
+    }
     // An entry picked to copy or move goes to the folder shown, from the
     // bar held at the bottom.
     let picking = s.picking.then(|| {
@@ -4598,52 +4601,125 @@ pub fn files(cx: &Ctx) -> Frame {
     // with them, and the page's own button starts and stops the choosing.
     let choosing = s.choosing.then(|| {
         let all = l.pick(["全选", "全選", "All"]);
-        let none = l.pick(["全不选", "全不選", "None"]);
         let copy = l.pick(["复制", "複製", "Copy"]);
         let cut = l.pick(["移动", "移動", "Move"]);
         let delete = l.pick(["删除", "刪除", "Delete"]);
         let (canvas, rects) = widgets::dock_bar_danger(t, f, files::page(t), &[all, copy, cut, delete], Some(3));
-        let _ = none;
         Dock { canvas, hits: hits(&rects, &[Action::ChooseAll, Action::PasteChosen(FileOp::Copy), Action::PasteChosen(FileOp::Move), Action::AskDeleteChosen]) }
     });
     let dock = choosing.or(dock);
     let button = Some((widgets::Glyph::Terminal, Action::TerminalHere));
     let root = l.pick(["内部存储", "內部儲存空間", "Internal storage"]);
     let other = l.pick(["U 盘", "USB 隨身碟", "USB drive"]);
-    let key = l.pick(match s.sort {
-        SortKey::Name => ["名称", "名稱", "Name"],
-        SortKey::Size => ["大小", "大小", "Size"],
-        SortKey::Modified => ["修改时间", "修改時間", "Modified"],
-        SortKey::Type => ["类型", "類型", "Type"],
-    });
-    let side = l.pick(match s.sort_desc {
-        true => ["降序 ↓", "降序 ↓", "Down ↓"],
-        false => ["升序 ↑", "升序 ↑", "Up ↑"],
-    });
-    let first = l.pick(match s.folders_first {
-        true => ["文件夹置顶", "資料夾置頂", "Folders first"],
-        false => ["混合排列", "混合排列", "Mixed"],
-    });
+    // A name is looked for in the folder shown: what it holds is filtered as
+    // the name is typed, so the page itself answers the search.
+    let shown = filter_folder(s);
     let entry_action: fn(usize) -> Action = if s.choosing { Action::ChooseEntryAt } else { Action::OpenEntry };
-    // The way into choosing several sits at the end of the order row, after
-    // folders first; once choosing, it says how to stop.
-    let many = l.pick(match s.choosing {
-        true => ["完成", "完成", "Done"],
-        false => ["多选", "多選", "Select"],
-    });
     let frame = listing(
         cx,
-        &s.files,
+        &shown,
         root,
         None,
         l.pick(["暂无文件", "沒有檔案", "No files"]),
         entry_action,
         l.pick(FILES),
-        Some([key, side, first]),
-        Some((many, Action::ChooseMany(!s.choosing))),
         Some((other, Action::FilesOtg)),
     );
-    Frame { dock, button, ..frame }
+    // The controls sit beside the title as four round buttons, all of them
+    // icons, rather than as a row of words over the list: the list is what the
+    // page is for, and the words took a row of it.
+    let chips: [(Icon, Action, bool); 4] = [
+        (Icon::Sort, Action::SortPanel(true), false),
+        (Icon::Choose, Action::ChooseMany(!s.choosing), s.choosing),
+        (Icon::UsbDrive, Action::FilesOtg, false),
+        (Icon::Search, Action::SearchFiles, false),
+    ];
+    let (d, gap) = (t.m.dp(40.0), t.m.dp(8.0));
+    let mut art = Canvas::new((d * 4.0 + gap * 3.0).ceil() as u32, d.ceil() as u32);
+    let mut bar_hits = Vec::new();
+    for (k, (icon, action, on)) in chips.iter().enumerate() {
+        let x = k as f32 * (d + gap);
+        // The fill is the button's own colour, which shows as a circle on the
+        // light theme too; the card's colour would be the page's.
+        let (fill, ink) = if *on { (t.pal.button_press, t.pal.danger) } else { (t.pal.search, t.pal.text) };
+        art.fill_circle(x + d / 2.0, d / 2.0, d / 2.0, fill);
+        crate::icons::glyph(&mut art, *icon, x + d / 2.0, d / 2.0, d * 0.56, ink);
+        bar_hits.push(Hit { rect: Rect::new(x, 0.0, d, d), action: *action });
+    }
+    // Placed to the right of the title's own words, on the title's line.
+    let title = l.pick(FILES);
+    let zero = Canvas::new(0, 0);
+    let px = zero.fitting(&f.title, title, t.m.title_px, t.m.w as f32 - t.m.title_x - t.m.margin);
+    let tw = zero.text_width(&f.title, title, px);
+    let ax = t.m.title_x + tw + t.m.dp(16.0);
+    let ay = t.m.title_top - t.m.dp(4.0);
+    Frame { dock, button, bar_hits, title_art: Some((art, ax, ay)), ..frame }
+}
+
+/// The folder the file manager shows, with only the entries whose names hold
+/// what was typed where the page was opened from there to look for one.
+/// Everything is kept where nothing was typed: the page is the folder
+/// otherwise.
+fn filter_folder(s: &crate::app::State) -> crate::app::Folder {
+    let mut folder = s.files.clone();
+    if s.search_scope != crate::app::SearchScope::Files {
+        return folder;
+    }
+    let query = s.search.trim().to_lowercase();
+    if query.is_empty() {
+        return folder;
+    }
+    if let Ok(entries) = &mut folder.entries {
+        entries.retain(|e| e.name.to_lowercase().contains(&query));
+    }
+    folder
+}
+
+/// What the file manager's list is sorted by, and which way, chosen from one
+/// page of ticks rather than cycled through a button.
+fn sort_panel(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let m = &t.m;
+    let keys: [(&str, SortKey); 4] = [
+        (l.pick(["名称", "名稱", "Name"]), SortKey::Name),
+        (l.pick(["大小", "大小", "Size"]), SortKey::Size),
+        (l.pick(["修改时间", "修改時間", "Modified"]), SortKey::Modified),
+        (l.pick(["类型", "類型", "Type"]), SortKey::Type),
+    ];
+    let sides: [(&str, bool); 2] = [
+        (l.pick(["升序 ↑", "升序 ↑", "Up ↑"]), false),
+        (l.pick(["降序 ↓", "降序 ↓", "Down ↓"]), true),
+    ];
+    let mut rows: Vec<Row> = Vec::new();
+    for (label, key) in keys {
+        rows.push(Row::new(label).trail(Trail::Check(s.sort == key)));
+    }
+    for (label, desc) in sides {
+        rows.push(Row::new(label).trail(Trail::Check(s.sort_desc == desc)));
+    }
+    let done = l.pick(texts::common::DONE);
+    let top = m.dp(56.0);
+    let h = top + m.dp(56.0) * rows.len() as f32 + m.dp(96.0);
+    let mut c = Canvas::new(m.w, h.ceil() as u32);
+    c.clear(files::page(t));
+    let mut out = Vec::new();
+    let block = widgets::list(&mut c, t, f, top, &rows);
+    for (k, rect) in block.rows.iter().enumerate() {
+        let action = match keys.get(k) {
+            Some((_, key)) => Action::SortTo(*key),
+            None => Action::SortDesc(sides[k - keys.len()].1),
+        };
+        out.push(Hit { rect: *rect, action });
+    }
+    let y = block.bottom + m.dp(20.0);
+    let px = m.dp(17.0);
+    let h_row = m.dp(44.0);
+    let w = c.text_width(&f.value, done, px) + m.dp(56.0);
+    let x = (m.w as f32 - w) / 2.0;
+    widgets::pill_sized(&mut c, f, x, y, h_row, px, m.dp(20.0), done, t.pal.search, t.pal.text);
+    out.push(Hit { rect: Rect::new(x, y, w, h_row), action: Action::SortPanel(false) });
+    let bottom = y + h_row;
+    Frame::new(t, fit(c, t, bottom), out, l.pick(["排序", "排序", "Sort"]), top)
 }
 
 /// A place's folders and the files in them that can be installed, to
@@ -4661,9 +4737,7 @@ pub fn choose(cx: &Ctx, place: Place) -> Frame {
         _ => None,
     };
     let empty = l.pick(["暂无可安装的文件", "沒有可安裝的檔案", "Nothing here to install"]);
-    // The page that chooses a file has no order of its own: it shows the same
-    // three controls, which turn the order of the file manager it came from.
-    listing(cx, s.folder(Screen::Choose(place)), place_name(l, place), absent, empty, Action::ChooseEntry, l.pick(["选择文件", "選擇檔案", "Choose a file"]), None, None, None)
+    listing(cx, s.folder(Screen::Choose(place)), place_name(l, place), absent, empty, Action::ChooseEntry, l.pick(["选择文件", "選擇檔案", "Choose a file"]), None)
 }
 
 /// A folder laid out as the stock file manager lays one out: the path as
@@ -4683,8 +4757,6 @@ fn listing(
     empty: &str,
     action: fn(usize) -> Action,
     title: &'static str,
-    order: Option<[&str; 3]>,
-    extra: Option<(&str, Action)>,
     // The other place the files can be shown from, beside the trail.
     places_other: Option<(&str, Action)>,
 ) -> Frame {
@@ -4706,7 +4778,7 @@ fn listing(
         }
         (None, Ok(entries)) => Some(files::rows(t, f, entries, action)),
     };
-    let pinned = Some(files::strip_with(t, f, top, &folder.path, order, extra, places_other));
+    let pinned = Some(files::strip_with(t, f, top, &folder.path, places_other));
     Frame { bg, rows, pinned, ..Frame::new(t, c, Vec::new(), title, t.m.dp(files::LIST_TOP_DP)) }
 }
 

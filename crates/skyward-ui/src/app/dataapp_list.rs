@@ -28,6 +28,9 @@ impl App {
                 _ => None,
             },
             SearchScope::Features => None,
+            // The file manager's own page answers for its folder: the entry
+            // found there is the one it opens.
+            SearchScope::Files => None,
         }
     }
 

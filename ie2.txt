@@ -1,0 +1,35 @@
+﻿57     /// A page with three lines of text cut out of it.
+58     Log,
+59     /// A shield with a tick, as the stock Settings' security status shows
+60     /// it.
+61     Shield,
+62     /// The WLAN's fan, as the stock Settings' WLAN shows it.
+63     Wlan,
+64     /// A battery, as the stock Settings' battery shows it.
+65     Battery,
+66     /// Two phones, the one behind showing round the one in front.
+67     Systems,
+68 }
+69 
+70 /// The stock icons' box: every outline here is laid out in it.
+71 const BOX: f32 = 28.0;
+72 
+73 /// How a part of a glyph is drawn.
+74 #[derive(Clone, Copy)]
+75 enum Shape {
+76     /// Filled wherever the outline goes round.
+77     Fill(&'static str),
+78     /// Filled where the outline goes round an odd number of times, which
+79     /// leaves out what lies inside it twice: how the stock glyphs cut their
+80     /// details out of their shapes.
+81     EvenOdd(&'static str),
+82     /// A line this wide, round at its ends and where it turns.
+83     Line(&'static str, f32),
+84 }
+85 
+86 /// A part of a glyph, drawn over the parts before it or cut out of them.
+87 #[derive(Clone, Copy)]
+88 struct Part {
+89     shape: Shape,
+90     cut: bool,
+91 }

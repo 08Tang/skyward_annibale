@@ -43,6 +43,9 @@ pub enum SearchScope {
     Features,
     Apps,
     Modules,
+    /// The folder the file manager shows: a name is looked for among what it
+    /// holds, and the entry found is the one opened.
+    Files,
 }
 
 /// The warmest and coolest the charge may be let to warm the battery to, in
@@ -327,6 +330,10 @@ pub struct State {
     pub sort: SortKey,
     pub sort_desc: bool,
     pub folders_first: bool,
+    /// Whether the panel that chooses the order is showing over the file
+    /// manager: it is another screen of that page rather than a page of its
+    /// own, so going back closes it rather than leaving the file manager.
+    pub sort_panel: bool,
     /// The folder of internal storage a file to install is chosen in, its
     /// path from the top of the storage.
     pub storage: Folder,
@@ -549,6 +556,7 @@ impl Default for State {
             sort: SortKey::Name,
             sort_desc: false,
             folders_first: true,
+            sort_panel: false,
             storage: Folder::new(""),
             usb_drive: None,
             drive: Folder::new(""),

@@ -65,6 +65,13 @@ pub enum Icon {
     Battery,
     /// Two phones, the one behind showing round the one in front.
     Systems,
+    /// A magnifying glass: a ring with its handle through it.
+    Search,
+    /// Three lines, longest at the top, with a small arrow beside them: the
+    /// sort the file manager's list is in.
+    Sort,
+    /// A box with a tick in it: choosing more than one entry.
+    Choose,
 }
 
 /// The stock icons' box: every outline here is laid out in it.
@@ -338,6 +345,28 @@ const BATTERY: &[Part] = &[add(Shape::EvenOdd(
      C22.747,11.536 22.613,11.536 22.345,11.536C22.077,11.536 21.943,11.536 21.838,11.583C21.719,11.637 21.624,11.732 21.571,11.851Z",
 ))];
 
+/// A magnifying glass: a ring, and its handle through the ring's lower right.
+const SEARCH: &[Part] = &[add(Shape::EvenOdd(
+    "M12,4.2 A7.8,7.8 0 1,1 11.99,4.2 Z\
+     M12,6.4 A5.6,5.6 0 1,0 12.01,6.4 Z\
+     M17.1,17.1 L23.6,23.6 L26,21.2 L19.5,14.7 Z",
+))];
+/// Three lines, each shorter than the one above, and a small arrow beside the
+/// shortest: the order the list is in.
+const SORT: &[Part] = &[add(Shape::EvenOdd(
+    "M4,6 H19 V8.6 H4 Z\
+     M4,12 H15 V14.6 H4 Z\
+     M4,18 H11 V20.6 H4 Z\
+     M20,16.5 H22.6 V21.5 H20 Z\
+     M18.2,20.5 L21.3,25.2 L24.4,20.5 Z",
+))];
+/// A box with a tick in it: choosing more than one entry.
+const CHOOSE: &[Part] = &[add(Shape::EvenOdd(
+    "M4,4 H24 V24 H4 Z\
+     M6.6,6.6 V21.4 H21.4 V6.6 Z\
+     M11.2,17.3 L8.4,14.5 L10,12.9 L11.2,14.1 L17.4,7.9 L19,9.5 Z",
+))];
+
 const SYSTEMS: &[Part] = &[
     add(Shape::Fill("M8.6,5.2H15A2.4,2.4 0 0 1 17.4,7.6V17.2A2.4,2.4 0 0 1 15,19.6H8.6A2.4,2.4 0 0 1 6.2,17.2V7.6A2.4,2.4 0 0 1 8.6,5.2Z")),
     // The gap that sets the phone in front apart from the one behind.
@@ -371,6 +400,9 @@ fn outline(icon: Icon) -> (&'static [Part], f32) {
         Icon::Wlan => (WLAN, 1.0),
         Icon::Battery => (BATTERY, 1.0),
         Icon::Systems => (SYSTEMS, 1.0),
+        Icon::Search => (SEARCH, 1.0),
+        Icon::Sort => (SORT, 1.0),
+        Icon::Choose => (CHOOSE, 1.0),
     }
 }
 

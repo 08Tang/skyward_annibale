@@ -53,6 +53,13 @@ pub struct Frame {
     /// The round button at the right end of the bar: what it shows, and
     /// what touching it does.
     pub button: Option<(widgets::Glyph, Action)>,
+    /// Art drawn beside the large title rather than over the page, such as
+    /// the file manager's row of round buttons: the canvas it is drawn on, and
+    /// where its top left corner goes.
+    pub title_art: Option<(Canvas, f32, f32)>,
+    /// What touching the title art does, in the art's own coordinates: the
+    /// page cannot answer for it, since the art is not drawn where it lies.
+    pub bar_hits: Vec<Hit>,
 }
 
 /// A strip held at the bottom of the screen over the page, such as the
@@ -218,6 +225,8 @@ impl Frame {
             dock: None,
             caret: None,
             button: None,
+            title_art: None,
+            bar_hits: Vec::new(),
         }
     }
 

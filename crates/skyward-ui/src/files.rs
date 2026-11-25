@@ -20,17 +20,12 @@ use std::path::{Component, Path};
 pub const STRIP_TOP_DP: f32 = 164.0;
 /// How tall the strip of pills is.
 const STRIP_DP: f32 = 51.0;
-/// How tall the row of sort controls under the pills is.
-pub const SORT_ROW_DP: f32 = 44.0;
 
-/// Where the list of entries starts: under the strip and the sort row drawn in
-/// it, so the first entry is covered by neither (2026-11-15: it was covered by
-/// the pills, and the first folder showed half behind them).
-pub const LIST_TOP_DP: f32 = STRIP_TOP_DP + STRIP_DP + SORT_ROW_DP;
+/// Where the list of entries starts: under the strip, so the first entry is
+/// covered by neither the pills nor the bar.
+pub const LIST_TOP_DP: f32 = STRIP_TOP_DP + STRIP_DP;
 /// The three labels of the sort row, as the tests give them.
 #[cfg(test)]
-const ORDER: [&str; 3] = ["名称", "升序 ↑", "文件夹置顶"];
-
 const PILL_TOP_DP: f32 = 13.0;
 const PILL_DP: f32 = 33.0;
 const PILL_PAD_DP: f32 = 14.0;
@@ -481,28 +476,18 @@ fn arrow(c: &mut Canvas, t: &Theme, x: f32, cy: f32, color: Rgba) {
 /// `top`, and the folder shown last in amber; each earlier one goes up to
 /// its folder. A path longer than the strip shows its end, as the stock
 /// strip does scrolled to it.
-pub fn strip(t: &Theme, f: &Fonts, top: &str, folder: &str, order: Option<[&str; 3]>) -> Pinned {
-    strip_with(t, f, top, folder, order, None, None)
-}
-
-/// The same strip, with one more control at the end of the sort row: the file
-/// manager's way into choosing several entries, where the order is set.
 pub fn strip_with(
     t: &Theme,
     f: &Fonts,
     top: &str,
     folder: &str,
-    order: Option<[&str; 3]>,
-    more: Option<(&str, Action)>,
     // The other place the files can be shown from, beside the trail: its
     // label and what reaching it does (`None` where there is but one place).
     other: Option<(&str, Action)>,
 ) -> Pinned {
     let m = &t.m;
     let p = palette(t);
-    // Tall enough for the sort row drawn under the pills.
-    let extra = if order.is_some() { SORT_ROW_DP } else { 0.0 };
-    let mut c = Canvas::new(m.w, m.dp(STRIP_DP + extra).round() as u32);
+    let mut c = Canvas::new(m.w, m.dp(STRIP_DP).round() as u32);
     c.clear(p.page);
     let below = Path::new(folder).components().filter_map(|part| match part {
         Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
@@ -588,40 +573,6 @@ pub fn strip_with(
     {
         widgets::pill_sized(&mut c, f, x, x_top, h, px, m.dp(PILL_PAD_DP), label, p.pill, p.pill_text);
         hits.push(Hit { rect: Rect::new(x, x_top, w, h), action });
-    }
-    // The order the entries are shown in, under the pills: the key, the side,
-    // and whether folders stay on top. Each is touched where it is written.
-    let Some(order) = order else {
-        return Pinned { canvas: c, top: m.dp(STRIP_TOP_DP), floor: widgets::bar_bottom(t), hits };
-    };
-    let row_top = m.dp(PILL_TOP_DP) + m.dp(PILL_DP) + m.dp(7.0);
-    let row_h = m.dp(PILL_DP);
-    let px = m.dp(PILL_TEXT_DP);
-    let widths: Vec<f32> = order.iter().map(|label| c.text_width(&f.value, label, px) + m.dp(PILL_PAD_DP) * 2.0).collect();
-    let mut x = m.dp(SIDE_DP);
-    for ((label, &w), action) in order.iter().zip(&widths).zip([Action::CycleSort, Action::ToggleSortOrder, Action::ToggleFoldersFirst]) {
-        if x + w > m.w as f32 - m.dp(SIDE_DP) {
-            break;
-        }
-        widgets::pill_sized(&mut c, f, x, row_top, row_h, px, m.dp(PILL_PAD_DP), label, p.pill, p.pill_text);
-        hits.push(Hit { rect: Rect::new(x, row_top, w, row_h), action });
-        x += w + m.dp(6.0);
-    }
-    // The way into choosing several, after the order, where a finger looking
-    // for the list's controls already is.
-    // The way into choosing several sits at the right end of its row, under the
-    // other place's pill at the right end of the strip above it, so the two line
-    // up down the page.
-    if let Some((label, action)) = more {
-        let w = c.text_width(&f.value, label, px) + m.dp(PILL_PAD_DP) * 2.0;
-        let right = m.w as f32 - m.dp(SIDE_DP);
-        let left = right - w;
-        // Clear of the sort controls where the row is long: it is dropped
-        // rather than drawn over them.
-        if left >= x {
-            widgets::pill_sized(&mut c, f, left, row_top, row_h, px, m.dp(PILL_PAD_DP), label, p.here, p.here_text);
-            hits.push(Hit { rect: Rect::new(left, row_top, w, row_h), action });
-        }
     }
     Pinned { canvas: c, top: m.dp(STRIP_TOP_DP), floor: widgets::bar_bottom(t), hits }
 }
@@ -766,14 +717,12 @@ mod tests {
     fn the_path_goes_up_by_its_capsules_and_shows_its_end_when_long() {
         let f = crate::font::bundled();
         let t = Theme::light(1440, 3200, 3.5);
-        let path = strip(&t, &f, "根目录", "/system/bin", Some(ORDER));
-        // The sort row is part of the strip where the page draws one, so only
-        // the capsules above the folder shown are the ones going up.
+        let path = strip_with(&t, &f, "根目录", "/system/bin", None);
         let ups = |p: &Pinned| -> Vec<Action> { p.hits.iter().map(|h| h.action).filter(|a| matches!(a, Action::OpenAncestor(_))).collect() };
         assert_eq!(ups(&path), [Action::OpenAncestor(0), Action::OpenAncestor(1)], "the root and system go up; bin is where we are");
-        let place = strip(&t, &f, "内部存储", "Download", Some(ORDER));
+        let place = strip_with(&t, &f, "内部存储", "Download", None);
         assert_eq!(ups(&place), [Action::OpenAncestor(0)], "a place's top goes up");
-        let deep = strip(&t, &f, "根目录", "/data/media/0/Android/data/com.example.something.long/files/cache/images", Some(ORDER));
+        let deep = strip_with(&t, &f, "根目录", "/data/media/0/Android/data/com.example.something.long/files/cache/images", None);
         let last = deep.hits.last().expect("the capsules before the folder shown");
         assert!(last.rect.x + last.rect.w < t.m.w as f32, "the end shows");
         // A trail too long for the strip leaves the middle out rather than

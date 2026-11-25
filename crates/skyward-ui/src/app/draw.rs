@@ -850,6 +850,9 @@ impl App {
     /// as it last showed has them drawn already.
     pub(super) fn paint_page(&mut self, out: &mut Canvas, t: &Theme, fresh: Option<(&Fonts, &DeviceInfo)>, view: &View) {
         let m = t.m;
+        // The chips beside the title are placed as the page is drawn, so the
+        // places from the last drawing are of no use.
+        self.bar_chip_rects.clear();
         let screen = self.screen();
         let (scroll, offset, pressing) = (view.scroll, view.offset, view.pressing);
         // The light goes over its control, in the part of the screen the
@@ -940,6 +943,19 @@ impl App {
             if frame.header {
                 let level = (1.0 - frame.title_lift(scroll) / m.dp(TITLE_FADE_DP)).clamp(0.0, 1.0);
                 draw_faded(out, big, 0.0, -frame.title_lift(offset), t.pal.text, level, (1.0 - level) * m.dp(TITLE_BLUR_DP));
+                // Art that sits beside the title is drawn over the page rather
+                // than in it, so its touches are answered from here: the page's
+                // own hits are where the art is not.
+                if let Some((art, x, y)) = &frame.title_art {
+                    let lift = frame.title_lift(offset);
+                    out.lay(art, *x as i32, (*y - lift) as i32, level);
+                    for hit in &frame.bar_hits {
+                        self.bar_chip_rects.push((
+                            Rect { x: hit.rect.x + *x, y: hit.rect.y + *y - lift, ..hit.rect },
+                            hit.action,
+                        ));
+                    }
+                }
             }
         }
         let bar = view.bar;

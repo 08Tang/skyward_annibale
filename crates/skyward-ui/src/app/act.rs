@@ -61,6 +61,25 @@ impl App {
                 self.resort_files();
                 return vec![Effect::KeepSort(self.state.sort, self.state.sort_desc, self.state.folders_first)];
             }
+            // The order is chosen from a panel of ticks rather than cycled
+            // through a button, since there are four keys and two ways and a
+            // button makes the owner walk past the one they want.
+            Action::SortPanel(on) => {
+                self.state.sort_panel = on;
+                self.refresh();
+            }
+            Action::SortTo(key) => {
+                self.state.sort = key;
+                self.state.sort_panel = false;
+                self.resort_files();
+                return vec![Effect::KeepSort(self.state.sort, self.state.sort_desc, self.state.folders_first)];
+            }
+            Action::SortDesc(desc) => {
+                self.state.sort_desc = desc;
+                self.state.sort_panel = false;
+                self.resort_files();
+                return vec![Effect::KeepSort(self.state.sort, self.state.sort_desc, self.state.folders_first)];
+            }
             Action::FetchStart => {
                 let url = self.state.fetch_url.trim().to_string();
                 if url.is_empty() {
@@ -131,6 +150,13 @@ impl App {
             }
             // The card asking to delete is what the page shows: back puts it
             // away before it leaves the page.
+            // The sort panel is not a page of its own: going back closes it
+            // rather than leaving the file manager.
+            Action::Back if self.state.sort_panel => {
+                self.state.sort_panel = false;
+                self.refresh();
+                return Vec::new();
+            }
             Action::Back if self.state.asking_delete || self.state.asking_many.is_some() || self.state.image_asking.is_some() => {
                 self.state.asking_delete = false;
                 self.state.asking_many = None;
@@ -918,8 +944,12 @@ impl App {
             // The search page is opened to look through one page's entries:
             // the query is cleared, and the page it was opened from says what
             // it is looking through.
-            Action::SearchApps | Action::SearchModules => {
-                self.state.search_scope = if matches!(action, Action::SearchApps) { SearchScope::Apps } else { SearchScope::Modules };
+            Action::SearchApps | Action::SearchModules | Action::SearchFiles => {
+                self.state.search_scope = match action {
+                    Action::SearchApps => SearchScope::Apps,
+                    Action::SearchModules => SearchScope::Modules,
+                    _ => SearchScope::Files,
+                };
                 self.state.search.clear();
                 return self.act(Action::Open(Screen::Search), now);
             }
@@ -1054,11 +1084,14 @@ impl App {
                             }
                         }
                         // Looking through a page's entries, the first that
-                        // answers is the one opened.
+                        // answers is the one opened. The file manager's own
+                        // page filters as the name is typed, so return has
+                        // nothing left to open.
                         scope => {
                             let Some(first) = self.first_match(scope, &query) else { return Vec::new() };
                             return match scope {
                                 SearchScope::Apps => self.act(Action::DataAppOpen(first), now),
+                                SearchScope::Files => Vec::new(),
                                 _ => self.act(Action::ModuleOpen(first), now),
                             };
                         }
