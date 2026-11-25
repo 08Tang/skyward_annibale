@@ -68,6 +68,16 @@ enum Cmd {
         /// The monospaced typeface's licence, which goes with it.
         #[arg(long)]
         mono_license: PathBuf,
+        /// The coloured emoji typeface.
+        #[arg(long)]
+        emoji: Option<PathBuf>,
+        /// The flags' typeface, which is a bitmap one of its own. Left out, a
+        /// phone draws every emoji but the flags.
+        #[arg(long)]
+        emoji_flags: Option<PathBuf>,
+        /// The emoji typefaces' licence, which goes with them.
+        #[arg(long)]
+        emoji_license: Option<PathBuf>,
         #[arg(long)]
         out: PathBuf,
     },
@@ -125,7 +135,7 @@ fn main() -> Result<()> {
             img.kernel = BootImage::read(&kernel)?.kernel;
             write(&out, &img, &img.to_bytes()?)
         }
-        Cmd::Recovery { stock, binary, system_init, config, font, mono, mono_license, out } => {
+        Cmd::Recovery { stock, binary, system_init, config, font, mono, mono_license, emoji, emoji_flags, emoji_license, out } => {
             let size = partition_size(&stock)?;
             let mut img = BootImage::read(&stock)?;
             let mut rd = Ramdisk::decode(&img.ramdisk)?;
@@ -149,6 +159,18 @@ fn main() -> Result<()> {
             rd.add(paths::FONT, 0o644, read(&font)?)?;
             rd.add(paths::MONO, 0o644, read(&mono)?)?;
             rd.add(paths::MONO_LICENSE, 0o644, read(&mono_license)?)?;
+            // The emoji typefaces are the recovery's to do without: where the
+            // build has none, a name with an emoji in it draws a box, and
+            // nothing else changes.
+            if let Some(emoji) = &emoji {
+                rd.add(paths::EMOJI, 0o644, read(emoji)?)?;
+            }
+            if let Some(flags) = &emoji_flags {
+                rd.add(paths::EMOJI_FLAGS, 0o644, read(flags)?)?;
+            }
+            if let Some(licence) = &emoji_license {
+                rd.add(paths::EMOJI_LICENSE, 0o644, read(licence)?)?;
+            }
             // A stock ramdisk may run logd without any scheduling profiles,
             // and logd stops as soon as it cannot find the one it asks for.
             if rd.find(paths::TASK_PROFILES).is_none() {

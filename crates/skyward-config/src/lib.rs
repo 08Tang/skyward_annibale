@@ -15,6 +15,14 @@ pub mod ramdisk {
     /// The monospaced typeface's licence, which travels with every copy of
     /// it.
     pub const MONO_LICENSE: &str = "skyward/KirkMono-OFL.txt";
+    /// The coloured emoji typeface: a name with an emoji in it is drawn from
+    /// it, the UI face having no picture for one.
+    pub const EMOJI: &str = "skyward/NotoColorEmoji.ttf";
+    /// The flags' typeface, which is a bitmap one: a pair of regional
+    /// indicators is a flag through a ligature in it.
+    pub const EMOJI_FLAGS: &str = "skyward/NotoColorEmojiFlags.ttf";
+    /// The emoji typefaces' licence, which travels with every copy of them.
+    pub const EMOJI_LICENSE: &str = "skyward/NotoColorEmoji-OFL.txt";
     /// The recovery service binary init starts.
     pub const RECOVERY: &str = "system/bin/recovery";
     /// The first program of a system installed beside the installed one,

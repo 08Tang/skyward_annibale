@@ -4,6 +4,7 @@ pub mod canvas;
 pub mod charge;
 pub mod color;
 pub mod editor;
+pub mod emoji;
 pub mod files;
 pub mod fling;
 pub mod fmt;

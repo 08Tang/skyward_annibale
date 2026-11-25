@@ -1263,6 +1263,9 @@ struct Pages<'a> {
     /// Whether the apps installed have been read ahead of the page that lists
     /// them, so that opening it does not start the reading.
     apps_prefetched: bool,
+    /// Whether the log has said which emoji typeface the phone has, so that it
+    /// says it once rather than a turn.
+    emoji_told: bool,
     /// When that reading is due: some seconds after the data partition opens.
     prefetch_due: Option<u64>,
     closed: Vec<Closed>,
@@ -1574,6 +1577,7 @@ impl<'a> Pages<'a> {
             pending_open: None,
             boot_decided: false,
             apps_prefetched: false,
+            emoji_told: false,
             prefetch_due: None,
             closed: Vec::new(),
             remembered: remembered.clone(),
@@ -1827,6 +1831,20 @@ impl<'a> Pages<'a> {
         // and the decrypt page is never drawn for it; an encrypted one has to
         // be opened before it is known whether anyone has a screen lock, so
         // the decrypt page is where it waits and where the lock is answered.
+        // A name with an emoji in it that comes out as a box is first a
+        // question of whether the phone has the typeface at all, so the log
+        // says which of them was found.
+        if !self.emoji_told && self.app.state.prepared {
+            self.emoji_told = true;
+            let fonts = skyward_ui::emoji::found();
+            if fonts.is_empty() {
+                skyward_sys::kmsg("no emoji typeface is here: a name with an emoji shows a box")?;
+            } else {
+                for (path, len) in fonts {
+                    skyward_sys::kmsg(&format!("the emoji typeface is {path}, {len} bytes"))?;
+                }
+            }
+        }
         // This is the second look, and it corrects the first either way.
         if !self.boot_decided && self.app.state.prepared {
             self.boot_decided = true;

@@ -1010,13 +1010,41 @@ impl Canvas {
         let sf = face.font.as_scaled(scale);
         let mut w = 0.0;
         let mut prev: Option<GlyphId> = None;
-        for ch in text.chars() {
+        let chars: Vec<char> = text.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            let ch = chars[i];
+            if joining(ch) {
+                i += 1;
+                continue;
+            }
+            // A flag is two regional indicators put together, and stands for
+            // one character's width.
+            if let Some(art) = flag_art(face, &chars, i, px) {
+                w += art.advance;
+                prev = None;
+                i += 2;
+                continue;
+            }
+            if crate::emoji::regional(ch) {
+                // A single regional indicator is no picture, and in the UI
+                // face it is only a box: it takes no room.
+                i += 1;
+                continue;
+            }
+            if let Some(art) = face.emoji_art(ch, px) {
+                w += art.advance;
+                prev = None;
+                i += 1;
+                continue;
+            }
             let (id, advance) = face.glyph(ch, scale);
             if let Some(p) = prev {
                 w += sf.kern(p, id);
             }
             w += advance;
             prev = Some(id);
+            i += 1;
         }
         w
     }
@@ -1060,7 +1088,42 @@ impl Canvas {
         let chars: Vec<char> = text.chars().collect();
         let mut pen = x;
         let mut prev: Option<GlyphId> = None;
-        for (i, &ch) in chars.iter().enumerate() {
+        let mut i = 0;
+        while i < chars.len() {
+            let ch = chars[i];
+            if joining(ch) {
+                i += 1;
+                continue;
+            }
+            // A flag and an emoji are both small coloured pictures rather than
+            // outlines: the UI face has no shape for either.
+            let flag = flag_art(face, &chars, i, px);
+            let single = if flag.is_none() { face.emoji_art(ch, px) } else { None };
+            if let Some(art) = flag.or(single) {
+                if let Some(lim) = limit {
+                    let more = i + 1 < chars.len();
+                    if pen + art.advance + if more { ell_w } else { 0.0 } > lim {
+                        self.glyph(face, ell, scale, pen, baseline, ink);
+                        pen += ell_w;
+                        watched(|w| {
+                            w.cut.insert(text.to_string());
+                        });
+                        break;
+                    }
+                }
+                let (at_x, at_y) = ((pen + art.dx as f32).round() as i32, (baseline + art.dy as f32).round() as i32);
+                self.lay(&art.canvas, at_x, at_y, 1.0);
+                pen += art.advance;
+                prev = None;
+                i += if crate::emoji::regional(ch) { 2 } else { 1 };
+                continue;
+            }
+            if crate::emoji::regional(ch) {
+                // A single regional indicator: only a box in the UI face, drawn
+                // neither and taking no room.
+                i += 1;
+                continue;
+            }
             let (id, aw) = face.glyph(ch, scale);
             if let Some(p) = prev {
                 pen += sf.kern(p, id);
@@ -1079,6 +1142,7 @@ impl Canvas {
             self.glyph(face, id, scale, pen, baseline, ink);
             pen += aw;
             prev = Some(id);
+            i += 1;
         }
         watched(|w| {
             let (text, canvas) = (text.to_string(), (self.w, self.h));
@@ -1299,6 +1363,24 @@ fn rr_sdf(px: f32, py: f32, cx: f32, cy: f32, hx: f32, hy: f32, r: f32) -> f32 {
     let ox = dx.max(0.0);
     let oy = dy.max(0.0);
     (ox * ox + oy * oy).sqrt() + dx.max(dy).min(0.0) - r
+}
+
+/// The flag two regional indicators spell, where the phone's typeface has one:
+/// a pair of them is a flag, and either alone is only a box.
+fn flag_art(face: &Face, chars: &[char], i: usize, px: f32) -> Option<std::rc::Rc<crate::emoji::Art>> {
+    let first = *chars.get(i)?;
+    let second = *chars.get(i + 1)?;
+    if !crate::emoji::regional(first) || !crate::emoji::regional(second) {
+        return None;
+    }
+    face.emoji_flag(first, second, px)
+}
+
+/// The controls that only combine: the variation selectors (U+FE0E and
+/// U+FE0F), the zero-width joiner (U+200D) and the keycap's combiner (U+20E3).
+/// None of them takes room of its own, and none should be drawn as a box.
+fn joining(ch: char) -> bool {
+    matches!(ch, '\u{fe0e}' | '\u{fe0f}' | '\u{200d}' | '\u{20e3}')
 }
 
 #[cfg(test)]
