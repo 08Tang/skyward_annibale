@@ -1061,6 +1061,12 @@ const SCAN_EVERY: Duration = Duration::from_secs(10);
 /// supplicant's own round is slow.
 const LOOKING_FOR: Duration = Duration::from_secs(3);
 
+/// How long after the data partition opens the list of installed apps is read
+/// ahead: the first seconds on the menu are when the owner is most likely to
+/// tap something, and scanning every app's folder would take the loop that
+/// takes the taps away from them.
+const PREFETCH_WAIT_MS: u64 = 5_000;
+
 /// The picture the account service keeps for the account the phone is signed
 /// in to: one file, `xiaomi_user_avatar_` and the account's number.
 fn account_picture(px: u32) -> Option<avatar::Avatar> {
@@ -1254,6 +1260,11 @@ struct Pages<'a> {
     /// this is the second look that corrects it where the table could not be
     /// read then.
     boot_decided: bool,
+    /// Whether the apps installed have been read ahead of the page that lists
+    /// them, so that opening it does not start the reading.
+    apps_prefetched: bool,
+    /// When that reading is due: some seconds after the data partition opens.
+    prefetch_due: Option<u64>,
     closed: Vec<Closed>,
     /// The screen lock kept from before, where one was kept, so that the data
     /// partition opens as the recovery starts rather than waiting to be typed.
@@ -1562,6 +1573,8 @@ impl<'a> Pages<'a> {
             decryptor: None,
             pending_open: None,
             boot_decided: false,
+            apps_prefetched: false,
+            prefetch_due: None,
             closed: Vec::new(),
             remembered: remembered.clone(),
             tried_remembered: false,
@@ -1786,6 +1799,7 @@ impl<'a> Pages<'a> {
     /// stands.
     fn turn(&mut self, sleeper: &Sleeper, uevents: &uevent::Listener) -> Result<()> {
         let now = monotonic_ms();
+        let at = Instant::now();
         if self.leave_at.is_some_and(|at| now >= at) {
             self.leave_at = None;
             power(self.leave)?;
@@ -1844,7 +1858,34 @@ impl<'a> Pages<'a> {
             self.app.set_fastboot(running, link);
             self.port_at = Instant::now();
         }
+        // The list of installed apps is read ahead of the page that lists it,
+        // so that opening the page does not start the reading. It waits some
+        // seconds after the data partition opens: the first seconds after the
+        // menu comes up are when the owner is most likely to tap something,
+        // and a scan of every app's folder would take the loop that takes the
+        // taps away from them.
+        if self.prefetch_due.is_none()
+            && !matches!(self.app.state.data, skyward_ui::app::Data::Closed | skyward_ui::app::Data::Opening)
+        {
+            self.prefetch_due = Some(monotonic_ms() + PREFETCH_WAIT_MS);
+        }
+        if let Some(due) = self.prefetch_due
+            && !self.apps_prefetched
+            && monotonic_ms() >= due
+        {
+            self.apps_prefetched = true;
+            let _ = self.effect(skyward_ui::app::Effect::ReadDataApps, monotonic_ms())?;
+        }
         let (lit, shown) = self.show(now)?;
+        // How much of the turn went on working and drawing: waiting for input
+        // is not counted, since that is idle. When the menu has just come up
+        // and taps do nothing, this line tells apart a loop held up by drawing
+        // and by the readings coming back from a loop that never took the
+        // touches at all.
+        let spent = at.elapsed().as_millis();
+        if spent >= 120 {
+            skyward_sys::kmsg(&format!("a turn spent {spent} ms before waiting"))?;
+        }
         self.wait(sleeper, uevents, now, lit, shown)?;
         let now = monotonic_ms();
         for slept in sleeper.slept() {
