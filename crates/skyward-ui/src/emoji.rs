@@ -758,6 +758,19 @@ mod tests {
             assert!(art.canvas.w >= 16 && art.canvas.h >= 16, "{ch:?}: {}×{}", art.canvas.w, art.canvas.h);
             let coloured = art.canvas.data.as_chunks::<4>().0.iter().filter(|p| p[3] > 128).count();
             assert!(coloured > 50, "{ch:?}: only {coloured} pixels painted");
+            // The whole shape is inside the picture: nothing painted touches
+            // the edge, since the picture was cut to the shape plus a pad. A
+            // picture that runs to its own edge is one the shape was cut by,
+            // which is what kept happening to these.
+            let (w, h) = (art.canvas.w as i32, art.canvas.h as i32);
+            let at = |x: i32, y: i32| art.canvas.data[((y * w + x) * 4 + 3) as usize] > 0;            let mut edge = false;
+            for x in 0..w {
+                edge |= at(x, 0) || at(x, h - 1);
+            }
+            for y in 0..h {
+                edge |= at(0, y) || at(w - 1, y);
+            }
+            assert!(!edge, "{ch:?}: the shape reaches the picture's own edge, so it was cut");
         }
         // Every pictorial character in the typeface has to be drawable: not
         // one box.
