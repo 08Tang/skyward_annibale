@@ -56,6 +56,15 @@ pub fn found() -> Vec<(String, u64)> {
         .collect()
 }
 
+/// The pictures a typeface has drawn, by character (or ligature glyph) and em
+/// size. A picture is absent where the typeface draws none, which is worth
+/// remembering as much as one that is there.
+type Drawn = HashMap<(u32, u16), Option<Rc<Art>>>;
+
+/// One layer of a COLR glyph: the outlines it fills, its colour, and the box
+/// it is clipped to (in font units) where it has one.
+type Layer = (Vec<Seg>, Rgba, Option<(f32, f32, f32, f32)>);
+
 /// One emoji as it is drawn: a small picture of its own size, and where it
 /// stands against the pen position and the baseline.
 pub struct Art {
@@ -135,7 +144,6 @@ pub fn depicted(ch: char) -> bool {
     matches!(
         ch as u32,
         0x1F000..=0x1FAFF
-            | 0x1F1E6..=0x1F1FF
             | 0x2190..=0x21FF
             | 0x2300..=0x23FF
             | 0x25A0..=0x27BF
@@ -169,7 +177,7 @@ struct Font {
     /// PNGs.
     bitmap: bool,
     /// Each picture drawn, by character (or ligature glyph) and em size.
-    cache: RefCell<HashMap<(u32, u16), Option<Rc<Art>>>>,
+    cache: RefCell<Drawn>,
 }
 
 impl Emoji {
@@ -289,7 +297,7 @@ impl Font {
         let scale = ppem as f32 / upem;
         let (fw, fh) = (ppem as f32 * 1.05, ppem as f32 * 1.2);
         let (ox, oy) = (ppem as f32 * 0.02, ppem as f32);
-        let mut parts: Vec<(Vec<Seg>, Rgba, Option<(f32, f32, f32, f32)>)> = Vec::new();
+        let mut parts: Vec<Layer> = Vec::new();
         for shape in &painter.shapes {
             let m = shape.transform;
             // A transform read as broken -- NaN or infinite -- would only
