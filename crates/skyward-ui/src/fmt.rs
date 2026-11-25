@@ -1004,7 +1004,7 @@ pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, String) {
         ImageKind::Filesystem(filesystem) => {
             return (l.pick(PARTITION), texts::image::holds::filesystem(l, filesystem.name()));
         }
-        ImageKind::Other => (&PARTITION[..], &["内容不明", "內容不明", "Holds what couldn't be identified"][..]),
+        ImageKind::Other => (&PARTITION[..], &["内容不明", "內容不明", "Holds what couldn't be identified"]),
     };
     (l.pick(name), l.pick(holds).into())
 }
