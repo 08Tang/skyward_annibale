@@ -2971,6 +2971,25 @@ fn kb_top(t: &Theme) -> f32 {
     t.m.h as f32 - widgets::keyboard_height(t)
 }
 
+/// The keys and the spelling bar as one strip held at the foot of the screen.
+///
+/// A page that holds its keys in a dock rather than drawing them on the page
+/// cannot use [`keyboard_hits`], and drawing only the keys would leave it with
+/// no way to type Chinese: the bar is part of the strip, above the keys, and
+/// its hits come back in the strip's own coordinates with the keys'.
+fn keys_dock(t: &Theme, f: &Fonts, s: &State, enter: &str) -> Dock {
+    let m = &t.m;
+    let bar = crate::ime::height(t);
+    let mut canvas = Canvas::new(m.w, (bar + widgets::keyboard_height(t)).ceil() as u32);
+    let mut hits = crate::ime::bar(&mut canvas, t, f, &s.ime, 0.0);
+    hits.extend(
+        widgets::keyboard(&mut canvas, t, f, s.lang, bar, s.layer, s.key_held(), enter, s.ime.enabled)
+            .into_iter()
+            .map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }),
+    );
+    Dock { canvas, hits }
+}
+
 /// The lowest line a page's content may use: the keyboard's top edge less the
 /// strip the spelling bar takes.
 fn text_floor(t: &Theme) -> f32 {
@@ -3066,19 +3085,8 @@ pub fn search(cx: &Ctx) -> Frame {
     }
     let find = l.pick(["搜索", "搜尋", "Search"]);
     // The keyboard is held at the foot of the screen rather than drawn on the
-    // page: a page that scrolls would take the keys with it. The spelling bar
-    // is held with it, in the same strip, or a page that drew its keys in a
-    // dock would have no way to type Chinese at all.
-    let keys = widgets::keyboard_height(t);
-    let bar = crate::ime::height(t);
-    let mut key_canvas = Canvas::new(m.w, (bar + keys).ceil() as u32);
-    let mut held = crate::ime::bar(&mut key_canvas, t, f, &s.ime, 0.0);
-    held.extend(
-        widgets::keyboard(&mut key_canvas, t, f, s.lang, bar, s.layer, s.key_held(), find, s.ime.enabled)
-            .into_iter()
-            .map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }),
-    );
-    let dock = Dock { canvas: key_canvas, hits: held };
+    // page: a page that scrolls would take the keys with it.
+    let dock = keys_dock(t, f, s, find);
     // The field's clear button is on the strip too, in the strip's own
     // coordinates.
     let mut pinned = pinned;
@@ -3593,13 +3601,16 @@ fn mb(bytes: u64) -> String {
 pub fn fetch(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let m = &t.m;
-    let mut c = page(cx);
+    // A long page, with the keys held in a dock at its foot: the page holds
+    // the served page's address and the state of a download as well as the
+    // field, which is more than a screen, and keys drawn on the page would
+    // scroll away from the field they type into.
+    let mut c = long_page(cx);
     let mut out = Vec::new();
     let wide = m.w as f32 - m.margin * 2.0;
-    let floor = m.h as f32 - widgets::keyboard_height(t) - m.dp(10.0);
-    let top = m.content_top - m.dp(66.0);
+    let top = m.content_top;
     let hint = l.pick(["粘贴或输入完整网址", "貼上或輸入完整網址", "Type or paste a full address"]);
-    let field = widgets::search_field(&mut c, t, f, m.margin, wide, top + m.dp(24.0), &s.fetch_url, hint);
+    let field = widgets::search_field(&mut c, t, f, m.margin, wide, top, &s.fetch_url, hint);
     let running = matches!(s.fetch, Fetch::Running { .. });
     let label = match running {
         true => l.pick(["停止下载", "停止下載", "Stop"]),
@@ -3626,7 +3637,9 @@ pub fn fetch(cx: &Ctx) -> Frame {
     // opens a page this recovery serves; the code is where that page is.
     if let Some(at) = s.fetch_portal.clone() {
         let caption = m.dp(40.0);
-        let room = (floor - y - caption - m.dp(14.0)).max(m.dp(96.0));
+        // The page scrolls, so the code may be as tall as it needs to be: a
+        // square that fits the width, with the caption under it.
+        let room = wide.max(m.dp(96.0));
         let side = m.dp(168.0).min(wide).min(room);
         let x0 = (m.w as f32 - side) / 2.0;
         let quiet = 2.0f32;
@@ -3653,6 +3666,7 @@ pub fn fetch(cx: &Ctx) -> Frame {
         widgets::footnote(&mut c, t, f, y, how);
         y += caption;
     }
+    let mut end = y;
     match &s.fetch {
         Fetch::Idle => {
             let how = l.pick([
@@ -3660,7 +3674,7 @@ pub fn fetch(cx: &Ctx) -> Frame {
                 "檔案儲存到 /sdcard/Download，名字取網址裡最後一段。",
                 "Files are saved in /sdcard/Download, named after the last part of the address.",
             ]);
-            widgets::footnote(&mut c, t, f, y, how);
+            end = widgets::footnote(&mut c, t, f, y, how);
         }
         Fetch::Running { done, total } => {
             let share = total.map(|t| (*done as f32 / (t.max(1) as f32)).clamp(0.0, 1.0));
@@ -3671,18 +3685,18 @@ pub fn fetch(cx: &Ctx) -> Frame {
                 }
                 _ => mb(*done),
             };
-            widgets::progress_card(&mut c, t, f, y, l.pick(["正在下载", "正在下載", "Downloading"]), &detail, share);
+            end = widgets::progress_card(&mut c, t, f, y, l.pick(["正在下载", "正在下載", "Downloading"]), &detail, share);
         }
         Fetch::Done { path, bytes } => {
             let (where_to, size_s) = (path.clone(), mb(*bytes));
             let detail = tr!(l, "已保存 {where_to}（{size_s}）", "已儲存 {where_to}（{size_s}）", "Saved {where_to} ({size_s})");
-            widgets::info_card(&mut c, t, f, y, &[(l.pick(["完成", "完成", "Done"]), detail)]);
+            end = widgets::info_card(&mut c, t, f, y, &[(l.pick(["完成", "完成", "Done"]), detail)]);
         }
         Fetch::Failed(why) => {
-            widgets::info_card(&mut c, t, f, y, &[(l.pick(["失败", "失敗", "Failed"]), why.clone())]);
+            end = widgets::info_card(&mut c, t, f, y, &[(l.pick(["失败", "失敗", "Failed"]), why.clone())]);
         }
         Fetch::Stopped => {
-            widgets::info_card(&mut c, t, f, y, &[(l.pick(["已停止", "已停止", "Stopped"]), String::new())]);
+            end = widgets::info_card(&mut c, t, f, y, &[(l.pick(["已停止", "已停止", "Stopped"]), String::new())]);
         }
     }
     let title = l.pick(FETCH);
@@ -3690,11 +3704,15 @@ pub fn fetch(cx: &Ctx) -> Frame {
         true => l.pick(["停止下载", "停止下載", "Stop"]),
         false => l.pick(["开始下载", "開始下載", "Download"]),
     };
-    keyboard_hits(&mut c, t, f, s, enter, &mut out);
+    // The keys and the spelling bar are held in a dock at the foot of the
+    // screen, so the field, the code and the state of a download scroll under
+    // them rather than taking the whole screen with them.
+    let dock = keys_dock(t, f, s, enter);
     if let Some(rect) = field.clear {
-        out.push(Hit { rect, action: Action::ClearSearch });
+        out.push(Hit { rect, action: Action::ClearFetchUrl });
     }
-    Frame { header: false, caret: Some(field.caret), ..Frame::new(t, c, out, title, 0.0) }
+    let c = fit(c, t, end);
+    Frame { dock: Some(dock), caret: Some(field.caret), ..Frame::new(t, c, out, title, top) }
 }
 
 pub fn advanced(cx: &Ctx) -> Frame {
@@ -6410,9 +6428,9 @@ pub fn feedback(cx: &Ctx) -> Frame {
             f,
             y,
             l.pick([
-                "只能用英文输入。写不出英文也可以用拼音代替，意思到了就行。",
-                "只能用英文輸入。寫不出英文也可以用拼音代替，意思到了就行。",
-                "English only, though pinyin standing in for Chinese is fine: what it means is what matters.",
+                "中英文都可以写。中文用上面那一条拼音候选打出来，意思到了就行。",
+                "中英文都可以寫。中文用上面那一條拼音候選打出來，意思到了就行。",
+                "Write in Chinese or English: Chinese comes from the spelling bar above the keys, and what it means is what matters.",
             ]),
         );
     }
@@ -6486,10 +6504,7 @@ pub fn feedback(cx: &Ctx) -> Frame {
     // written over more lines than a screen holds. A report on its way, or one
     // turned down, is read rather than written: the keys would cover it.
     let dock = if matches!(fb.report, Report::Writing) {
-        let keys = widgets::keyboard_height(t);
-        let mut key_canvas = Canvas::new(m.w, keys.ceil() as u32);
-        let held = widgets::keyboard(&mut key_canvas, t, f, l, 0.0, s.layer, s.key_held(), l.pick(["换行", "換行", "Return"]), s.ime.enabled);
-        Some(Dock { canvas: key_canvas, hits: held.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect() })
+        Some(keys_dock(t, f, s, l.pick(["换行", "換行", "Return"])))
     } else {
         None
     };

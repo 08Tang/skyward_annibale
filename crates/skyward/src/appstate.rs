@@ -163,20 +163,35 @@ mkdir "$D" 2>/dev/null || exit 0
 
 /// 系统写回的停用状态，按包名：true 是已停用。`failed` 行不留记录（那一次
 /// 没成，页面上按「还能再停一次」显示）。
+///
+/// 队列里还没执行的请求也算：脚本要等到系统起来才动手，而 recovery 可能在这
+/// 之前重启过几次。只看写回的状态，一个已经排了队的包会显示成它原来的样子，
+/// 于是再点一下又是排一遍同样的请求 —— 看上去像点了没反应。
 pub fn states() -> BTreeMap<String, bool> {
     let mut out = BTreeMap::new();
-    let text = match fs::read_to_string(STATE) {
-        Ok(text) => text,
-        Err(_) => return out,
-    };
-    for line in text.lines() {
-        let mut parts = line.split_whitespace();
-        let (Some(word), Some(package)) = (parts.next(), parts.next()) else { continue };
-        match word {
-            "disabled" => out.insert(package.to_string(), true),
-            "enabled" => out.insert(package.to_string(), false),
-            _ => continue,
-        };
+    if let Ok(text) = fs::read_to_string(STATE) {
+        for line in text.lines() {
+            let mut parts = line.split_whitespace();
+            let (Some(word), Some(package)) = (parts.next(), parts.next()) else { continue };
+            match word {
+                "disabled" => out.insert(package.to_string(), true),
+                "enabled" => out.insert(package.to_string(), false),
+                _ => continue,
+            };
+        }
+    }
+    // The queue is read after the state it was written against, so a request
+    // still waiting is what the page shows.
+    if let Ok(text) = fs::read_to_string(QUEUE) {
+        for line in text.lines() {
+            let mut parts = line.split_whitespace();
+            let (Some(word), Some(package)) = (parts.next(), parts.next()) else { continue };
+            match word {
+                "disable" => out.insert(package.to_string(), true),
+                "enable" => out.insert(package.to_string(), false),
+                _ => continue,
+            };
+        }
     }
     out
 }

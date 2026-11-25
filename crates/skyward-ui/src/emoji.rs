@@ -295,8 +295,14 @@ impl Font {
         // baseline -- the peach's base, the whale's spout -- is not cut off
         // (the proportion settled on in 0.0.78).
         let scale = ppem as f32 / upem;
-        let (fw, fh) = (ppem as f32 * 1.05, ppem as f32 * 1.2);
-        let (ox, oy) = (ppem as f32 * 0.02, ppem as f32);
+        // The picture is a little wider than an em on both sides: a COLR
+        // layer may paint past the advance (the clock's hands, a face's
+        // ears), and a picture cut at the advance would lose that part of it.
+        // The margin is the same on each side, so the em stands in the middle
+        // and the advance follows the picture's width.
+        let margin = ppem as f32 * 0.12;
+        let (fw, fh) = (ppem as f32 + margin * 2.0, ppem as f32 * 1.2);
+        let (ox, oy) = (margin, ppem as f32);
         let mut parts: Vec<Layer> = Vec::new();
         for shape in &painter.shapes {
             let m = shape.transform;

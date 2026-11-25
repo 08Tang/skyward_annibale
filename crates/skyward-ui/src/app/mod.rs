@@ -415,6 +415,8 @@ pub enum Action {
     TermKey(TermKey),
     /// Empty the search field.
     ClearSearch,
+    /// Empty the download page's link field, which is not a search.
+    ClearFetchUrl,
     /// Leave the search, by the round button beside its field.
     CloseSearch,
     /// Open the file manager's entry at this place in the folder: a folder

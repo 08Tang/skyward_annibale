@@ -16,6 +16,9 @@ impl App {
             Screen::WlanAdd => self.state.adding.is_some(),
             Screen::Editor => self.state.editor.is_some(),
             Screen::Terminal => true,
+            // A report is written in either language: the bar is what types the
+            // Chinese, and the page says so.
+            Screen::Feedback => matches!(self.state.feedback.report, Report::Writing),
             Screen::Decrypt => matches!(self.state.data, Data::Locked { keys: Keys::Letters, checking: false, .. }),
             _ => false,
         }

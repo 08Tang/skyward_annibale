@@ -99,8 +99,13 @@ impl App {
                 if let Some(up) = self.state.files.up() {
                     return vec![Effect::ReadDir(up)];
                 }
-                // Leaving the file manager puts a picked entry down.
+                // Leaving the file manager puts a picked entry down, and gives
+                // up choosing a folder to serve: the bar that takes the folder
+                // is the file manager's, and leaving without taking it is a
+                // way of saying no. Left set, the bar would stand at the foot
+                // of the page the next time it was opened.
                 self.state.clip = None;
+                self.state.picking = false;
             }
             Screen::FilesOtg => {
                 if let Some(up) = self.state.otg.up() {

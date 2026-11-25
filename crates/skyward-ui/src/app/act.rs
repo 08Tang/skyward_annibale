@@ -133,6 +133,13 @@ impl App {
                 if s == Screen::Serve {
                     self.state.picking = false;
                 }
+                // Opening the file manager from anywhere but the serve page is
+                // not choosing a folder to serve, so the bar that takes one is
+                // not put at its foot: the choosing is the serve page's, and a
+                // page opened from the home page is only the file manager.
+                if s == Screen::Files && self.screen() != Screen::Serve {
+                    self.state.picking = false;
+                }
                 // The second system's place in Dual boot opens the install
                 // page for a package that installs a system beside the
                 // installed one, and says so: a package of any other kind is
@@ -755,6 +762,14 @@ impl App {
                 self.edits += 1;
                 self.refresh();
             }
+            // The download page's field holds a link, not a search: clearing it
+            // is its own thing, or the cross would empty the search page's
+            // query and leave the link where it was.
+            Action::ClearFetchUrl => {
+                self.state.fetch_url.clear();
+                self.edits += 1;
+                self.refresh();
+            }
             Action::OpenEntry(i) => {
                 let entry = self.state.files.entry(i).clone();
                 match entry.kind {
@@ -1068,12 +1083,15 @@ impl App {
                     None => None,
                 };
                 if let Some(package) = package {
-                    // What it is headed for already, if it was tapped before;
-                    // otherwise what it is now.
-                    let now_disabled = match self.state.app_state_queued.get(&package) {
-                        Some(&d) => d,
-                        None => self.state.app_disabled.as_ref().and_then(|m| m.get(&package)).copied().unwrap_or(false),
-                    };
+                    // What the app is headed for: a queued change first, since
+                    // it is the thing just asked for, and otherwise what the
+                    // system last reported. A queued change the system has
+                    // already carried out is no longer queued -- the state file
+                    // it was written from is what says so -- so this turns over
+                    // from the state the app is actually in.
+                    let disabled = self.state.app_disabled.as_ref().and_then(|m| m.get(&package)).copied().unwrap_or(false);
+                    let queued = self.state.app_state_queued.get(&package).copied();
+                    let now_disabled = queued.unwrap_or(disabled);
                     return vec![Effect::QueueAppState { package, disable: !now_disabled }];
                 }
             }
