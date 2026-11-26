@@ -783,7 +783,7 @@ mod tests {
 
     #[test]
     fn a_program_keeps_the_named_capabilities_its_init_script_gives_it() {
-        let text = "[device]\ncodename = \"x\"\n[[service]]\npath = \"/odm/bin/touch_report\"\nuser = \"system\"\ncapabilities = [\"SYS_NICE\"]\n";
+        let text = "[device]\ncodename = \"x\"\n[[service]]\npath = \"/odm/bin/touch_report\"\nuser = \"system\"\ngroups = [\"system\"]\ncapabilities = [\"SYS_NICE\"]\n";
         let touch = DeviceConfig::parse(text).unwrap().services.remove(0);
         assert_eq!((touch.user.as_deref(), &touch.capabilities[..]), (Some("system"), &["SYS_NICE".to_string()][..]));
     }
