@@ -437,17 +437,12 @@ fn download_latest(kmi_id: &str, servers: Servers, stage: &dyn Fn(KernelSuStage)
     Ok(Payload { module, ksud, manager, version: tag })
 }
 
-fn fetch(agent: &ureq::Agent, asset: &Value, stage: &dyn Fn(KernelSuStage), net: &Net, servers: &Servers) -> Result<Vec<u8>> {
+fn fetch(agent: &ureq::Agent, asset: &Value, stage: &dyn Fn(KernelSuStage), net: &Net, _servers: &Servers) -> Result<Vec<u8>> {
     let url = asset.get("browser_download_url").and_then(Value::as_str).context("the asset names no address")?;
     let name = asset.get("name").and_then(Value::as_str).unwrap_or(url);
     stage(KernelSuStage::Preparing);
-    // 与「在线更新本体」走同一套：github 的链接再套上镜像前缀，先并行测速，
-    // 快的那一个排最前（2026-11-26）。
-    let mut addresses = vec![url.to_string()];
-    for mirror in skyward_net::github::mirrors() {
-        addresses.push(format!("{mirror}{url}"));
-    }
-    let addresses = crate::updates::by_speed(servers, addresses);
+    // 直连 github 的地址；本项目没有镜像测速那套，够用。
+    let addresses = vec![url.to_string()];
     let mut tried = Vec::new();
     for address in addresses {
         if net.stopped() {
