@@ -1181,7 +1181,7 @@ pub fn root(cx: &Ctx) -> Frame {
     let mut out = Vec::new();
     let mut y = t.m.content_top;
 
-    let (kernel_su, magisk) = (kernel_su_saying(&s), magisk_saying(&s));
+    let (kernel_su, magisk) = (kernel_su_saying(s), magisk_saying(s));
     let rows = [
         Row::new(l.pick(texts::kernel_su::TITLE))
             .icon(BLUE, Icon::KernelSu)
