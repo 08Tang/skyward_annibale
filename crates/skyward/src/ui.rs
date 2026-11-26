@@ -2006,7 +2006,7 @@ impl<'a> Pages<'a> {
         self.wlan_told()?;
         self.root_told(now)?;
         self.magisk_told(now)?;
-        self.versions_told(now)?;
+        self.versions_told(now);
         self.keep_settings(now)?;
         self.updates_told(now)?;
         self.skyward_told(now)?;
@@ -2784,7 +2784,8 @@ impl Pages<'_> {
     /// is read again so the page shows what is now on the phone.
     fn root_told(&mut self, now: u64) -> Result<()> {
         if let Some(worker) = &self.root_worker {
-            self.root_bytes_told(worker);
+            let (done, total) = worker.bytes();
+            self.root_bytes_told(done, total);
         }
         let told = self.root_worker.as_ref().map(root::Worker::events).unwrap_or_default();
         let mut ended = false;
@@ -2815,7 +2816,8 @@ impl Pages<'_> {
     /// read again so the page shows what is now on the phone.
     fn magisk_told(&mut self, now: u64) -> Result<()> {
         if let Some(worker) = &self.magisk_worker {
-            self.root_bytes_told(worker);
+            let (done, total) = worker.bytes();
+            self.root_bytes_told(done, total);
         }
         let told = self.magisk_worker.as_ref().map(root::Worker::events).unwrap_or_default();
         let mut ended = false;
@@ -2842,8 +2844,7 @@ impl Pages<'_> {
     }
 
     /// 下载进度：半秒算一次速度，写到页面的卡上。
-    fn root_bytes_told(&mut self, worker: &root::Worker) {
-        let (done, total) = worker.bytes();
+    fn root_bytes_told(&mut self, done: u64, total: Option<u64>) {
         let at = Instant::now();
         match self.root_seen {
             Some((last, then)) if at.duration_since(then).as_secs_f64() >= 0.5 => {
