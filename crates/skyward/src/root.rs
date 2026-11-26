@@ -33,7 +33,6 @@ pub enum Task {
 pub enum Event {
     Stage(KernelSuStage),
     Fetched(String),
-    Fallback(String),
     Ended(KernelSuEnd),
 }
 
@@ -88,8 +87,6 @@ impl Versions {
 
 pub struct Worker {
     worker: skyward_sys::worker::Worker<Event>,
-    /// 手指把卡滑回去时置位：下载与写入看到它就收手。
-    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// 正在下的这一份：已下多少字节、总共多少（不知道时为 None）。
     bytes: std::sync::Arc<std::sync::Mutex<(u64, Option<u64>)>>,
 }
@@ -141,12 +138,7 @@ impl Worker {
             };
             tell.tell(Event::Ended(end));
         })?;
-        Ok(Worker { worker, stop, bytes })
-    }
-
-    /// 让它收手：下载中会立刻结束，已写出去的不会回滚。
-    pub fn stop(&self) {
-        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(Worker { worker, bytes })
     }
 
     /// 正在下的这一份：已下字节与总字节。
@@ -298,27 +290,7 @@ fn read_magisk_version() -> Option<String> {
     detailed(semver, package_version_code("com.topjohnwu.magisk"))
 }
 
-/// The KernelSU KMI to patch with when the page has not chosen one: the
-/// last one written, or the kernel's own default.
-pub fn auto_kmi(info: &skyward_info::DeviceInfo) -> Option<String> {
-    fs::read_to_string(Path::new(ROOT_DIR).join(KERNELSU_MANIFEST))
-        .ok()
-        .and_then(|text| field(&text, "kmi"))
-        .filter(|id| skyward_root::find(id).is_some())
-        .or_else(|| skyward_root::default(info.android.as_deref(), &info.kernel).map(|k| k.id.to_string()))
-}
 
-/// The module the last install wrote, when it was one the user chose:
-/// auto-patching the same kernel needs the same module, and one that has
-/// gone missing is a reason not to patch, not to fall back to another.
-pub fn auto_module() -> Result<Option<String>, String> {
-    let Ok(text) = fs::read_to_string(Path::new(ROOT_DIR).join(KERNELSU_MANIFEST)) else { return Ok(None) };
-    match field(&text, "module").as_deref() {
-        None | Some("builtin") => Ok(None),
-        Some(path) if Path::new(path).is_file() => Ok(Some(path.to_string())),
-        Some(path) => Err(format!("the KernelSU module {path} is gone")),
-    }
-}
 
 fn field(text: &str, name: &str) -> Option<String> {
     let key = format!("{name}=");

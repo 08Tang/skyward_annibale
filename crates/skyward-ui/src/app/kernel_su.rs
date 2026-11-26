@@ -85,9 +85,6 @@ pub struct KernelSuJob {
     pub outcome: Option<KernelSuEnd>,
     /// The latest release's version, once it has been downloaded.
     pub fetched: Option<String>,
-    /// Why the latest release could not be fetched, when the built-in
-    /// payloads were used instead.
-    pub fallback: Option<String>,
 }
 
 impl KernelSuStage {
@@ -118,13 +115,13 @@ impl App {
 
     /// Writing KernelSU has begun.
     pub fn kernel_su_started(&mut self) {
-        self.state.kernel_su_job = Some(KernelSuJob { stage: KernelSuStage::Preparing, outcome: None, fetched: None, fallback: None });
+        self.state.kernel_su_job = Some(KernelSuJob { stage: KernelSuStage::Preparing, outcome: None, fetched: None });
         self.refresh();
     }
 
     /// How far writing KernelSU has come.
     pub fn kernel_su_progress(&mut self, stage: KernelSuStage) {
-        let job = self.state.kernel_su_job.get_or_insert(KernelSuJob { stage, outcome: None, fetched: None, fallback: None });
+        let job = self.state.kernel_su_job.get_or_insert(KernelSuJob { stage, outcome: None, fetched: None });
         if job.outcome.is_none() {
             job.stage = stage;
             self.refresh();
@@ -142,20 +139,10 @@ impl App {
         self.refresh();
     }
 
-    /// The latest release could not be fetched; the built-in payloads are
-    /// used, and both the page and the toast say why.
-    pub fn kernel_su_fallback(&mut self, why: String, now: u64) {
-        if let Some(job) = &mut self.state.kernel_su_job {
-            job.fallback = Some(why.clone());
-        }
-        let said = format!("{} {why}", self.state.lang.pick(texts::kernel_su::FALLBACK));
-        self.report(&said, now);
-        self.refresh();
-    }
 
     /// Writing KernelSU ended, and the page says how.
     pub fn kernel_su_ended(&mut self, end: KernelSuEnd, now: u64) {
-        let job = self.state.kernel_su_job.get_or_insert(KernelSuJob { stage: KernelSuStage::Checking, outcome: None, fetched: None, fallback: None });
+        let job = self.state.kernel_su_job.get_or_insert(KernelSuJob { stage: KernelSuStage::Checking, outcome: None, fetched: None });
         job.outcome = Some(end);
         self.wake(now);
         self.refresh();

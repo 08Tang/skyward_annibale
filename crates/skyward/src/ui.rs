@@ -2793,7 +2793,6 @@ impl Pages<'_> {
             match ev {
                 root::Event::Stage(stage) => self.app.kernel_su_progress(stage),
                 root::Event::Fetched(version) => self.app.kernel_su_fetched(version, now),
-                root::Event::Fallback(why) => self.app.kernel_su_fallback(why, now),
                 root::Event::Ended(end) => {
                     skyward_sys::kmsg(&format!("writing KernelSU ended: {end:?}"))?;
                     self.app.kernel_su_ended(end, now);
@@ -2824,7 +2823,7 @@ impl Pages<'_> {
         for ev in told {
             match ev {
                 root::Event::Stage(stage) => self.app.magisk_progress(stage),
-                root::Event::Fetched(_) | root::Event::Fallback(_) => {}
+                root::Event::Fetched(_) => {}
                 root::Event::Ended(end) => {
                     skyward_sys::kmsg(&format!("writing Magisk ended: {end:?}"))?;
                     self.app.magisk_ended(end, now);
