@@ -26,13 +26,13 @@ impl App {
 
     /// Writing Magisk has begun.
     pub fn magisk_started(&mut self) {
-        self.state.magisk_job = Some(KernelSuJob { stage: KernelSuStage::Preparing, outcome: None, fetched: None, fallback: None });
+        self.state.magisk_job = Some(KernelSuJob { stage: KernelSuStage::Preparing, outcome: None, fetched: None });
         self.refresh();
     }
 
     /// How far writing Magisk has come.
     pub fn magisk_progress(&mut self, stage: KernelSuStage) {
-        let job = self.state.magisk_job.get_or_insert(KernelSuJob { stage, outcome: None, fetched: None, fallback: None });
+        let job = self.state.magisk_job.get_or_insert(KernelSuJob { stage, outcome: None, fetched: None });
         if job.outcome.is_none() {
             job.stage = stage;
             self.refresh();
@@ -41,7 +41,7 @@ impl App {
 
     /// Writing Magisk ended, and the page says how.
     pub fn magisk_ended(&mut self, end: KernelSuEnd, now: u64) {
-        let job = self.state.magisk_job.get_or_insert(KernelSuJob { stage: KernelSuStage::Checking, outcome: None, fetched: None, fallback: None });
+        let job = self.state.magisk_job.get_or_insert(KernelSuJob { stage: KernelSuStage::Checking, outcome: None, fetched: None });
         job.outcome = Some(end);
         self.wake(now);
         self.refresh();
