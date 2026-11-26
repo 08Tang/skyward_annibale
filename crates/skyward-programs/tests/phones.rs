@@ -221,7 +221,7 @@ fn the_hardware_s_script_is_named_by_what_the_bootloader_calls_the_hardware() {
 /// adds it where the phone's own init has it.
 #[test]
 fn each_charge_step_starts_the_programs_it_names_and_no_others() {
-    let properties = [("ro.boot.hardware", "qcom"), ("vendor.gatekeeper.is_security_level_spu", "0")];
+    let properties = [("ro.boot.hardware", "qcom"), ("ro.boot.product.vendor.sku", "kera"), ("vendor.gatekeeper.is_security_level_spu", "0")];
     let plain = secure::steps(&phone("annibale", &properties), false, false).unwrap();
     let fast = secure::steps(&phone("annibale", &properties), true, false).unwrap();
     let fastest = secure::steps(&phone("annibale", &properties), true, true).unwrap();
