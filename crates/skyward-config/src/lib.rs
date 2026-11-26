@@ -799,16 +799,12 @@ mod tests {
     }
 
     #[test]
-    fn each_phone_names_the_stock_build_its_recovery_is_made_on() {
-        for (text, version) in [
-            (include_str!("../../../devices/annibale.toml"), "OS4.0.6.0.WPKCNXM.D02"),
-        ] {
-            let stock = DeviceConfig::parse(text).unwrap().stock.expect("a stock build to build on");
-            assert_eq!(stock.version, version);
-            let package_version = stock.package_version.as_deref().unwrap_or(&stock.version);
-            let path = stock.package.split(['?', '#']).next().unwrap_or_default();
-            assert!(path.ends_with(".zip") && path.contains(&format!("/{package_version}/")), "{}", stock.package);
-        }
+    fn the_phone_names_the_stock_build_its_recovery_is_made_on() {
+        let stock = DeviceConfig::parse(include_str!("../../../devices/annibale.toml")).unwrap().stock.expect("a stock build to build on");
+        assert_eq!(stock.version, "OS4.0.6.0.WPKCNXM.D02");
+        let package_version = stock.package_version.as_deref().unwrap_or(&stock.version);
+        let path = stock.package.split(['?', '#']).next().unwrap_or_default();
+        assert!(path.ends_with(".zip") && path.contains(&format!("/{package_version}/")), "{}", stock.package);
     }
 
     #[test]
