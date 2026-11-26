@@ -3673,15 +3673,6 @@ impl Pages<'_> {
                     self.versions = Some(root::Versions::start(servers)?);
                 }
             }
-            Effect::CancelRoot { magisk } => {
-                if let Some(worker) = if magisk { self.magisk_worker.as_ref() } else { self.root_worker.as_ref() } {
-                    skyward_sys::kmsg(&format!("root: cancelled by the finger ({})", if magisk { "magisk" } else { "kernelsu" }))?;
-                    worker.stop();
-                }
-                self.app.clear_root_bytes();
-                self.app.state.confirm = 0.0;
-                self.app.refresh();
-            }
             Effect::ReadMagisk => self.app.set_magisk(root::magisk_status(&self.info)),
             Effect::InstallMagisk => {
                 ensure!(self.magisk_worker.is_none(), "Magisk is being written already");

@@ -1252,7 +1252,7 @@ pub fn kernel_su(cx: &Ctx) -> Frame {
     let latest = online_saying(l, s.latest_kernelsu.as_deref(), status.and_then(|st| st.version.as_deref()), !status.is_some_and(|st| st.installed));
     match status {
         Some(st) => {
-            rows.push(Row::new(l.pick(st.installed.then(|| texts::kernel_su::INSTALLED).unwrap_or_else(|| texts::kernel_su::NOT_INSTALLED))).trail(Trail::Value(&version)));
+            rows.push(Row::new(l.pick(if st.installed { texts::kernel_su::INSTALLED } else { texts::kernel_su::NOT_INSTALLED })).trail(Trail::Value(&version)));
             rows.push(Row::new(&latest_label).trail(Trail::Value(&latest)));
             if let Some(target) = &st.backup_target {
                 rows.push(Row::new(l.pick(texts::kernel_su::INSTALLED_TO)).trail(Trail::Value(target)));
@@ -1260,7 +1260,7 @@ pub fn kernel_su(cx: &Ctx) -> Frame {
             if let Some(slot) = &st.slot {
                 rows.push(Row::new(&slot_label).trail(Trail::Value(slot)));
             }
-            rows.push(Row::new(&lock_label).trail(Trail::Value(l.pick([st.unlocked.then(|| "已解锁").unwrap_or("已锁定"), st.unlocked.then(|| "已解鎖").unwrap_or("已鎖定"), st.unlocked.then(|| "Unlocked").unwrap_or("Locked")]))));
+            rows.push(Row::new(&lock_label).trail(Trail::Value(l.pick(if st.unlocked { ["已解锁", "已解鎖", "Unlocked"] } else { ["已锁定", "已鎖定", "Locked"] }))));
         }
         None => rows.push(Row::new(l.pick(texts::kernel_su::NOT_READ)).trail(Trail::None)),
     }
@@ -1414,7 +1414,7 @@ pub fn magisk(cx: &Ctx) -> Frame {
     let mut rows = Vec::new();
     match st {
         Some(st) => {
-            rows.push(Row::new(l.pick(st.installed.then(|| texts::kernel_su::INSTALLED).unwrap_or_else(|| texts::kernel_su::NOT_INSTALLED))).trail(Trail::Value(&version)));
+            rows.push(Row::new(l.pick(if st.installed { texts::kernel_su::INSTALLED } else { texts::kernel_su::NOT_INSTALLED })).trail(Trail::Value(&version)));
             rows.push(Row::new(&latest_label).trail(Trail::Value(&latest)));
             if let Some(target) = &st.backup_target {
                 rows.push(Row::new(l.pick(texts::kernel_su::INSTALLED_TO)).trail(Trail::Value(target)));

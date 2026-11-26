@@ -1053,12 +1053,12 @@ impl App {
             // goes to is opened so that the folder it lands in can be walked
             // to, and the bar at the foot puts it down there.
             // 列表点到一行：打开这一行的详情，那儿才有开关和卸载。
-            /// 选 KernelSU 列表里这个位置的 KMI 来写。
+            // 选 KernelSU 列表里这个位置的 KMI 来写。
             Action::KernelSuKmi(at) => {
                 self.set_kernel_su_kmi(at);
                 return self.back(now);
             }
-            /// 把备份的 KernelSU 原厂 boot 写回去。
+            // 把备份的 KernelSU 原厂 boot 写回去。
             Action::RestoreKernelSu => {
                 if self.state.data != Data::Open {
                     self.say(l.pick(texts::kernel_su::NO_DATA), now);
@@ -1069,10 +1069,10 @@ impl App {
                     return vec![Effect::RestoreKernelSu];
                 }
             }
-            /// 把备份的 Magisk 原厂 boot 写回去。
+            // 把备份的 Magisk 原厂 boot 写回去。
             Action::RestoreMagisk => {
                 if self.state.data != Data::Open {
-                    self.say(l.pick(texts::magisk::BUSY), now);
+                    self.say(l.pick(texts::kernel_su::NO_DATA), now);
                 } else if self.state.magisk_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
                     self.say(l.pick(texts::magisk::BUSY), now);
                 } else {
@@ -1080,7 +1080,7 @@ impl App {
                     return vec![Effect::RestoreMagisk];
                 }
             }
-            /// 选哪个 Root 在安装后修补新槽，或不修补。
+            // 选哪个 Root 在安装后修补新槽，或不修补。
             Action::SetAutoRoot(root) => {
                 self.state.auto_root = root;
                 self.refresh();
@@ -1422,23 +1422,6 @@ impl App {
         matches!(is_newer(installed.as_deref(), online.as_deref()), Some(false))
     }
 
-    /// 手指把滑块从底滑回左端（没滑完）：对正在写的 Root 就是取消。
-    pub(super) fn unconfirmed(&mut self, which: Confirm, now: u64) -> Vec<Effect> {
-        let l = self.state.lang;
-        let running = |job: Option<&KernelSuJob>| job.is_some_and(|j| j.outcome.is_none());
-        match which {
-            Confirm::KernelSu if running(self.state.kernel_su_job.as_ref()) => {
-                self.say(l.pick(["已取消", "已取消", "Cancelled"]), now);
-                vec![Effect::CancelRoot { magisk: false }]
-            }
-            Confirm::Magisk if running(self.state.magisk_job.as_ref()) => {
-                self.say(l.pick(["已取消", "已取消", "Cancelled"]), now);
-                vec![Effect::CancelRoot { magisk: true }]
-            }
-            _ => Vec::new(),
-        }
-    }
-
     pub(super) fn confirmed(&mut self, which: Confirm, now: u64) -> Vec<Effect> {
         let (l, mut fx) = (self.state.lang, Vec::new());
         // Every slider taken across is answered with a click of the motor,
@@ -1453,7 +1436,7 @@ impl App {
                 self.lock = None;
                 self.refresh();
             }
-            /// 把选好的 KMI 写进当前槽的 boot 镜像。
+            // 把选好的 KMI 写进当前槽的 boot 镜像。
             Confirm::KernelSu => {
                 if self.state.data != Data::Open {
                     self.say(l.pick(texts::kernel_su::NO_DATA), now);
@@ -1473,7 +1456,7 @@ impl App {
             }
             Confirm::Magisk => {
                 if self.state.data != Data::Open {
-                    self.say(l.pick(texts::magisk::BUSY), now);
+                    self.say(l.pick(texts::kernel_su::NO_DATA), now);
                 } else if self.state.magisk_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
                     self.say(l.pick(texts::magisk::BUSY), now);
                 } else if self.state.magisk.as_ref().and_then(|r| r.as_ref().ok()).is_some_and(|st| !st.unlocked) {

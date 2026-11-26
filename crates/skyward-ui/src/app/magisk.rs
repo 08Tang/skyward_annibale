@@ -2,7 +2,6 @@
 //! into the current slot.
 
 use super::*;
-use crate::texts;
 
 /// What the phone and Magisk's APK say before anything is written.
 #[derive(Clone, Debug, PartialEq, Eq)]

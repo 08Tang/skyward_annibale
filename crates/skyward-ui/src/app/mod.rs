@@ -969,8 +969,6 @@ pub enum Effect {
     InstallMagisk,
     /// 把 Magisk 换掉的 boot 镜像写回去。
     RestoreMagisk,
-    /// 手指把卡滑回去：正在下的这一份停下。
-    CancelRoot { magisk: bool },
     /// 问一下 GitHub 上 KernelSU 与 Magisk 的最新版本号。
     ReadRootLatest,
 }
