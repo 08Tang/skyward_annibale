@@ -1185,10 +1185,10 @@ pub fn root(cx: &Ctx) -> Frame {
     let rows = [
         Row::new(l.pick(texts::kernel_su::TITLE))
             .icon(BLUE, Icon::KernelSu)
-            .trail(Trail::Value(&kernel_su)),
+            .trail(Trail::Value(kernel_su.as_str())),
         Row::new(l.pick(texts::magisk::TITLE))
             .icon(PURPLE, Icon::Magisk)
-            .trail(Trail::Value(&magisk)),
+            .trail(Trail::Value(magisk.as_str())),
         Row::new(l.pick(MODULES)).icon(GREEN, Icon::Layers),
     ];
     let opens = [
