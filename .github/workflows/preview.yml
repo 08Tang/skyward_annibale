@@ -41,13 +41,6 @@ jobs:
         run: |
           cargo metadata --format-version 1 > /dev/null
           git diff --exit-code -- Cargo.lock
-      # 暂时：锁文件没对上时把 cargo 写出来的那份留下来，好照着改。
-      - name: Keep the lock file as cargo resolves it
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: resolved-Cargo.lock
-          path: Cargo.lock
       - name: Lint what runs on the computer
         run: cargo clippy --workspace --all-targets -- -D warnings
       # The vendored QR generator's own examples are written for its own
