@@ -2506,6 +2506,7 @@ dependencies = [
  "libc",
  "procfs",
  "sha2 0.10.9",
+ "serde_json",
  "skyward-backup",
  "skyward-binder",
  "skyward-block",
