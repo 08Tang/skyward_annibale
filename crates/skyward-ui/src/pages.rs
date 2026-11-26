@@ -3,7 +3,8 @@ use crate::app::{
     DownloadEnd,
     EraseStop, FASTBOOT_CHOICES, Fetch, Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, ImageEnd, ImageFlow, ImageJob, Install, JobEnd, Keys, PackageKind, Pick, Pinned, Place, Region, Rows,
     RecordSetting, SCREEN_OFF, Screen, SearchScope, Serving, SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, SortKey, Source, State, Switch, SystemsWork, TARGETS, THERMAL_LIMIT_LEAST, THERMAL_LIMIT_MOST, TIME_ZONES, Target, Report,
-    UsbDrive, UsbLink, WIPES, Wipe, installs, starting, MEDIA_PART, UTC, listed, DATA_PART,};
+    UsbDrive, UsbLink, WIPES, Wipe, installs, starting, MEDIA_PART, UTC, listed, DATA_PART,
+    AutoRoot, KernelSuEnd, KernelSuJob, KernelSuStage, is_newer,};
 use crate::canvas::Canvas;
 use crate::color::Rgba;
 use crate::editor;
@@ -1188,7 +1189,7 @@ pub fn root(cx: &Ctx) -> Frame {
         Row::new(l.pick(texts::magisk::TITLE))
             .icon(PURPLE, Icon::Magisk)
             .trail(Trail::Value(&magisk)),
-        Row::new(l.pick(texts::modules::TITLE)).icon(GREEN, Icon::Layers),
+        Row::new(l.pick(MODULES)).icon(GREEN, Icon::Layers),
     ];
     let opens = [
         Action::Open(Screen::KernelSu),

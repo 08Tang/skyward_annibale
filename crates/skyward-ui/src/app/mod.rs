@@ -86,6 +86,8 @@ pub use image::*;
 pub use install::*;
 pub use manager::*;
 pub use mount::*;
+pub use kernel_su::*;
+pub use magisk::*;
 pub use prefs::*;
 pub use reboot::*;
 pub use relabel::*;
