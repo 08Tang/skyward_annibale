@@ -339,6 +339,36 @@ impl App {
                 }
             }
             Screen::Slot | Screen::Reboot => vec![Effect::ReadSlots],
+            // Root 的页与它的三页进来就把现状读一遍：KernelSU、Magisk、模块。
+            Screen::Root => {
+                let mut fx = vec![Effect::ReadKernelSu, Effect::ReadMagisk];
+                if self.state.latest_kernelsu.is_none() {
+                    fx.push(Effect::ReadRootLatest);
+                }
+                if self.state.modules.is_none() {
+                    fx.push(Effect::ReadModules);
+                }
+                fx
+            }
+            Screen::KernelSu => {
+                self.state.kernel_su = None;
+                self.state.kernel_su_job = None;
+                let mut fx = vec![Effect::ReadKernelSu];
+                if self.state.latest_kernelsu.is_none() {
+                    fx.push(Effect::ReadRootLatest);
+                }
+                fx
+            }
+            Screen::KernelSuKmi => vec![Effect::ReadKernelSu],
+            Screen::Magisk => {
+                self.state.magisk = None;
+                self.state.magisk_job = None;
+                let mut fx = vec![Effect::ReadMagisk];
+                if self.state.latest_magisk.is_none() {
+                    fx.push(Effect::ReadRootLatest);
+                }
+                fx
+            }
             Screen::Systems => vec![Effect::ReadSystems],
             Screen::Restore => vec![self.find_backups()],
             Screen::Files => vec![Effect::ReadDir(self.state.files.path.clone())],

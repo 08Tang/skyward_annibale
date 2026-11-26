@@ -1053,6 +1053,38 @@ impl App {
             // goes to is opened so that the folder it lands in can be walked
             // to, and the bar at the foot puts it down there.
             // 列表点到一行：打开这一行的详情，那儿才有开关和卸载。
+            /// 选 KernelSU 列表里这个位置的 KMI 来写。
+            Action::KernelSuKmi(at) => {
+                self.set_kernel_su_kmi(at);
+                return self.back(now);
+            }
+            /// 把备份的 KernelSU 原厂 boot 写回去。
+            Action::RestoreKernelSu => {
+                if self.state.data != Data::Open {
+                    self.say(l.pick(texts::kernel_su::NO_DATA), now);
+                } else if self.state.kernel_su_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
+                    self.say(l.pick(texts::kernel_su::BUSY), now);
+                } else {
+                    self.kernel_su_started();
+                    return vec![Effect::RestoreKernelSu];
+                }
+            }
+            /// 把备份的 Magisk 原厂 boot 写回去。
+            Action::RestoreMagisk => {
+                if self.state.data != Data::Open {
+                    self.say(l.pick(texts::magisk::BUSY), now);
+                } else if self.state.magisk_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
+                    self.say(l.pick(texts::magisk::BUSY), now);
+                } else {
+                    self.magisk_started();
+                    return vec![Effect::RestoreMagisk];
+                }
+            }
+            /// 选哪个 Root 在安装后修补新槽，或不修补。
+            Action::SetAutoRoot(root) => {
+                self.state.auto_root = root;
+                self.refresh();
+            }
             Action::ModuleOpen(k) => {
                 self.state.module_at = Some(k);
                 return self.act(Action::Open(Screen::ModuleInfo), now);
@@ -1378,6 +1410,35 @@ impl App {
     }
 
     /// What a swipe-to-confirm control slid to its end does.
+    /// 在线的那一版比装着的旧吗：旧 → 不写，页面拦住。
+    fn root_would_downgrade(&self, magisk: bool) -> bool {
+        let (installed, online) = if magisk {
+            let installed = self.state.magisk.as_ref().and_then(|r| r.as_ref().ok()).and_then(|st| st.version.clone());
+            (installed, self.state.latest_magisk.clone())
+        } else {
+            let installed = self.state.kernel_su.as_ref().and_then(|r| r.as_ref().ok()).and_then(|st| st.version.clone());
+            (installed, self.state.latest_kernelsu.clone())
+        };
+        matches!(is_newer(installed.as_deref(), online.as_deref()), Some(false))
+    }
+
+    /// 手指把滑块从底滑回左端（没滑完）：对正在写的 Root 就是取消。
+    pub(super) fn unconfirmed(&mut self, which: Confirm, now: u64) -> Vec<Effect> {
+        let l = self.state.lang;
+        let running = |job: Option<&KernelSuJob>| job.is_some_and(|j| j.outcome.is_none());
+        match which {
+            Confirm::KernelSu if running(self.state.kernel_su_job.as_ref()) => {
+                self.say(l.pick(["已取消", "已取消", "Cancelled"]), now);
+                vec![Effect::CancelRoot { magisk: false }]
+            }
+            Confirm::Magisk if running(self.state.magisk_job.as_ref()) => {
+                self.say(l.pick(["已取消", "已取消", "Cancelled"]), now);
+                vec![Effect::CancelRoot { magisk: true }]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     pub(super) fn confirmed(&mut self, which: Confirm, now: u64) -> Vec<Effect> {
         let (l, mut fx) = (self.state.lang, Vec::new());
         // Every slider taken across is answered with a click of the motor,
@@ -1391,6 +1452,39 @@ impl App {
             Confirm::Unlock => {
                 self.lock = None;
                 self.refresh();
+            }
+            /// 把选好的 KMI 写进当前槽的 boot 镜像。
+            Confirm::KernelSu => {
+                if self.state.data != Data::Open {
+                    self.say(l.pick(texts::kernel_su::NO_DATA), now);
+                } else if self.state.kernel_su_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
+                    self.say(l.pick(texts::kernel_su::BUSY), now);
+                } else if self.state.kernel_su.as_ref().and_then(|r| r.as_ref().ok()).is_some_and(|st| !st.unlocked) {
+                    self.say(l.pick(texts::kernel_su::LOCKED), now);
+                } else if self.root_would_downgrade(false) {
+                    self.say(l.pick(["已是最新，不降级", "已是最新，不降級", "Already the newest; not downgraded"]), now);
+                } else {
+                    let kmi = self.kernel_su_kmi().map(|row| row.id.clone()).unwrap_or_default();
+                    let module = self.state.kernel_su_ko.take();
+                    self.kernel_su_started();
+                    self.state.confirm = 1.0;
+                    fx.push(Effect::InstallKernelSu { kmi, module });
+                }
+            }
+            Confirm::Magisk => {
+                if self.state.data != Data::Open {
+                    self.say(l.pick(texts::magisk::BUSY), now);
+                } else if self.state.magisk_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
+                    self.say(l.pick(texts::magisk::BUSY), now);
+                } else if self.state.magisk.as_ref().and_then(|r| r.as_ref().ok()).is_some_and(|st| !st.unlocked) {
+                    self.say(l.pick(texts::kernel_su::LOCKED), now);
+                } else if self.root_would_downgrade(true) {
+                    self.say(l.pick(["已是最新，不降级", "已是最新，不降級", "Already the newest; not downgraded"]), now);
+                } else {
+                    self.magisk_started();
+                    self.state.confirm = 1.0;
+                    fx.push(Effect::InstallMagisk);
+                }
             }
             Confirm::Reboot => fx.push(Effect::Reboot(TARGETS[self.state.reboot])),
             Confirm::PowerOff => fx.push(Effect::Reboot(Target::PowerOff)),

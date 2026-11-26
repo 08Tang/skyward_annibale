@@ -50,6 +50,8 @@ mod ime;
 mod input;
 mod install;
 mod keys;
+mod kernel_su;
+mod magisk;
 mod manager;
 mod modules;
 mod mount;
@@ -134,6 +136,15 @@ pub enum Screen {
     Modules,
     /// One module: what it is, and what can be done with it.
     ModuleInfo,
+    /// Root: what KernelSU and Magisk are on the phone, and writing one into
+    /// the running slot.
+    Root,
+    /// KernelSU's page: the KMI the phone runs, and writing the chosen one.
+    KernelSu,
+    /// Choosing the KMI by hand, from the list KernelSU is built for.
+    KernelSuKmi,
+    /// Magisk's page: writing its patched boot image into the running slot.
+    Magisk,
     /// The apps the owner installed, newest first, a screen at a time.
     DataApps,
     /// The apps the system's own partitions hold: what is there, and
@@ -285,6 +296,10 @@ pub enum Confirm {
     RunScript,
     /// Merge the update that waits in the slot the phone runs from.
     Merge,
+    /// 把 KernelSU 写进当前槽的 boot 镜像。
+    KernelSu,
+    /// 把 Magisk 写进当前槽的 boot 镜像。
+    Magisk,
     /// Give the data partition's files the SELinux labels the installed
     /// system's rules give them.
     Relabel,
@@ -437,6 +452,14 @@ pub enum Action {
     InstallAsModule,
     /// Open the module at this place in the list.
     ModuleOpen(usize),
+    /// 选 KernelSU 列表里这个位置的 KMI 来写。
+    KernelSuKmi(usize),
+    /// 把备份的 KernelSU 原厂 boot 写回去。
+    RestoreKernelSu,
+    /// 把备份的 Magisk 原厂 boot 写回去。
+    RestoreMagisk,
+    /// 选哪个 Root 在安装后修补新槽，或不修补；两者不能同时装。
+    SetAutoRoot(AutoRoot),
     /// Turn the apps page by this many screens: a negative count goes back.
     /// The apps page turned to the screen at this place in the list.
     AppPage(usize),
@@ -932,6 +955,22 @@ pub enum Effect {
     /// Merge the update that waits in the slot the phone runs from,
     /// telling how it goes with [`App::set_update`].
     Merge,
+    /// 把 KMI 写进当前槽的 boot 镜像。
+    InstallKernelSu { kmi: String, module: Option<String> },
+    /// 把 KernelSU 换掉的 boot 镜像写回去。
+    RestoreKernelSu,
+    /// 读 KernelSU 与手机的现状。
+    ReadKernelSu,
+    /// 读 Magisk 与手机的现状。
+    ReadMagisk,
+    /// 把 Magisk 写进当前槽的 boot 镜像。
+    InstallMagisk,
+    /// 把 Magisk 换掉的 boot 镜像写回去。
+    RestoreMagisk,
+    /// 手指把卡滑回去：正在下的这一份停下。
+    CancelRoot { magisk: bool },
+    /// 问一下 GitHub 上 KernelSU 与 Magisk 的最新版本号。
+    ReadRootLatest,
 }
 
 enum Drag {

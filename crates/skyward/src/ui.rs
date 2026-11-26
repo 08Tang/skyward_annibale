@@ -1368,6 +1368,20 @@ struct Pages<'a> {
     reporter: Option<report::Worker>,
     /// Whether verified boot's checks have been read for the avb page shown.
     avb_read: bool,
+    /// Writing KernelSU into the running slot, or reading what it left.
+    root_worker: Option<root::Worker>,
+    /// Writing Magisk into the running slot.
+    magisk_worker: Option<root::Worker>,
+    /// The latest versions on GitHub being asked for.
+    versions: Option<root::Versions>,
+    /// How many times the versions were asked for without an answer.
+    versions_tries: u32,
+    /// When to ask for them again, while the network is not up yet.
+    versions_retry: Option<u64>,
+    /// The last byte count seen, and when, so the rate can be worked out.
+    root_seen: Option<(u64, Instant)>,
+    /// How fast the download went in the last second.
+    root_rate: u64,
     portal: Option<crate::portal::Portal>,
     scanned_at: Instant,
     /// The network kept with the password that worked, and how far the opening
@@ -1649,6 +1663,13 @@ impl<'a> Pages<'a> {
             fetcher: None,
             reporter: None,
             avb_read: false,
+            root_worker: None,
+            magisk_worker: None,
+            versions: None,
+            versions_tries: 0,
+            versions_retry: None,
+            root_seen: None,
+            root_rate: 0,
             portal: None,
             scanned_at: Instant::now(),
             wlan_saved: None,
@@ -1982,6 +2003,9 @@ impl<'a> Pages<'a> {
         self.merge_told(now)?;
         self.systems_told(now)?;
         self.wlan_told()?;
+        self.root_told(now)?;
+        self.magisk_told(now)?;
+        self.versions_told(now)?;
         self.keep_settings(now)?;
         self.updates_told(now)?;
         self.skyward_told(now)?;
@@ -2239,6 +2263,15 @@ impl<'a> Pages<'a> {
         }
         if let Some(s) = &self.systems_worker {
             fds.push(s.fd());
+        }
+        if let Some(r) = &self.root_worker {
+            fds.push(r.fd());
+        }
+        if let Some(m) = &self.magisk_worker {
+            fds.push(m.fd());
+        }
+        if let Some(v) = &self.versions {
+            fds.push(v.fd());
         }
         fds.push(self.readings.fd());
         wait(&fds, timeout)
@@ -2709,6 +2742,120 @@ impl Pages<'_> {
 
     /// What the WLAN told; its page scans again now and then while it
     /// shows, as the stock settings do.
+    /// 在线版本号问回来了：页面上写出来，下一次进来不必再问。
+    fn versions_told(&mut self, now: u64) {
+        let told = self.versions.as_ref().map(root::Versions::events).unwrap_or_default();
+        for ev in told {
+            let root::VersionEvent::Done(kernelsu, magisk) = ev;
+            self.versions = None;
+            if kernelsu.is_none() && magisk.is_none() {
+                // 多半是网还没连上：过一会儿再问，问六次为止。
+                self.versions_tries += 1;
+                if self.versions_tries <= 6 {
+                    self.versions_retry = Some(now + 5_000);
+                    let _ = skyward_sys::kmsg(&format!(
+                        "root: the online versions were not asked again yet (try {}), asking again in 5 s",
+                        self.versions_tries
+                    ));
+                } else {
+                    let _ = skyward_sys::kmsg("root: the online versions were not answered after six tries");
+                    self.app.mark_latest_unavailable();
+                }
+            } else {
+                self.versions_retry = None;
+                self.app.set_latest_root(kernelsu, magisk);
+            }
+        }
+        // 到点了再问一次。
+        if self.versions.is_none()
+            && let Some(at) = self.versions_retry
+            && now >= at
+        {
+            self.versions_retry = None;
+            let servers = self.servers.clone();
+            if let Ok(v) = root::Versions::start(servers) {
+                self.versions = Some(v);
+            }
+        }
+    }
+
+    /// What writing KernelSU told: its page follows the stages, and its end
+    /// is read again so the page shows what is now on the phone.
+    fn root_told(&mut self, now: u64) -> Result<()> {
+        if let Some(worker) = &self.root_worker {
+            self.root_bytes_told(worker);
+        }
+        let told = self.root_worker.as_ref().map(root::Worker::events).unwrap_or_default();
+        let mut ended = false;
+        for ev in told {
+            match ev {
+                root::Event::Stage(stage) => self.app.kernel_su_progress(stage),
+                root::Event::Fetched(version) => self.app.kernel_su_fetched(version, now),
+                root::Event::Fallback(why) => self.app.kernel_su_fallback(why, now),
+                root::Event::Ended(end) => {
+                    skyward_sys::kmsg(&format!("writing KernelSU ended: {end:?}"))?;
+                    self.app.kernel_su_ended(end, now);
+                    ended = true;
+                }
+            }
+        }
+        if ended {
+            self.root_worker = None;
+            self.root_seen = None;
+            self.root_rate = 0;
+            self.app.clear_root_bytes();
+            self.app.state.confirm = 0.0;
+            self.app.set_kernel_su(root::status(&self.info));
+        }
+        Ok(())
+    }
+
+    /// What writing Magisk told: its page follows the stages, and its end is
+    /// read again so the page shows what is now on the phone.
+    fn magisk_told(&mut self, now: u64) -> Result<()> {
+        if let Some(worker) = &self.magisk_worker {
+            self.root_bytes_told(worker);
+        }
+        let told = self.magisk_worker.as_ref().map(root::Worker::events).unwrap_or_default();
+        let mut ended = false;
+        for ev in told {
+            match ev {
+                root::Event::Stage(stage) => self.app.magisk_progress(stage),
+                root::Event::Fetched(_) | root::Event::Fallback(_) => {}
+                root::Event::Ended(end) => {
+                    skyward_sys::kmsg(&format!("writing Magisk ended: {end:?}"))?;
+                    self.app.magisk_ended(end, now);
+                    ended = true;
+                }
+            }
+        }
+        if ended {
+            self.magisk_worker = None;
+            self.root_seen = None;
+            self.root_rate = 0;
+            self.app.clear_root_bytes();
+            self.app.state.confirm = 0.0;
+            self.app.set_magisk(root::magisk_status(&self.info));
+        }
+        Ok(())
+    }
+
+    /// 下载进度：半秒算一次速度，写到页面的卡上。
+    fn root_bytes_told(&mut self, worker: &root::Worker) {
+        let (done, total) = worker.bytes();
+        let at = Instant::now();
+        match self.root_seen {
+            Some((last, then)) if at.duration_since(then).as_secs_f64() >= 0.5 => {
+                let seconds = at.duration_since(then).as_secs_f64();
+                self.root_rate = (done.saturating_sub(last) as f64 / seconds) as u64;
+                self.root_seen = Some((done, at));
+            }
+            Some(_) => {}
+            None => self.root_seen = Some((done, at)),
+        }
+        self.app.set_root_bytes(done, total, self.root_rate);
+    }
+
     fn wlan_told(&mut self) -> Result<()> {
         if let Some((told, traffic)) = self.wlan.as_ref().map(wlan::Worker::told) {
             if let Some(w) = told {
@@ -3504,6 +3651,53 @@ impl Pages<'_> {
                 self.app.set_modules(rows);
             }
             Effect::ReadSlots => self.app.set_boot_slots(read_slots()),
+            Effect::ReadKernelSu => self.app.set_kernel_su(root::status(&self.info)),
+            Effect::InstallKernelSu { kmi, module } => {
+                ensure!(self.root_worker.is_none(), "KernelSU is being written already");
+                ensure!(self.magisk_worker.is_none(), "Magisk is being written already");
+                ensure!(self.installer.is_none(), "an installer is running already");
+                skyward_sys::kmsg(&format!("fetching and writing the latest KernelSU {kmi} into the current slot"))?;
+                let servers = self.servers.clone();
+                self.root_worker = Some(root::Worker::start(root::Task::InstallKernelSu { kmi, slot: None, servers, module })?);
+            }
+            Effect::RestoreKernelSu => {
+                ensure!(self.root_worker.is_none(), "KernelSU is being written already");
+                ensure!(self.magisk_worker.is_none(), "Magisk is being written already");
+                ensure!(self.installer.is_none(), "an installer is running already");
+                skyward_sys::kmsg("restoring the stock boot image KernelSU replaced")?;
+                self.root_worker = Some(root::Worker::start(root::Task::RestoreKernelSu)?);
+            }
+            Effect::ReadRootLatest => {
+                if self.versions.is_none() {
+                    let servers = self.servers.clone();
+                    self.versions = Some(root::Versions::start(servers)?);
+                }
+            }
+            Effect::CancelRoot { magisk } => {
+                if let Some(worker) = if magisk { self.magisk_worker.as_ref() } else { self.root_worker.as_ref() } {
+                    skyward_sys::kmsg(&format!("root: cancelled by the finger ({})", if magisk { "magisk" } else { "kernelsu" }))?;
+                    worker.stop();
+                }
+                self.app.clear_root_bytes();
+                self.app.state.confirm = 0.0;
+                self.app.refresh();
+            }
+            Effect::ReadMagisk => self.app.set_magisk(root::magisk_status(&self.info)),
+            Effect::InstallMagisk => {
+                ensure!(self.magisk_worker.is_none(), "Magisk is being written already");
+                ensure!(self.root_worker.is_none(), "KernelSU is being written already");
+                ensure!(self.installer.is_none(), "an installer is running already");
+                skyward_sys::kmsg("writing Magisk into the current slot")?;
+                let servers = self.servers.clone();
+                self.magisk_worker = Some(root::Worker::start(root::Task::InstallMagisk { slot: None, servers })?);
+            }
+            Effect::RestoreMagisk => {
+                ensure!(self.magisk_worker.is_none(), "Magisk is being written already");
+                ensure!(self.root_worker.is_none(), "KernelSU is being written already");
+                ensure!(self.installer.is_none(), "an installer is running already");
+                skyward_sys::kmsg("restoring the stock boot image Magisk replaced")?;
+                self.magisk_worker = Some(root::Worker::start(root::Task::RestoreMagisk)?);
+            }
             Effect::SetSlot(slot) => self.app.slot_switched(set_slot(slot), now),
             Effect::ReadSystems => self.systems()?.send(systems::Task::Read),
             // An install still under way may yet write the boot

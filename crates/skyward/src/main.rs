@@ -51,6 +51,8 @@ mod remember;
 #[cfg(target_os = "android")]
 mod report;
 #[cfg(target_os = "android")]
+mod root;
+#[cfg(target_os = "android")]
 mod secure;
 #[cfg(target_os = "android")]
 mod services;

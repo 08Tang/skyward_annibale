@@ -57,6 +57,44 @@ pub enum Switch {
 /// the order the page lists them; `None` keeps it on.
 pub const SCREEN_OFF: [Option<u64>; 7] = [Some(15_000), Some(30_000), Some(60_000), Some(120_000), Some(300_000), Some(600_000), None];
 
+/// Which root manager patches the new slot after an install. Only one may
+/// be installed, so only one may be chosen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AutoRoot {
+    #[default]
+    None,
+    KernelSu,
+    Magisk,
+}
+
+impl AutoRoot {
+    pub fn name(self) -> &'static str {
+        match self {
+            AutoRoot::None => "none",
+            AutoRoot::KernelSu => "kernelsu",
+            AutoRoot::Magisk => "magisk",
+        }
+    }
+
+    /// 点一下换下一个：关 → KernelSU → Magisk → 关。
+    pub fn next(self) -> AutoRoot {
+        match self {
+            AutoRoot::None => AutoRoot::KernelSu,
+            AutoRoot::KernelSu => AutoRoot::Magisk,
+            AutoRoot::Magisk => AutoRoot::None,
+        }
+    }
+
+    pub fn named(name: &str) -> Option<AutoRoot> {
+        match name {
+            "none" => Some(AutoRoot::None),
+            "kernelsu" => Some(AutoRoot::KernelSu),
+            "magisk" => Some(AutoRoot::Magisk),
+            _ => None,
+        }
+    }
+}
+
 /// A part of the world the time zone page lists its zones under.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Region {

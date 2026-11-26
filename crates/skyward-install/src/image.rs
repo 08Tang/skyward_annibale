@@ -348,6 +348,34 @@ fn holds(packed: impl Read, wanted: impl Fn(&str) -> bool) -> Result<bool> {
     Ok(find(packed, wanted, |_| Ok(()))?.is_some())
 }
 
+/// Whether the boot image's ramdisk holds an entry whose name `wanted`
+/// picks: whether the image already carries a root manager's patch.
+pub fn ramdisk_holds<R: Read + Seek>(file: &mut R, wanted: impl Fn(&str) -> bool) -> Result<bool> {
+    Ok(in_ramdisk(file, wanted, |_| Ok(()))?.is_some())
+}
+
+/// What `take` makes of the first entry of the boot image's ramdisk whose
+/// name `wanted` picks, read from its start; none when the image is no boot
+/// image, has no ramdisk, or no entry's name is picked.
+fn in_ramdisk<R: Read + Seek, T>(file: &mut R, wanted: impl Fn(&str) -> bool, take: impl FnOnce(&mut dyn Read) -> Result<T>) -> Result<Option<T>> {
+    let mut head = Vec::with_capacity(4096);
+    file.take(4096).read_to_end(&mut head).context("read the image's first bytes")?;
+    if !head.starts_with(BOOT_MAGIC) {
+        return Ok(None);
+    }
+    let header = Header::parse(&mut Cursor::new(&head)).context("read the boot image header")?;
+    if header.ramdisk_size() == 0 {
+        return Ok(None);
+    }
+    file.seek(SeekFrom::Start(header.ramdisk_position() as u64)).context("seek to the ramdisk")?;
+    let mut ramdisk = BufReader::new(file.take(u64::from(header.ramdisk_size())));
+    let start = ramdisk.fill_buf().context("read the ramdisk's first bytes")?;
+    if ![LZ4_LEGACY, LZ4_FRAME, GZIP, NEWC].iter().any(|magic| start.starts_with(magic)) {
+        return Ok(None);
+    }
+    find(ramdisk, wanted, take)
+}
+
 /// What `take` makes of the first entry of a packed ramdisk whose name
 /// `wanted` picks, read from its start; none when no entry's name is
 /// picked.

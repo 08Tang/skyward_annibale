@@ -82,6 +82,10 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::Advanced => advanced(cx),
         Screen::Modules => modules(cx),
         Screen::ModuleInfo => module_info(cx),
+        Screen::Root => root(cx),
+        Screen::KernelSu => kernel_su(cx),
+        Screen::KernelSuKmi => kernel_su_kmi(cx),
+        Screen::Magisk => magisk(cx),
         Screen::DataApps => data_apps(cx),
         Screen::SystemApps => system_apps(cx),
         Screen::DataAppInfo => data_app_info(cx),
@@ -171,6 +175,8 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
         Confirm::InstallWipe => (&["滑动以安装并清除", "滑動以安裝並清除", "Slide to install and wipe"][..], true),
         Confirm::RunScript => (&INSTALL[..], true),
         Confirm::Merge => (&["滑动以合并", "滑動以合併", "Slide to merge"][..], true),
+        Confirm::KernelSu => (&["滑动以写入 KernelSU", "滑動以寫入 KernelSU", "Slide to write KernelSU"][..], false),
+        Confirm::Magisk => (&["滑动以写入 Magisk", "滑動以寫入 Magisk", "Slide to write Magisk"][..], false),
         Confirm::Relabel => (&["滑动以修复", "滑動以修復", "Slide to fix"][..], true),
         Confirm::SwitchSystem => (&["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"][..], false),
         Confirm::RemoveSystem => (&["滑动以删除", "滑動以刪除", "Slide to remove"][..], true),
@@ -1166,6 +1172,336 @@ fn update_value(cx: &Ctx) -> &'static str {
         return l.pick(texts::update::NEW_VERSION);
     }
     fmt::update_value(l, &s.update)
+}
+
+pub fn root(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let mut y = t.m.content_top;
+
+    let (kernel_su, magisk) = (kernel_su_saying(&s), magisk_saying(&s));
+    let rows = [
+        Row::new(l.pick(texts::kernel_su::TITLE))
+            .icon(BLUE, Icon::KernelSu)
+            .trail(Trail::Value(&kernel_su)),
+        Row::new(l.pick(texts::magisk::TITLE))
+            .icon(PURPLE, Icon::Magisk)
+            .trail(Trail::Value(&magisk)),
+        Row::new(l.pick(texts::modules::TITLE)).icon(GREEN, Icon::Layers),
+    ];
+    let opens = [
+        Action::Open(Screen::KernelSu),
+        Action::Open(Screen::Magisk),
+        Action::Open(Screen::Modules),
+    ];
+    let first = widgets::list(&mut c, t, f, y, &rows);
+    out.extend(hits(&first.rows, &opens));
+    y = first.bottom + t.m.card_gap;
+
+    // 在线安装：这两张卡本身就是写入动作（要滑动确认），与上面两行「点进去看
+    // 现状、选 KMI」是两回事，不会进同一个页面。
+    y = widgets::section(&mut c, t, f, y, l.pick(texts::root::INSTALL_ONLINE));
+    let (ks_label, mg_label) = (
+        tr!(l, "滑动以在线写入 KernelSU", "滑動以線上寫入 KernelSU", "Slide to write KernelSU online"),
+        tr!(l, "滑动以在线写入 Magisk", "滑動以線上寫入 Magisk", "Slide to write Magisk online"),
+    );
+    let (ks_progress, ks_text) = write_state(s.kernel_su_job.as_ref(), s.root_bytes, l, &ks_label);
+    let (mg_progress, mg_text) = write_state(s.magisk_job.as_ref(), s.root_bytes, l, &mg_label);
+    for (label, progress, which) in [(ks_text, ks_progress, Confirm::KernelSu), (mg_text, mg_progress, Confirm::Magisk)] {
+        let track = widgets::confirm(&mut c, t, f, y, &label, false, progress);
+        out.push(Hit { rect: track, action: Action::Confirm(which) });
+        y = track.y + track.h + t.m.card_gap;
+    }
+
+    y = widgets::section(&mut c, t, f, y, l.pick(texts::root::TITLE));
+    let auto_root = auto_root_saying(s, l);
+    let rows = [
+        Row::new(l.pick(texts::root::AUTO_PATCH)).trail(Trail::Value(&auto_root)),
+    ];
+    let picks = [Action::SetAutoRoot(s.auto_root.next())];
+    let second = widgets::list(&mut c, t, f, y, &rows);
+    out.extend(hits(&second.rows, &picks));
+    y = second.bottom;
+    let note = widgets::footnote(&mut c, t, f, y, l.pick(texts::root::AUTO_PATCH_NOTE));
+    Frame { back: false, ..Frame::new(t, c.crop_height(fitted(t, note)), out, l.pick(texts::root::TITLE), t.m.content_top) }
+}
+
+/// KernelSU 的页：现状、要写的 KMI，以及写进当前槽的 boot 镜像。
+pub fn kernel_su(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let mut y = t.m.content_top;
+
+    let status = s.kernel_su.as_ref().and_then(|r| r.as_ref().ok());
+    let why = match s.kernel_su.as_ref() {
+        Some(Err(why)) => Some(why.clone()),
+        _ => None,
+    };
+    let mut rows = Vec::new();
+    let version = status
+        .and_then(|st| st.version.clone())
+        .unwrap_or_else(|| l.pick(texts::kernel_su::NONE).into());
+    let (slot_label, lock_label, latest_label) = (
+        tr!(l, "当前槽位", "目前槽位", "Current slot"),
+        tr!(l, "开机锁", "開機鎖", "Bootloader"),
+        tr!(l, "在线最新", "線上最新", "Latest online"),
+    );
+    let latest = online_saying(l, s.latest_kernelsu.as_deref(), status.and_then(|st| st.version.as_deref()), !status.is_some_and(|st| st.installed));
+    match status {
+        Some(st) => {
+            rows.push(Row::new(l.pick(st.installed.then(|| texts::kernel_su::INSTALLED).unwrap_or_else(|| texts::kernel_su::NOT_INSTALLED))).trail(Trail::Value(&version)));
+            rows.push(Row::new(&latest_label).trail(Trail::Value(&latest)));
+            if let Some(target) = &st.backup_target {
+                rows.push(Row::new(l.pick(texts::kernel_su::INSTALLED_TO)).trail(Trail::Value(target)));
+            }
+            if let Some(slot) = &st.slot {
+                rows.push(Row::new(&slot_label).trail(Trail::Value(slot)));
+            }
+            rows.push(Row::new(&lock_label).trail(Trail::Value(l.pick([st.unlocked.then(|| "已解锁").unwrap_or("已锁定"), st.unlocked.then(|| "已解鎖").unwrap_or("已鎖定"), st.unlocked.then(|| "Unlocked").unwrap_or("Locked")]))));
+        }
+        None => rows.push(Row::new(l.pick(texts::kernel_su::NOT_READ)).trail(Trail::None)),
+    }
+    let list = widgets::list(&mut c, t, f, y, &rows);
+    y = list.bottom + t.m.card_gap;
+
+    // Writing it: the stage the job is at says how far it has come, and the
+    // swipe under it writes the KMI the list chose.
+    let said = match s.kernel_su_job.as_ref().map(|j| j.stage) {
+        Some(KernelSuStage::Preparing) => l.pick(texts::kernel_su::WORKING),
+        Some(KernelSuStage::BackingUp) => l.pick(texts::kernel_su::WORKING),
+        Some(KernelSuStage::Patching) => l.pick(texts::kernel_su::WORKING),
+        Some(KernelSuStage::Writing) => l.pick(texts::kernel_su::WORKING),
+        Some(KernelSuStage::Checking) | None => l.pick(texts::kernel_su::INSTALL),
+    };
+    let stage_note = widgets::footnote(&mut c, t, f, y, said);
+    y = stage_note + t.m.card_gap;
+    let idle = tr!(l, "滑动以写入 KernelSU", "滑動以寫入 KernelSU", "Slide to write KernelSU");
+    let (progress, write_label) = write_state(s.kernel_su_job.as_ref(), s.root_bytes, l, &idle);
+    let track = widgets::confirm(&mut c, t, f, y, &write_label, false, progress);
+    out.push(Hit { rect: track, action: Action::Confirm(Confirm::KernelSu) });
+    y = track.y + track.h + t.m.card_gap;
+
+    // The KMIs, each one the row to write it; the one the phone's kernel
+    // names is marked, and the one written is too.
+    if let Some(st) = status {
+        y = widgets::section(&mut c, t, f, y, l.pick(texts::kernel_su::KMI));
+        let kmis: Vec<Row> = st
+            .kmis
+            .iter()
+            .enumerate()
+            .map(|(k, row)| Row::new(&row.id).subtitle(&row.target).trail(Trail::Check(s.kernel_su_kmi == Some(k) || st.default == Some(k))))
+            .collect();
+        let picks: Vec<Action> = (0..kmis.len()).map(Action::KernelSuKmi).collect();
+        let chosen = widgets::list(&mut c, t, f, y, &kmis);
+        out.extend(hits(&chosen.rows, &picks));
+        y = chosen.bottom + t.m.card_gap;
+    }
+    let note = widgets::footnote(&mut c, t, f, y, l.pick(texts::kernel_su::NOTE));
+    y = note + t.m.card_gap;
+    let online = widgets::footnote(&mut c, t, f, y, l.pick(texts::kernel_su::ONLINE_NOTE));
+    y = online + t.m.card_gap;
+    if let Some(why) = &why {
+        let at = widgets::footnote(&mut c, t, f, y, why);
+        y = at + t.m.card_gap;
+    }
+
+    let saved_at = widgets::section(&mut c, t, f, y, &texts::kernel_su::restore_target(l, st_target(status.and_then(|st| st.backup_target.clone()))));
+    // 没有备份记录时不摆那一行可点的「已恢复」——点了必然报 no KernelSU backup
+    // record（2026-11-26，取自 Ff428 的真机修正）。
+    let bottom = if status.is_some_and(|st| st.has_backup) {
+        let row = Row::new(l.pick(texts::kernel_su::RESTORED)).icon(SLATE, Icon::Restore);
+        let list = widgets::list(&mut c, t, f, saved_at, &[row]);
+        out.extend(hits(&list.rows, &[Action::RestoreKernelSu]));
+        list.bottom
+    } else {
+        widgets::footnote(&mut c, t, f, saved_at, l.pick([
+            "本机没有原厂 boot 备份，先写入一次 Root 才有得恢复。",
+            "本機沒有原廠 boot 備份，先寫入一次 Root 才有得恢復。",
+            "No stock boot backup on this phone; write a root once before restoring.",
+        ]))
+    };
+    Frame { back: false, ..Frame::new(t, c.crop_height(fitted(t, bottom)), out, l.pick(texts::kernel_su::TITLE), t.m.content_top) }
+}
+
+
+/// 写入卡该停在哪、写什么：滑到底开始后停在底并说「正在写入」；写完停在底说
+/// 「已写入」；失败回到原位，让手指知道可以再滑一次（2026-11-26）。
+fn write_state(job: Option<&KernelSuJob>, bytes: Option<(u64, Option<u64>, u64)>, l: Lang, idle: &str) -> (f32, String) {
+    match job {
+        Some(job) if job.outcome.is_none() => {
+            // 下载中把百分比与速度写在卡上，看得见进展（2026-11-26）。
+            let worked = match bytes {
+                Some((done, Some(total), rate)) if total > 0 => {
+                    format!("{}% · {}", done.saturating_mul(100) / total, per_second(rate))
+                }
+                Some((done, None, rate)) => format!("{} · {}", fmt::bytes(done), per_second(rate)),
+                _ => tr!(l, "准备中…", "準備中…", "Preparing…"),
+            };
+            (1.0, format!("{} {}", tr!(l, "正在在线写入", "正在線上寫入", "Writing online"), worked))
+        }
+        Some(job) if matches!(job.outcome, Some(KernelSuEnd::Failed(_))) => {
+            (0.0, tr!(l, "写入未完成，可以再滑一次", "寫入未完成，可以再滑一次", "Not written; slide again"))
+        }
+        Some(_) => (1.0, tr!(l, "已写入", "已寫入", "Written")),
+        None => (0.0, idle.to_string()),
+    }
+}
+
+/// 在线那一版怎么写在页面上：比装着的这一版新就写「可升级」，一样或旧写
+/// 「已是最新」，装都没装就只写版本号（2026-11-26）。
+fn online_saying(l: Lang, online: Option<&str>, installed: Option<&str>, not_installed: bool) -> String {
+    let Some(online) = online else {
+        return tr!(l, "未获取（需要联网）", "未取得（需要連網）", "Not fetched (needs a network)");
+    };
+    if not_installed {
+        return online.to_string();
+    }
+    match is_newer(installed, Some(online)) {
+        Some(true) => format!("{online} · {}", tr!(l, "可升级", "可升級", "Update available")),
+        Some(false) => format!("{online} · {}", tr!(l, "已是最新", "已是最新", "Up to date")),
+        None => online.to_string(),
+    }
+}
+
+/// 每秒多少字节，写成人看得懂的样子。
+fn per_second(rate: u64) -> String {
+    if rate == 0 {
+        "…".to_string()
+    } else {
+        format!("{}/s", fmt::bytes(rate))
+    }
+}
+
+/// The KMI the KernelSU page writes: the list, each one checked or not.
+pub fn kernel_su_kmi(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let y = t.m.content_top;
+    let st = s.kernel_su.as_ref().and_then(|r| r.as_ref().ok());
+    let rows: Vec<Row> = st
+        .map(|st| {
+            st.kmis
+                .iter()
+                .enumerate()
+                .map(|(k, row)| Row::new(&row.id).subtitle(&row.target).trail(Trail::Check(s.kernel_su_kmi == Some(k) || st.default == Some(k))))
+                .collect()
+        })
+        .unwrap_or_default();
+    let picks: Vec<Action> = (0..rows.len()).map(Action::KernelSuKmi).collect();
+    let list = widgets::list(&mut c, t, f, y, &rows);
+    out.extend(hits(&list.rows, &picks));
+    Frame { back: false, ..Frame::new(t, c.crop_height(fitted(t, list.bottom)), out, l.pick(texts::kernel_su::KMI), t.m.content_top) }
+}
+
+/// Magisk 的页：现状与写进当前槽的 boot 镜像。
+pub fn magisk(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let mut y = t.m.content_top;
+    let st = s.magisk.as_ref().and_then(|r| r.as_ref().ok());
+    let version = st
+        .and_then(|st| st.version.clone())
+        .unwrap_or_else(|| l.pick(texts::magisk::NONE).into());
+    let (latest_label, latest) = (
+        tr!(l, "在线最新", "線上最新", "Latest online"),
+        online_saying(l, s.latest_magisk.as_deref(), st.and_then(|st| st.version.as_deref()), !st.is_some_and(|st| st.installed)),
+    );
+    let mut rows = Vec::new();
+    match st {
+        Some(st) => {
+            rows.push(Row::new(l.pick(st.installed.then(|| texts::kernel_su::INSTALLED).unwrap_or_else(|| texts::kernel_su::NOT_INSTALLED))).trail(Trail::Value(&version)));
+            rows.push(Row::new(&latest_label).trail(Trail::Value(&latest)));
+            if let Some(target) = &st.backup_target {
+                rows.push(Row::new(l.pick(texts::kernel_su::INSTALLED_TO)).trail(Trail::Value(target)));
+            }
+            rows.push(Row::new(&latest_label).trail(Trail::Value(&latest)));
+            rows.push(Row::new(l.pick(texts::magisk::TARGET)).trail(Trail::Value(&st.target)));
+            if let Some(slot) = &st.slot {
+                rows.push(Row::new(l.pick(texts::kernel_su::TARGET)).trail(Trail::Value(slot)));
+            }
+        }
+        None => rows.push(Row::new(l.pick(texts::kernel_su::NOT_READ)).trail(Trail::None)),
+    }
+    let list = widgets::list(&mut c, t, f, y, &rows);
+    y = list.bottom + t.m.card_gap;
+    let note = widgets::footnote(&mut c, t, f, y, l.pick(texts::magisk::NOTE));
+    y = note + t.m.card_gap;
+    let online = widgets::footnote(&mut c, t, f, y, l.pick(texts::kernel_su::ONLINE_NOTE));
+    y = online + t.m.card_gap;
+    let idle = tr!(l, "滑动以写入 Magisk", "滑動以寫入 Magisk", "Slide to write Magisk");
+    let (progress, write_label) = write_state(s.magisk_job.as_ref(), s.root_bytes, l, &idle);
+    let track = widgets::confirm(&mut c, t, f, y, &write_label, false, progress);
+    out.push(Hit { rect: track, action: Action::Confirm(Confirm::Magisk) });
+    y = track.y + track.h + t.m.card_gap;
+    let saved_at = widgets::section(&mut c, t, f, y, &texts::magisk::restore_target(l, st_target(st.map(|s| s.target.clone()))));
+    let bottom = if st.is_some_and(|st| st.has_backup) {
+        let row = Row::new(l.pick(texts::kernel_su::RESTORED)).icon(SLATE, Icon::Restore);
+        let list = widgets::list(&mut c, t, f, saved_at, &[row]);
+        out.extend(hits(&list.rows, &[Action::RestoreMagisk]));
+        list.bottom
+    } else {
+        widgets::footnote(&mut c, t, f, saved_at, l.pick([
+            "本机没有原厂 boot 备份，先写入一次 Root 才有得恢复。",
+            "本機沒有原廠 boot 備份，先寫入一次 Root 才有得恢復。",
+            "No stock boot backup on this phone; write a root once before restoring.",
+        ]))
+    };
+    Frame { back: false, ..Frame::new(t, c.crop_height(fitted(t, bottom)), out, l.pick(texts::magisk::TITLE), t.m.content_top) }
+}
+
+/// What the KernelSU row of the root page says beside its name.
+fn kernel_su_saying(s: &State) -> String {
+    match s.kernel_su.as_ref() {
+        Some(Ok(st)) => st.version.as_deref().map(short_version).unwrap_or_else(|| s.lang.pick(texts::kernel_su::NOT_INSTALLED).into()),
+        Some(Err(why)) => clip_saying(why),
+        None => s.lang.pick(texts::kernel_su::NOT_READ).to_owned(),
+    }
+}
+
+/// `3.3.1-56-gcfc60f8d (uapi: 6) (32736)` → `3.3.1`：右侧那一栏很窄，
+/// 整串写进去会把「KernelSU」挤成「K...」（2026-11-26，取自 Ff428 的真机修正）。
+fn short_version(version: &str) -> String {
+    version.split(['-', ' ', '(', '+']).next().unwrap_or(version).to_string()
+}
+
+/// 一行说法最多这么长，理由太长就截断，别把右侧那一栏撑满。
+fn clip_saying(why: &str) -> String {
+    let line = why.lines().next().unwrap_or(why).trim();
+    let mut out: String = line.chars().take(28).collect();
+    if out.chars().count() < line.chars().count() {
+        out.push('…');
+    }
+    out
+}
+
+/// What the Magisk row of the root page says beside its name.
+fn magisk_saying(s: &State) -> String {
+    match s.magisk.as_ref() {
+        Some(Ok(st)) => st.version.as_deref().map(short_version).unwrap_or_else(|| s.lang.pick(texts::kernel_su::NOT_INSTALLED).into()),
+        Some(Err(why)) => clip_saying(why),
+        None => s.lang.pick(texts::kernel_su::NOT_READ).to_owned(),
+    }
+}
+
+/// The partition a backup belongs to, as the restore row's title names it.
+fn st_target(target: Option<String>) -> String {
+    match target {
+        Some(t) => t,
+        None => "\u{2014}".to_owned(),
+    }
+}
+
+/// What the auto-patch choice on the root page says beside its name.
+fn auto_root_saying(s: &State, l: Lang) -> String {
+    match s.auto_root {
+        AutoRoot::None => l.pick(texts::root::NONE).to_owned(),
+        AutoRoot::KernelSu => l.pick(texts::kernel_su::TITLE).to_owned(),
+        AutoRoot::Magisk => l.pick(texts::magisk::TITLE).to_owned(),
+    }
 }
 
 /// Preferences, opening with the stock「显示与亮度」theme previews.
@@ -3731,6 +4067,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
             Row::new(l.pick(IMAGE_BACKUP)).icon(BLUE, Icon::Backup),
             Row::new(l.pick(FILESYSTEMS)).icon(RED, Icon::Mount),
             Row::new(l.pick(AVB)).icon(GREEN, Icon::Shield),
+            Row::new(l.pick(["Root", "Root", "Root"])).icon(ORANGE, Icon::KernelSu),
             Row::new(l.pick(SERVE)).icon(BLUE, Icon::Globe),
             Row::new(l.pick(FETCH)).icon(GREEN, Icon::Globe),
             Row::new(l.pick(UPDATE)).icon(GREEN, Icon::Layers).trail(Trail::Value(update_value(cx))),
@@ -3751,6 +4088,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
             Action::Open(Screen::ImageBackup),
             Action::Open(Screen::Filesystems),
             Action::Open(Screen::Avb),
+            Action::Open(Screen::Root),
             Action::Open(Screen::Serve),
             Action::Open(Screen::Fetch),
             Action::Open(Screen::Update),

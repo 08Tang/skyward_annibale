@@ -548,6 +548,26 @@ pub struct State {
     pub avb: Option<Result<AvbInfo, String>>,
     /// How an AVB change or backup ended.
     pub avb_notice: Option<String>,
+    /// What KernelSU and the phone say, and the KMI chosen to write.
+    pub kernel_su: Option<Result<KernelSuStatus, String>>,
+    pub kernel_su_kmi: Option<usize>,
+    /// A `kernelsu.ko` the user chose rather than the one the KMI names.
+    pub kernel_su_ko: Option<String>,
+    /// Writing KernelSU, or how it last ended.
+    pub kernel_su_job: Option<KernelSuJob>,
+    /// What Magisk and the phone say, and writing its boot patcher.
+    pub magisk: Option<Result<MagiskStatus, String>>,
+    pub magisk_job: Option<KernelSuJob>,
+    /// Which root manager, if either, is patched into the new slot's boot
+    /// image after an update is written.
+    pub auto_root: AutoRoot,
+    /// 正在下的这一份：已下字节、总字节、每秒字节。
+    pub root_bytes: Option<(u64, Option<u64>, u64)>,
+    /// 在线上的最新版本号（问过 GitHub 才有）。
+    pub latest_kernelsu: Option<String>,
+    pub latest_magisk: Option<String>,
+    /// 问过几次都没问到（开机时还没联网），页面写「未获取」而不是一直「读取中」。
+    pub latest_root_failed: bool,
     /// How fast data went over the network joined in the last second.
     pub traffic: Traffic,
 }
@@ -689,6 +709,17 @@ impl Default for State {
             skyward_job: None,
             avb: None,
             avb_notice: None,
+            kernel_su: None,
+            kernel_su_kmi: None,
+            kernel_su_ko: None,
+            kernel_su_job: None,
+            magisk: None,
+            magisk_job: None,
+            auto_root: AutoRoot::None,
+            root_bytes: None,
+            latest_kernelsu: None,
+            latest_magisk: None,
+            latest_root_failed: false,
             traffic: Traffic::default(),
         }
     }
