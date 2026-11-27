@@ -1445,9 +1445,9 @@ pub fn text_field(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, text: &str) ->
 /// A field of its own width at `x`, for pages that put two side by side;
 /// returns where the cursor is, and the card it is drawn in.
 pub fn text_field_in(c: &mut Canvas, t: &Theme, f: &Fonts, x: f32, top: f32, w: f32, text: &str) -> (Rect, Caret) {
-    let at = draw_text_field_in(c, t, f, x, top, w, text, false);
+    let at = draw_text_field_in(c, t, f, Field { x, top, w }, text, false);
     let caret = caret_over(at, |art, dx, dy| {
-        draw_text_field_in(art, t, f, x - dx, top - dy, w, text, true);
+        draw_text_field_in(art, t, f, Field { x: x - dx, top: top - dy, w }, text, true);
     });
     (at, caret)
 }
@@ -1456,12 +1456,21 @@ pub fn text_field_in(c: &mut Canvas, t: &Theme, f: &Fonts, x: f32, top: f32, w: 
 /// `caret`; returns where the cursor is.
 fn draw_text_field(c: &mut Canvas, t: &Theme, f: &Fonts, x0: f32, top: f32, text: &str, caret: bool) -> Rect {
     let w = t.m.w as f32 - t.m.margin * 2.0;
-    draw_text_field_in(c, t, f, x0, top, w, text, caret)
+    draw_text_field_in(c, t, f, Field { x: x0, top, w }, text, caret)
 }
 
-/// Draw a field of the width given from `x0`, `top`, with its cursor if
-/// `caret`; returns the card it is drawn in.
-fn draw_text_field_in(c: &mut Canvas, t: &Theme, f: &Fonts, x0: f32, top: f32, w: f32, text: &str, caret: bool) -> Rect {
+/// Where a field is drawn: its left edge, its top, and how wide it is.
+#[derive(Clone, Copy)]
+struct Field {
+    x: f32,
+    top: f32,
+    w: f32,
+}
+
+/// Draw a field where `at` puts it, with its cursor if `caret`; returns the
+/// card it is drawn in.
+fn draw_text_field_in(c: &mut Canvas, t: &Theme, f: &Fonts, at: Field, text: &str, caret: bool) -> Rect {
+    let (x0, top, w) = (at.x, at.top, at.w);
     let m = &t.m;
     let h = m.dp(56.0);
     c.fill_round_rect(x0, top, w, h, m.card_radius, t.pal.card);
@@ -1473,12 +1482,12 @@ fn draw_text_field_in(c: &mut Canvas, t: &Theme, f: &Fonts, x0: f32, top: f32, w
         rest.next();
         shown = rest.as_str();
     }
-    let at = cursor(t, f, x + c.text_width(&f.heading, shown, px), top + h / 2.0, px);
+    let card = cursor(t, f, x + c.text_width(&f.heading, shown, px), top + h / 2.0, px);
     if caret {
-        c.fill_round_rect(at.x, at.y, at.w, at.h, m.dp(CARET_RADIUS_DP), t.pal.accent);
+        c.fill_round_rect(card.x, card.y, card.w, card.h, m.dp(CARET_RADIUS_DP), t.pal.accent);
     }
     c.text_vc(&f.heading, shown, x, top + h / 2.0, px, t.pal.text, None);
-    at
+    card
 }
 
 /// A full-width button in the accent colour, for a page's one action that
