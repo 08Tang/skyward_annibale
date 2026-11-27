@@ -131,6 +131,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::WlanNetwork => wlan_network(cx),
         Screen::FilesOtg => files_otg(cx),
         Screen::WlanAdd => wlan_add(cx),
+        Screen::WlanStatic => wlan_static(cx),
     }
 }
 
@@ -5733,6 +5734,16 @@ pub fn wlan(cx: &Ctx) -> Frame {
             y = list.bottom;
         }
     }
+    // 手动 IP 的入口，和现在用的是哪一套。
+    let manual = widgets::list(
+        &mut c,
+        t,
+        f,
+        y + t.m.card_gap,
+        &[Row::new(l.pick(texts::wlan::MANUAL_IP)).trail(Trail::Value(l.pick(if s.static_on { texts::wlan::MANUAL_IP_ON } else { texts::wlan::MANUAL_IP_OFF })))],
+    );
+    out.extend(hits(&manual.rows, &[Action::OpenWlanStatic]));
+    y = manual.bottom;
     Frame::new(t, fit(c, t, y), out, l.pick(texts::page::WLAN), top)
 }
 
@@ -5751,6 +5762,51 @@ pub fn wlan_password(cx: &Ctx) -> Frame {
     out.extend(hits(&show.rows, &[Action::Toggle(Switch::ShowPassword)]));
     keyboard_hits(&mut c, t, f, s, l.pick(texts::wlan::CONNECT), &mut out);
     Frame { caret: Some(caret), ..Frame::new(t, c, out, l.pick(texts::wlan::ENTER_PASSWORD), top) }
+}
+
+/// 手动 IP 页：地址、掩码、网关、DNS 四格，键盘，「改回 DHCP」那一行。
+pub fn wlan_static(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let m = &t.m;
+    let mut c = page(cx);
+    let mut out = Vec::new();
+    let top = m.content_top;
+    let gap = m.dp(10.0);
+    let cw = (m.w as f32 - m.margin * 2.0 - gap) / 2.0;
+    let label_h = m.dp(20.0);
+    let mut caret = None;
+    // 一行两格：地址|掩码，网关|DNS。四行竖排会顶到键盘上，装不下。
+    let cells: [(Field, &'static str, &str); 4] = [
+        (Field::Address, l.pick(texts::wlan::ADDRESS), &s.static_ip.address),
+        (Field::Mask, l.pick(texts::wlan::MASK), &s.static_ip.mask),
+        (Field::Gateway, l.pick(texts::wlan::GATEWAY), &s.static_ip.gateway),
+        (Field::Dns, l.pick(texts::wlan::DNS), &s.static_ip.dns),
+    ];
+    let mut rows_bottom = top;
+    for pair in cells.chunks(2) {
+        let y = rows_bottom + label_h;
+        for (k, (kind, label, value)) in pair.iter().enumerate() {
+            let x = m.margin + k as f32 * (cw + gap);
+            c.text_top(&f.label, label, x + m.inner, rows_bottom, m.label_px, t.pal.section, None);
+            let (_, typed) = widgets::text_field_in(&mut c, t, f, x, y, cw, value);
+            if s.static_field == *kind {
+                caret = Some(typed);
+            }
+            out.push(Hit { rect: Rect::new(x, y, cw, m.dp(56.0)), action: Action::TypeInto(*kind) });
+        }
+        rows_bottom = y + m.dp(56.0) + gap;
+    }
+    // 两种模式：用这组地址，或自动获取。勾在现在用的那个上，点另一边就换
+    // 过去；点已经勾着的那边什么都不做。
+    let rows = [
+        Row::new(l.pick(texts::wlan::USE_MANUAL)).trail(Trail::Check(s.static_on)),
+        Row::new(l.pick(texts::wlan::MANUAL_IP_OFF)).trail(Trail::Check(!s.static_on)),
+    ];
+    let list = widgets::list(&mut c, t, f, rows_bottom + m.dp(2.0), &rows);
+    out.extend(hits(&list.rows, &[Action::ApplyStatic, Action::UseDhcp]));
+    widgets::footnote(&mut c, t, f, list.bottom, l.pick(texts::wlan::MANUAL_IP_NOTE));
+    keyboard_hits(&mut c, t, f, s, l.pick(texts::wlan::APPLY), &mut out);
+    Frame { caret, ..Frame::new(t, c, out, l.pick(texts::wlan::MANUAL_IP), top) }
 }
 
 /// A network added by hand: its name, how it is protected, its password

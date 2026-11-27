@@ -890,11 +890,66 @@ impl App {
                 self.open(Screen::WlanAdd);
             }
             Action::TypeInto(field) => {
+                // 手动 IP 页上的四格：把键盘指到这一格。
+                if self.screen() == Screen::WlanStatic {
+                    if self.state.static_field != field {
+                        self.state.static_field = field;
+                        self.refresh();
+                    }
+                    return Vec::new();
+                }
                 let a = self.state.adding.as_mut().expect("the fields are on the page that adds a network");
                 if a.field != field {
                     a.field = field;
                     self.refresh();
                 }
+            }
+            // 手动 IP：打开页、按填的连、改回 DHCP。
+            Action::OpenWlanStatic => {
+                // 已经连着的时候先把现在这套填上：只改地址那一格就行，
+                // 不至于因为网关空着一直说格式不对。
+                if let Some(skyward_net::wlan::Joined { stage: Joining::Connected(link), .. }) = self.state.wlan.as_ref().and_then(|w| w.joined.as_ref()) {
+                    self.state.static_ip.seed(link);
+                }
+                self.state.static_field = Field::Address;
+                self.state.layer = Layer::Digits;
+                self.open(Screen::WlanStatic);
+            }
+            Action::ApplyStatic => match self.state.static_ip.parsed() {
+                Ok((address, mask, gateway, dns)) => {
+                    self.state.static_on = true;
+                    // 说清楚存下来了，不然真机上像是什么都没发生。
+                    self.say(l.pick(texts::wlan::MANUAL_IP_ON), now);
+                    return vec![Effect::WlanStatic { address, mask, gateway, dns }];
+                }
+                Err(bad) => {
+                    let why = match bad {
+                        Bad::Address => l.pick(texts::wlan::IP_INVALID),
+                        Bad::Mask => l.pick(texts::wlan::MASK_INVALID),
+                        Bad::Gateway => l.pick(texts::wlan::GATEWAY_INVALID),
+                        Bad::GatewayOutOfSubnet => l.pick(texts::wlan::GATEWAY_SUBNET),
+                        Bad::Dns => l.pick(texts::wlan::DNS_INVALID),
+                    };
+                    // 填坏的那一格顺手把键盘指过去。
+                    let field = match bad {
+                        Bad::Address => Field::Address,
+                        Bad::Mask => Field::Mask,
+                        Bad::Gateway | Bad::GatewayOutOfSubnet => Field::Gateway,
+                        Bad::Dns => Field::Dns,
+                    };
+                    if self.state.static_field != field {
+                        self.state.static_field = field;
+                        self.refresh();
+                    }
+                    self.say(why, now)
+                }
+            },
+            Action::UseDhcp => {
+                if !self.state.static_on {
+                    return Vec::new();
+                }
+                self.state.static_on = false;
+                return vec![Effect::WlanDhcp];
             }
             Action::ChooseSecurity => {
                 self.state.adding.as_mut().expect("the protection is on the page that adds a network").choosing = true;
@@ -1215,8 +1270,17 @@ impl App {
                 match a.field {
                     Field::Name => &mut a.name,
                     Field::Password => &mut self.state.password,
+                    Field::Address | Field::Mask | Field::Gateway | Field::Dns => unreachable!("the add page has no address field"),
                 }
             }
+            // 手动 IP 页：键盘进哪一格由 static_field 说。
+            Screen::WlanStatic => match self.state.static_field {
+                Field::Address => &mut self.state.static_ip.address,
+                Field::Mask => &mut self.state.static_ip.mask,
+                Field::Gateway => &mut self.state.static_ip.gateway,
+                Field::Dns => &mut self.state.static_ip.dns,
+                Field::Name | Field::Password => unreachable!("the address page has no name or password"),
+            },
             s => panic!("{s:?} has no text field"),
         }
     }
@@ -1247,6 +1311,8 @@ impl App {
             }
             Cap::Show(layer) => self.state.layer = layer,
             Cap::Enter => match self.screen() {
+                // 手动 IP 页：回车就是「应用」。
+                Screen::WlanStatic => return self.act(Action::ApplyStatic, now),
                 Screen::Search => {
                     let query = self.state.search.trim().to_lowercase();
                     match self.state.search_scope {

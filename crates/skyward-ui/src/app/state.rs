@@ -532,6 +532,11 @@ pub struct State {
     /// network, and whether it shows.
     pub password: String,
     pub show_password: bool,
+    /// 手动 IP 页上填的值（地址、掩码、网关、DNS），以及键盘现在进哪一格。
+    pub static_ip: crate::settings::StaticV4,
+    pub static_field: Field,
+    /// 手动 IP 现在生效，而不是 DHCP。
+    pub static_on: bool,
     /// The phone maker's update server is known, and the update page asks
     /// it.
     pub update_server: bool,
@@ -701,6 +706,9 @@ impl Default for State {
             adding: None,
             password: String::new(),
             show_password: false,
+            static_ip: crate::settings::StaticV4 { address: String::new(), mask: "255.255.255.0".into(), gateway: String::new(), dns: String::new() },
+            static_field: Field::Address,
+            static_on: false,
             update_server: false,
             check: Check::Idle,
             have: Have::Nothing,

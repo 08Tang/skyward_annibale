@@ -1442,11 +1442,28 @@ pub fn text_field(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, text: &str) ->
     (top + t.m.dp(56.0), caret)
 }
 
+/// A field of its own width at `x`, for pages that put two side by side;
+/// returns where the cursor is, and the card it is drawn in.
+pub fn text_field_in(c: &mut Canvas, t: &Theme, f: &Fonts, x: f32, top: f32, w: f32, text: &str) -> (Rect, Caret) {
+    let at = draw_text_field_in(c, t, f, x, top, w, text, false);
+    let caret = caret_over(at, |art, dx, dy| {
+        draw_text_field_in(art, t, f, x - dx, top - dy, w, text, true);
+    });
+    (at, caret)
+}
+
 /// Draw the text field's card from `x0`, `top`, with its cursor if
 /// `caret`; returns where the cursor is.
 fn draw_text_field(c: &mut Canvas, t: &Theme, f: &Fonts, x0: f32, top: f32, text: &str, caret: bool) -> Rect {
+    let w = t.m.w as f32 - t.m.margin * 2.0;
+    draw_text_field_in(c, t, f, x0, top, w, text, caret)
+}
+
+/// Draw a field of the width given from `x0`, `top`, with its cursor if
+/// `caret`; returns the card it is drawn in.
+fn draw_text_field_in(c: &mut Canvas, t: &Theme, f: &Fonts, x0: f32, top: f32, w: f32, text: &str, caret: bool) -> Rect {
     let m = &t.m;
-    let (w, h) = (m.w as f32 - m.margin * 2.0, m.dp(56.0));
+    let h = m.dp(56.0);
     c.fill_round_rect(x0, top, w, h, m.card_radius, t.pal.card);
     let (x, room) = (x0 + m.inner, w - m.inner * 2.0 - m.dp(4.0));
     let px = m.row_title_px;

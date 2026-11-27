@@ -64,6 +64,19 @@ pub struct Settings {
     pub install: Install,
     pub backup: Backup,
     pub logs: Logs,
+    /// 手动指定的 IPv4；有它就不走 DHCP。
+    #[serde(default)]
+    pub wlan_static: Option<StaticV4>,
+}
+
+/// 手动指定的 IPv4：地址、掩码、网关，和 DNS（逗号或空格分隔，可空，空则用网关）。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StaticV4 {
+    pub address: String,
+    pub mask: String,
+    pub gateway: String,
+    pub dns: String,
 }
 
 /// The install page's options.
@@ -155,6 +168,7 @@ impl Settings {
                 verify: state.verify,
             },
             logs: Logs { kinds: names(&state.logs, &LOGS), to: LOG_PLACES[state.logs_to].to_string() },
+            wlan_static: state.static_on.then(|| state.static_ip.clone()),
         }
     }
 
@@ -226,6 +240,11 @@ impl Settings {
         state.logs = picked(&self.logs.kinds, &LOGS);
         if let Some(at) = LOG_PLACES.iter().position(|place| *place == self.logs.to) {
             state.logs_to = at;
+        }
+        // 手动 IP：文件里有它就按它来，没有就回 DHCP。
+        state.static_on = self.wlan_static.is_some();
+        if let Some(st) = &self.wlan_static {
+            state.static_ip = st.clone();
         }
     }
 }

@@ -265,6 +265,8 @@ pub enum Screen {
     /// A network added by hand: its name, how it is protected and its
     /// password, typed on the screen's keyboard.
     WlanAdd,
+    /// 手动 IP 页：地址、掩码、网关、DNS。
+    WlanStatic,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -566,6 +568,12 @@ pub enum Action {
     /// Look for the networks in range again.
     Rescan,
     /// Open the page that adds a network by hand.
+    /// 打开手动 IP 页：地址、掩码、网关、DNS 四个格子。
+    OpenWlanStatic,
+    /// 按页上填的那组地址连（不再问 DHCP）。
+    ApplyStatic,
+    /// 改回 DHCP。
+    UseDhcp,
     AddNetwork,
     /// Type into this field of the page that adds a network.
     TypeInto(Field),
@@ -926,6 +934,10 @@ pub enum Effect {
         security: Security,
         password: Secret,
     },
+    /// 手动 IPv4 生效：不走 DHCP。
+    WlanStatic { address: std::net::Ipv4Addr, mask: std::net::Ipv4Addr, gateway: std::net::Ipv4Addr, dns: Vec<std::net::Ipv4Addr> },
+    /// 改回 DHCP。
+    WlanDhcp,
     LeaveWlan,
     /// Ask the update server for the newest system, telling what it
     /// answered with [`App::update_checked`].

@@ -780,6 +780,34 @@ fn bring_up(cfg: &DeviceConfig, slot: skyward_vab::Slot, found: Result<keys::Fou
                 let kept = crate::wlanmem::read();
                 if kept.auto {
                     worker.send(wlan::Command::On);
+                    // 设置里记着手动 IP 的话，开机就按它配，不等 DHCP——这条
+                    // 开机路径在页面建起来之前就走完了，以前只发 On，重启后
+                    // 记着的地址永远用不上。
+                    if let Ok(file) = settings::read()
+                        && let Some(st) = file.settings().and_then(|s| s.wlan_static.clone())
+                    {
+                        let mask = match st.mask.trim() {
+                            "" => "255.255.255.0",
+                            text => text,
+                        };
+                        match (
+                            st.address.trim().parse::<std::net::Ipv4Addr>(),
+                            mask.parse::<std::net::Ipv4Addr>(),
+                            st.gateway.trim().parse::<std::net::Ipv4Addr>(),
+                        ) {
+                            (Ok(address), Ok(mask), Ok(gateway)) if address != gateway && (u32::from(address) & u32::from(mask)) == (u32::from(gateway) & u32::from(mask)) => {
+                                let mut dns: Vec<std::net::Ipv4Addr> = st.dns.split([' ', ',', ';']).filter(|p| !p.is_empty()).filter_map(|p| p.parse().ok()).collect();
+                                if dns.is_empty() {
+                                    dns.push(gateway);
+                                }
+                                worker.send(wlan::Command::Static(wlan::Static { address, mask, gateway, dns }));
+                                let _ = skyward_sys::kmsg(&format!("the address {address} set by hand is handed over as the WLAN opens"));
+                            }
+                            _ => {
+                                let _ = skyward_sys::kmsg("the address set by hand does not read; DHCP is asked instead");
+                            }
+                        }
+                    }
                     let _ = skyward_sys::kmsg(match kept.saved {
                         Some(_) => "the WLAN is opened for the network kept",
                         None => "the WLAN is opened as the recovery starts, with no network kept",

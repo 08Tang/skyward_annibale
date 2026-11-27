@@ -73,6 +73,24 @@ pub enum Command {
     Scan,
     Join { ssid: Vec<u8>, name: String, security: Security, password: String },
     Leave,
+    /// 手动指定的一组 IPv4：不走 DHCP。
+    Static(Static),
+    /// 改回 DHCP。
+    Dhcp,
+}
+
+/// 手动指定的一组 IPv4：地址、掩码、网关，和 DNS。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Static {
+    pub address: Ipv4Addr,
+    pub mask: Ipv4Addr,
+    pub gateway: Ipv4Addr,
+    pub dns: Vec<Ipv4Addr>,
+}
+
+/// 硬件地址写成 aa:bb:… 的样子，给页面看。
+fn mac_text(mac: [u8; 6]) -> String {
+    mac.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(":")
 }
 
 /// What comes to the thread: a command, how asking for an address went,
@@ -114,7 +132,7 @@ impl Worker {
         let (inbox, asked) = worker::telling().context("make the WLAN thread's inbox")?;
         let back = inbox.clone();
         let worker = worker::Worker::start("wlan", move |tell| {
-            let mut s = Station { cfg, modules, libraries, servers, state: Wlan::default(), running: None, back, tell };
+            let mut s = Station { cfg, modules, libraries, servers, state: Wlan::default(), running: None, static_ip: None, back, tell };
             s.run(&asked);
         })?;
         Ok(Worker { inbox, worker })
@@ -224,6 +242,8 @@ struct Station {
     servers: Servers,
     state: Wlan,
     running: Option<Running>,
+    /// 手动指定的一组地址；有它就不问 DHCP。
+    static_ip: Option<Static>,
     /// What a thread asking for an address, or looking how far the
     /// network reaches, answers to: the thread's own inbox.
     back: Teller<Inbox>,
@@ -298,6 +318,21 @@ impl Station {
                     self.lost(e);
                 }
                 self.state.joined = None;
+            }
+            // 手动 IP：不再问 DHCP，按这组地址连；切回 DHCP 时清掉它再问。
+            Command::Static(st) => {
+                self.unaddress();
+                let _ = skyward_sys::kmsg(&format!("the address {} is taken as set by hand", st.address));
+                self.static_ip = Some(st);
+                self.settle_static();
+            }
+            Command::Dhcp => {
+                self.static_ip = None;
+                self.unaddress();
+                if let Some(j) = &mut self.state.joined {
+                    j.stage = Stage::Addressing;
+                    self.ask_address();
+                }
             }
         }
     }
@@ -421,7 +456,13 @@ impl Station {
         let Some(j) = &mut self.state.joined else { return };
         match j.on(told) {
             Next::Show => {}
-            Next::Address => self.ask_address(),
+            Next::Address => {
+                if self.static_ip.is_some() {
+                    self.settle_static();
+                } else {
+                    self.ask_address();
+                }
+            }
             Next::Unaddress => self.unaddress(),
             Next::Forget => {
                 if let Some(r) = &self.running
@@ -457,7 +498,54 @@ impl Station {
         });
     }
 
+    /// 手动指定的地址生效：配上地址、掩码、默认路由与 DNS，页面当作连上。
+    /// 写不进去就报，让页面显示没有地址。
+    fn settle_static(&mut self) {
+        let Some(st) = self.static_ip.clone() else { return };
+        let Some(mac) = self.running.as_ref().map(|r| r.mac) else { return };
+        let Some(ssid) = self.state.joined.as_ref().map(|j| j.ssid.clone()) else { return };
+        let (signal, frequency) = self.state.networks.iter().find(|n| n.ssid == ssid).map_or((0, 0), |n| (n.signal, n.frequency));
+        if let Err(e) = iface::configure(&self.cfg.interface, st.address, st.mask, Some(st.gateway)) {
+            // 内核不认这组地址（最常见是网关不在同一网段）：说清楚，然后
+            // 回 DHCP，别拿一个配不上的地址每十秒撞一次。
+            let _ = skyward_sys::kmsg(&format!("the manual address did not go: {e:#}; an address is asked for over DHCP instead"));
+            self.static_ip = None;
+            if let Some(j) = &mut self.state.joined {
+                j.stage = Stage::Addressing;
+            }
+            self.ask_address();
+            return;
+        }
+        *self.servers.lock().expect("the DNS servers are not held by a thread that panicked") = st.dns.clone();
+        let Some(j) = &mut self.state.joined else { return };
+        j.stage = Stage::Connected(Link {
+            address: st.address,
+            mask: st.mask,
+            router: Some(st.gateway),
+            dns: st.dns.clone(),
+            signal,
+            frequency,
+            speed: None,
+            generation: None,
+            mac: mac_text(mac),
+            reach: None,
+        });
+        let _ = skyward_sys::kmsg(&format!(
+            "{} has {} ({}) as its own address, through {}, as set by hand",
+            self.cfg.interface, st.address, st.mask, st.gateway
+        ));
+        self.probe(st.dns.clone());
+    }
+
     fn addressed(&mut self, n: u64, answer: Result<Asked>) {
+        // 手动 IP 已经生效：DHCP 的答案（切换前发出去的那次）不要了。
+        if self.static_ip.is_some() {
+            if let Some(r) = &mut self.running {
+                r.asking = None;
+                r.retry_at = None;
+            }
+            return;
+        }
         let Some(r) = &mut self.running else { return };
         if r.asking.as_ref().map(|(m, _)| *m) != Some(n) {
             return;
@@ -558,6 +646,15 @@ impl Station {
 
     fn timers(&mut self) {
         let now = Instant::now();
+        if self.running.is_none() {
+            return;
+        }
+        // 记着手动 IP 却没落到「已连接」的阶段：不管事件顺序怎么绕，这里
+        // 每轮补一次。之前 Next::Address 那条路没走到，地址就一直没配上，
+        // 反而问起了 DHCP。
+        if self.static_ip.is_some() && self.state.joined.as_ref().is_some_and(|j| matches!(j.stage, Stage::Addressing)) {
+            self.settle_static();
+        }
         let Some(r) = &mut self.running else { return };
         if r.retry_at.is_some_and(|at| now >= at) {
             r.retry_at = None;

@@ -2156,6 +2156,12 @@ impl<'a> Pages<'a> {
                 }
                 shown = true;
             }
+            // 面板刚亮回来：触摸控制器可能已被驱动重置回上电态，把设置
+            // 再写一遍。只在这一次写，不按秒重写——synaptics 的驱动每写一次
+            // enable_touch_raw 都会关掉再打开触摸中断，按秒写等于按秒吞点击。
+            if self.blanked {
+                self.inputs.retell_touch();
+            }
             self.blanked = false;
         } else if !self.blanked {
             // Black out the panel's frame memory before the backlight goes
@@ -3802,6 +3808,10 @@ impl Pages<'_> {
                 wlan_worker(&self.wlan)?.send(wlan::Command::Join { ssid, name, security, password: password.0 })
             }
             Effect::LeaveWlan => wlan_worker(&self.wlan)?.send(wlan::Command::Leave),
+            Effect::WlanStatic { address, mask, gateway, dns } => {
+                wlan_worker(&self.wlan)?.send(wlan::Command::Static(wlan::Static { address, mask, gateway, dns }));
+            }
+            Effect::WlanDhcp => wlan_worker(&self.wlan)?.send(wlan::Command::Dhcp),
             // The folder the file manager shows is served to a browser on the
             // network the phone joined, so a computer moves files in and out
             // without a cable.
