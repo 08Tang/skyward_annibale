@@ -9,12 +9,8 @@ class SettingsSectionTest {
     fun settingsSectionsResolvePreciseAliases() {
         assertEquals(SettingsSection.UI_MODE, SettingsSection.normalize("ui_mode"))
         assertEquals(SettingsSection.GENERAL, SettingsSection.cardFor("ui_mode"))
-        assertEquals(SettingsSection.SECURITY, SettingsSection.cardFor("selinux_hide"))
-        assertEquals(
-            SettingsSection.MODULE_BEHAVIOUR,
-            SettingsSection.cardFor("auto_delete_module_zip"),
-        )
         assertEquals(SettingsSection.DIAGNOSTICS, SettingsSection.cardFor("diagnostics"))
+        assertEquals(SettingsSection.UNINSTALL, SettingsSection.cardFor("uninstall"))
         assertEquals(SettingsSection.GENERAL, SettingsSection.normalize("not_a_section"))
     }
 }
