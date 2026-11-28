@@ -10,7 +10,8 @@ name: APK
 on:
   push:
     branches: ["**"]
-    paths: ["apk-manager/**"]
+    # 改这个 workflow 本身也要触发一次，否则改完 CI 没法验证。
+    paths: ["apk-manager/**", ".github/workflows/apk.yml"]
   workflow_dispatch:
 
 permissions:
