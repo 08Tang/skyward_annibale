@@ -7,6 +7,9 @@ on:
     # The preview branch is checked by compiling alone, in its own workflow.
     branches-ignore: ["preview", "preview/**"]
     tags: ["v*"]
+    # apk-manager 是另一个东西（Kotlin 写的 APK），它有自己的 workflow，
+    # 不该让这里的 Rust 构建跟着跑一遍。
+    paths-ignore: ["apk-manager/**"]
   workflow_dispatch:
 
 permissions:

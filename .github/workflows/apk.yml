@@ -1,0 +1,128 @@
+name: APK
+
+# 构建 Skyward Manager（apk-manager/）。
+#
+# 这个 workflow 只碰 apk-manager/：Rust 那边有自己的 build.yml 和
+# preview.yml，两边互不触发。
+#
+# 每次构建都会把 version.properties 的补丁号加 0.0.1 再提交回去，所以同一
+# 个提交只会被构建一次——否则提交版本号会再触发一轮，绕不出来。
+on:
+  push:
+    branches: ["**"]
+    paths: ["apk-manager/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # 要提交版本号回去，得用能写的 token。
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Skip if only the version bump changed
+        id: guard
+        run: |
+          # 上一轮构建提交的只有 version.properties，别为它再构建一次。
+          last=$(git log -1 --pretty=%s)
+          changed=$(git diff-tree --no-commit-id --name-only -r HEAD || true)
+          echo "last commit: $last"
+          echo "changed: $changed"
+          if [ "$last" = "chore(apk): bump version" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 21
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        if: steps.guard.outputs.skip != 'true'
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          # compileSdk 37 / buildTools 37.0.0 由 build.gradle.kts 指定；
+          # 不装 NDK——这一版没有原生代码。
+          sdkmanager --install "platforms;android-37" "build-tools;37.0.0" "platform-tools"
+          yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Set up Gradle
+        if: steps.guard.outputs.skip != 'true'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore keystore
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.APK_KEYSTORE_BASE64 }}
+        run: |
+          # 证书只在 CI 里存在，仓库里不放。secret 是 base64 过的 .jks。
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::缺少 secret APK_KEYSTORE_BASE64，没有它签出来的包无法覆盖安装。"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/keystore"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/release.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: apk-manager
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Verify signature (v1 + v2 + v3)
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          apk=$(find apk-manager/app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "apk: $apk"
+          apksigner verify --verbose --print-certs "$apk"
+
+      - name: Upload APK
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: skyward-manager
+          path: apk-manager/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Bump version and commit back
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: apk-manager
+        run: |
+          # 每次构建把补丁号加 0.0.1，并提交回去，让下一个构建拿到新号。
+          cur=$(sed -n 's/^versionName=//p' version.properties)
+          major=$(echo "$cur" | cut -d. -f1)
+          minor=$(echo "$cur" | cut -d. -f2)
+          patch=$(echo "$cur" | cut -d. -f3)
+          next="$major.$minor.$((patch + 1))"
+          printf 'versionName=%s\n' "$next" > version.properties
+          echo "bumped $cur -> $next"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.properties
+          git commit -m "chore(apk): bump version" || echo "版本号没变，跳过提交"
+          git push

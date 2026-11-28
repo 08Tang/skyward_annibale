@@ -13,6 +13,8 @@ name: Preview
 on:
   push:
     branches: ["preview", "preview/**"]
+    # 同上：apk-manager 的改动由它自己的 workflow 管。
+    paths-ignore: ["apk-manager/**"]
   workflow_dispatch:
 
 permissions:
