@@ -3,6 +3,7 @@ package com.tkexig.skyward.ui.screen.skyward
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tkexig.skyward.appContext
+import com.tkexig.skyward.data.log.AppLog
 import com.tkexig.skyward.data.skyward.SkywardDevice
 import com.tkexig.skyward.data.skyward.SkywardDevices
 import com.tkexig.skyward.data.skyward.SkywardConfig
@@ -76,16 +77,20 @@ class SkywardViewModel : ViewModel() {
                 }
                 return@launch
             }
+            AppLog.i("刷新 Skyward 配置（root=$hasRoot，机型=${device?.codename ?: "未适配"}）")
             val read = withContext(Dispatchers.IO) { SkywardConfig.read() }
             _uiState.update {
                 when (read) {
-                    is SkywardRead.Loaded -> it.copy(
-                        loading = false,
-                        hasRoot = true,
-                        exists = true,
-                        settings = read.settings,
-                        error = null,
-                    )
+                    is SkywardRead.Loaded -> {
+                        AppLog.i("界面用文件里的值：screen_off=${read.settings.screenOff} thermal_limit=${read.settings.thermalLimit}")
+                        it.copy(
+                            loading = false,
+                            hasRoot = true,
+                            exists = true,
+                            settings = read.settings,
+                            error = null,
+                        )
+                    }
 
                     SkywardRead.Missing -> it.copy(
                         loading = false,
@@ -98,13 +103,16 @@ class SkywardViewModel : ViewModel() {
 
                     // 读失败时把原因摆出来：界面上是默认值，但用户得知道那不是
                     // 他的配置。直接保存会覆盖原文件。
-                    is SkywardRead.Failed -> it.copy(
-                        loading = false,
-                        hasRoot = true,
-                        exists = true,
-                        settings = SkywardSettings(),
-                        error = read.reason + "。现在显示的是默认值，直接保存会覆盖原文件。",
-                    )
+                    is SkywardRead.Failed -> {
+                        AppLog.w("界面用默认值：${read.reason}")
+                        it.copy(
+                            loading = false,
+                            hasRoot = true,
+                            exists = true,
+                            settings = SkywardSettings(),
+                            error = read.reason + "。现在显示的是默认值，直接保存会覆盖原文件。",
+                        )
+                    }
                 }
             }
         }

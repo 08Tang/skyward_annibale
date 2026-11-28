@@ -1,5 +1,6 @@
 package com.tkexig.skyward.ui.screen.sulog
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,6 +72,20 @@ fun SulogScreen() {
             OutlinedButton(onClick = { viewModel.clear(); }, modifier = Modifier.weight(1f)) {
                 Text("清空")
             }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        val clipboard = LocalClipboardManager.current
+        val context = LocalContext.current
+        OutlinedButton(
+            onClick = {
+                // 整份复制走：出问题时用户把这段贴过来就够了，不用去找文件。
+                clipboard.setText(AnnotatedString(state.lines.joinToString("\n")))
+                Toast.makeText(context, "日志已复制", Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("复制全部")
         }
 
         Spacer(Modifier.height(8.dp))

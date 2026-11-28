@@ -1,6 +1,6 @@
 package com.tkexig.skyward.data.skyward
 
-import android.util.Log
+import com.tkexig.skyward.data.log.AppLog
 import com.topjohnwu.superuser.ShellUtils
 import com.tkexig.skyward.ui.util.getRootShell
 import java.io.File
@@ -30,8 +30,6 @@ sealed interface SkywardRead {
 }
 
 object SkywardConfig {
-    private const val TAG = "SkywardConfig"
-
     const val DIR = "/metadata/skyward"
     const val FILE = "$DIR/settings.json"
 
@@ -42,11 +40,14 @@ object SkywardConfig {
      * 都有，没有的时候它报的错和「没挂」一模一样，于是这里以为没挂、去挂
      * 一个已经挂着的挂载点、挂不上，最后整份配置读不到、界面全显示默认值。
      */
-    private fun mounted(): Boolean =
-        ShellUtils.fastCmd(
+    private fun mounted(): Boolean {
+        val yes = ShellUtils.fastCmd(
             getRootShell(globalMnt = true),
             "grep -qs ' /metadata ' /proc/mounts && echo yes || echo no"
         ).trim() == "yes"
+        AppLog.d("mounted(/metadata) = $yes")
+        return yes
+    }
 
     /**
      * 让 /metadata 可读：没挂就挂上。
@@ -63,14 +64,19 @@ object SkywardConfig {
     private fun ensureMounted(): Boolean {
         if (mounted()) return true
         val dev = "/dev/block/by-name/metadata"
+        AppLog.i("挂载 /metadata：试 $dev")
         for (fs in listOf("erofs", "ext4", "f2fs")) {
-            ShellUtils.fastCmd(
+            val out = ShellUtils.fastCmd(
                 getRootShell(globalMnt = true),
                 "mkdir -p /metadata; mount -t $fs -o ro $dev /metadata 2>&1"
             )
-            if (mounted()) return true
+            AppLog.d("mount -t $fs → ${out.ifBlank { "(无输出)" }}")
+            if (mounted()) {
+                AppLog.i("/metadata 挂上了（$fs）")
+                return true
+            }
         }
-        Log.w(TAG, "cannot mount $dev on /metadata as erofs, ext4 or f2fs")
+        AppLog.e("cannot mount $dev on /metadata as erofs, ext4 or f2fs")
         return false
     }
 
@@ -83,23 +89,45 @@ object SkywardConfig {
      */
     fun read(): SkywardRead {
         if (!ensureMounted()) return SkywardRead.Failed("/metadata 挂不上，读不到配置")
-        // 用 exec().out 拿全部行再拼起来，不用 ShellUtils.fastCmd：那个只
-        // 给第一行，而这份 JSON 是多行的，读到的永远只有一个 "}"，解码必然
-        // 失败，界面就只能显示默认值。
+        // base64 传回来再解开，不直接 cat：libsu 按行给结果，而这份 JSON 是
+        // 多行格式化的，拼行会丢掉行尾的空格、也容易在换行处出错。base64 是
+        // 一整行，怎么读都不会坏。
+        var b64Chars = 0
         val text = runCatching {
-            getRootShell(globalMnt = true)
-                .newJob().add("cat ${FILE.shellQuote()}").exec().out
-                .joinToString("\n")
+            // -w0 让 base64 不折行；toybox 的老版本不认这个参数，那就退回
+            // 不带它，折出来的行下面会拼回去。
+            val shell = getRootShell(globalMnt = true)
+            val quoted = FILE.shellQuote()
+            var out = shell.newJob().add("base64 -w0 $quoted 2>/dev/null").exec().out
+            if (out.isEmpty()) out = shell.newJob().add("base64 $quoted").exec().out
+            val b64 = out.joinToString("").filterNot { it.isWhitespace() }
+            b64Chars = b64.length
+            if (b64.isBlank()) "" else String(
+                android.util.Base64.decode(b64, android.util.Base64.DEFAULT),
+                Charsets.UTF_8,
+            )
         }.getOrElse {
-            Log.w(TAG, "cat $FILE", it)
+            AppLog.e("读 $FILE 失败", it)
             return SkywardRead.Failed("读 $FILE 出错：${it.message}")
         }
-        if (text.isBlank()) return SkywardRead.Missing
+        if (text.isBlank()) {
+            AppLog.w("$FILE 是空的（base64 解出 0 字节）")
+            return SkywardRead.Missing
+        }
+        AppLog.i("读到 $FILE：${text.length} 字符，${text.lines().size} 行，$b64Chars 个 base64 字符")
+        AppLog.d("开头：${text.take(120).replace("\n", "\\n")}")
+        AppLog.d("结尾：${text.takeLast(60).replace("\n", "\\n")}")
         return runCatching { SkywardSettings.json.decodeFromString<SkywardSettings>(text) }
             .fold(
-                onSuccess = { SkywardRead.Loaded(it) },
+                onSuccess = {
+                    AppLog.i(
+                        "解码成功：screen_off=${it.screenOff}s thermal_limit=${it.thermalLimit}" +
+                            " charge_mode=${it.chargeMode} brightness=${it.brightness}"
+                    )
+                    SkywardRead.Loaded(it)
+                },
                 onFailure = {
-                    Log.w(TAG, "$FILE does not read as settings", it)
+                    AppLog.e("$FILE 解码失败", it)
                     SkywardRead.Failed("配置文件在，但读不懂：${it.message}")
                 },
             )
@@ -118,17 +146,26 @@ object SkywardConfig {
             getRootShell(globalMnt = true),
             "mount -o remount,rw /metadata 2>&1 && echo ok"
         ).trim()
+        AppLog.d("remount rw → ${remount.ifBlank { "(无输出)" }}")
         if (remount != "ok") error("/metadata 挂不成可写：$remount")
         val text = SkywardSettings.json.encodeToString(SkywardSettings.serializer(), settings)
+        AppLog.i("写入 $FILE：${text.length} 字符，screen_off=${settings.screenOff} thermal_limit=${settings.thermalLimit}")
         val tmp = "$FILE.new"
-        // base64 传内容：配置里有中文和换行，直接拼进 shell 会被拆开。
+        // 内容走 stdin，不拼进命令行：base64 有上千字符，拼进去会撞上命令行
+        // 长度上限，而且配置里的引号、换行都要另想办法转义。
         val b64 = android.util.Base64.encodeToString(text.toByteArray(), android.util.Base64.NO_WRAP)
-        val out = ShellUtils.fastCmd(
-            getRootShell(globalMnt = true),
-            "mkdir -p $DIR && echo $b64 | base64 -d > ${tmp.shellQuote()} && " +
-                "chmod 600 ${tmp.shellQuote()} && mv -f ${tmp.shellQuote()} ${FILE.shellQuote()} && echo ok"
-        ).trim()
-        if (out != "ok") error("写 $FILE 失败：$out")
+        val out = getRootShell(globalMnt = true)
+            .newJob()
+            .add("mkdir -p $DIR && base64 -d > ${tmp.shellQuote()} && " +
+                "chmod 600 ${tmp.shellQuote()} && mv -f ${tmp.shellQuote()} ${FILE.shellQuote()} && echo ok")
+            .to(ArrayList(), b64)
+            .exec()
+        val said = out.out.joinToString(" ").trim()
+        if (!out.isSuccess || !said.contains("ok")) {
+            AppLog.e("写 $FILE 失败：${said.ifBlank { out.err.joinToString(" ") }}")
+            error("写 $FILE 失败：${said.ifBlank { "无输出" }}")
+        }
+        AppLog.i("写入完成")
     }
 
     /** 配置文件在不在（挂上 /metadata 之后看）。 */
