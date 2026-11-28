@@ -158,7 +158,7 @@ object SkywardConfig {
             .newJob()
             .add("mkdir -p $DIR && base64 -d > ${tmp.shellQuote()} && " +
                 "chmod 600 ${tmp.shellQuote()} && mv -f ${tmp.shellQuote()} ${FILE.shellQuote()} && echo ok")
-            .to(ArrayList(), b64)
+            .to(ArrayList(), listOf(b64))
             .exec()
         val said = out.out.joinToString(" ").trim()
         if (!out.isSuccess || !said.contains("ok")) {
