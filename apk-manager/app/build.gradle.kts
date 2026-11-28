@@ -91,10 +91,9 @@ android {
             isShrinkResources = true
             vcsInfo.include = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // 没给证书时（本地随手构建）就不签，CI 里一定有。
-            if (hasKeystore) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            // 刻意不让 AGP 签名。minSdk 24 时它只出 v2/v3，而 v1 也要有；
+            // 让 CI 用 apksigner 对着未签名的包一次签全三种，比事后重签
+            // 干净——已带 v2 块的包再签不会补出 v1。
         }
     }
 
