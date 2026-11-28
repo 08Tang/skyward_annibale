@@ -55,15 +55,27 @@ jobs:
 
       - name: Set up Android SDK
         if: steps.guard.outputs.skip != 'true'
-        uses: android-actions/setup-android@v3
+        run: |
+          # ubuntu-latest 自带 Android SDK，直接用，不装 android-actions/setup-android：
+          # 那个 action 会去装一个叫 `tools` 的包，新版 SDK 仓库里已经没有它了，
+          # 装不到就退出 1，把整个 job 带垮。
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
 
       - name: Install SDK packages
         if: steps.guard.outputs.skip != 'true'
         run: |
-          # compileSdk 37 / buildTools 37.0.0 由 build.gradle.kts 指定；
+          # compileSdk 37.0 / buildTools 37.0.0 由 build.gradle.kts 指定。SDK 37 的
+          # 包名带 minor（platforms;android-37.0），不是 android-37。
           # 不装 NDK——这一版没有原生代码。
-          sdkmanager --install "platforms;android-37" "build-tools;37.0.0" "platform-tools"
-          yes | sdkmanager --licenses > /dev/null || true
+          SDKMANAGER=$(find "$ANDROID_HOME" -path '*/cmdline-tools/*/bin/sdkmanager' | head -1)
+          echo "sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
+          echo "$ANDROID_HOME/build-tools/37.0.0" >> "$GITHUB_PATH"
 
       - name: Set up Gradle
         if: steps.guard.outputs.skip != 'true'
