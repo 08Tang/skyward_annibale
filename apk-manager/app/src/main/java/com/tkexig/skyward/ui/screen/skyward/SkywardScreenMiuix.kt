@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tkexig.skyward.data.skyward.Feature
 import com.tkexig.skyward.data.skyward.SkywardConfig
+import com.tkexig.skyward.data.skyward.SkywardDevice
 import com.tkexig.skyward.data.skyward.SkywardSettings
 import com.tkexig.skyward.ui.component.miuix.AppCard
 import com.tkexig.skyward.ui.component.miuix.AppScaffold
