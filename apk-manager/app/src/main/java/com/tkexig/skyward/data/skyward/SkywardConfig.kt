@@ -13,16 +13,40 @@ import java.io.File
  * 通常根本没挂载，路径是个空目录，直接读会读到「没有配置」，而实际配置还
  * 在分区里。所以读写都先确保挂载，再动文件。
  */
+/**
+ * 读配置的结果。
+ *
+ * 分成三种而不是「读到或 null」：没有文件该显示默认值并说明「还没有配置」，
+ * 读失败该明确报错——两种情况都显示默认值的话，用户看到的就是一堆默认值
+ * 配着「一切正常」，那正是之前灭屏和温控看着不对的样子。
+ */
+sealed interface SkywardRead {
+    /** 读到了。 */
+    data class Loaded(val settings: SkywardSettings) : SkywardRead
+    /** 文件不存在，用 recovery 的默认值。 */
+    data object Missing : SkywardRead
+    /** 文件在但读不出来。 */
+    data class Failed(val reason: String) : SkywardRead
+}
+
 object SkywardConfig {
     private const val TAG = "SkywardConfig"
 
     const val DIR = "/metadata/skyward"
     const val FILE = "$DIR/settings.json"
 
-    /** /metadata 挂上了没有。 */
+    /**
+     * /metadata 挂上了没有。
+     *
+     * 看 /proc/mounts，不用 `mountpoint`：那个命令不是每台机器的 toybox 里
+     * 都有，没有的时候它报的错和「没挂」一模一样，于是这里以为没挂、去挂
+     * 一个已经挂着的挂载点、挂不上，最后整份配置读不到、界面全显示默认值。
+     */
     private fun mounted(): Boolean =
-        ShellUtils.fastCmd(getRootShell(globalMnt = true), "mountpoint -q /metadata && echo yes || echo no")
-            .trim() == "yes"
+        ShellUtils.fastCmd(
+            getRootShell(globalMnt = true),
+            "grep -qs ' /metadata ' /proc/mounts && echo yes || echo no"
+        ).trim() == "yes"
 
     /**
      * 让 /metadata 可读：没挂就挂上。
@@ -57,18 +81,23 @@ object SkywardConfig {
      * 默认值，但不能因此把文件写掉：一份读不出来的配置可能是新版 Skyward 写
      * 的，覆盖了就丢了。
      */
-    fun read(): SkywardSettings? {
-        if (!ensureMounted()) return null
+    fun read(): SkywardRead {
+        if (!ensureMounted()) return SkywardRead.Failed("/metadata 挂不上，读不到配置")
         val text = runCatching {
             ShellUtils.fastCmd(getRootShell(globalMnt = true), "cat ${FILE.shellQuote()}")
         }.getOrElse {
             Log.w(TAG, "cat $FILE", it)
-            return null
+            return SkywardRead.Failed("读 $FILE 出错：${it.message}")
         }
-        if (text.isBlank()) return null
+        if (text.isBlank()) return SkywardRead.Missing
         return runCatching { SkywardSettings.json.decodeFromString<SkywardSettings>(text) }
-            .onFailure { Log.w(TAG, "$FILE does not read as settings", it) }
-            .getOrNull()
+            .fold(
+                onSuccess = { SkywardRead.Loaded(it) },
+                onFailure = {
+                    Log.w(TAG, "$FILE does not read as settings", it)
+                    SkywardRead.Failed("配置文件在，但读不懂：${it.message}")
+                },
+            )
     }
 
     /**
@@ -110,8 +139,8 @@ object SkywardConfig {
      * 备份成 JSON 而不是二进制：这份文件本来就是 JSON，人看得懂、能改，换台
      * 机器也能用。
      */
-    fun exportJson(): String? = read()?.let {
-        SkywardSettings.json.encodeToString(SkywardSettings.serializer(), it)
+    fun exportJson(): String? = (read() as? SkywardRead.Loaded)?.let {
+        SkywardSettings.json.encodeToString(SkywardSettings.serializer(), it.settings)
     }
 
     /** 从 JSON 文本导入；解析不了就返回失败，不覆盖现有配置。 */

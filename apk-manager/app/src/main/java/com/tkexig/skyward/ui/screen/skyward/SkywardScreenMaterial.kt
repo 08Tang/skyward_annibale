@@ -142,7 +142,7 @@ fun SkywardScreenMaterial(
             if (settings.thermalGuard) {
                 item {
                     StepperItem(
-                        title = "温控上限",
+                        title = "温控",
                         value = settings.thermalLimit,
                         unit = "°C",
                         range = 40..55,

@@ -89,42 +89,24 @@ fun SkywardScreenMiuix(
         ) {
             Spacer(Modifier.height(8.dp))
 
-            // 机型卡片。认不出来就说清楚，不猜——配置项的可用性跟着它走。
+            // 机型与作者。机型可以点开换——认错机型时（改过代号、或者用着
+            // 别的机型的适配）能手动指过去，而不是只能接受猜出来的那个。
             AppCard {
-                val device = state.device
-                if (device != null) {
-                    Text(text = device.name, style = MiuixTheme.textStyles.title4)
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "${device.codename} · 适配 ${device.author}",
-                        style = MiuixTheme.textStyles.body2,
-                        color = colorScheme.onSurfaceVariantSummary,
-                    )
-                    if (device.note.isNotBlank()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = device.note,
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = colorScheme.onSurfaceVariantSummary,
-                        )
-                    }
-                } else {
-                    Text(text = "未适配的机型", style = MiuixTheme.textStyles.title4)
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = "代号 ${state.codenameOfThisDevice.ifBlank { "未知" }}。下面的配置项按通用处理。",
-                        style = MiuixTheme.textStyles.body2,
-                        color = colorScheme.onSurfaceVariantSummary,
-                    )
-                    if (state.knownDevices.isNotEmpty()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "已适配：" + state.knownDevices.joinToString("、") { it.name },
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = colorScheme.onSurfaceVariantSummary,
-                        )
-                    }
-                }
+                val current = state.device
+                DevicePicker(
+                    current = current,
+                    known = state.knownDevices,
+                    codename = state.codenameOfThisDevice,
+                    onSelect = actions.onSelectDevice,
+                )
+                // 作者这一行是手写的 Text，preference 组件自带的左右留白它没有，
+                // 不给就会贴到圆角上被切掉一截。
+                Text(
+                    text = "作者：" + (current?.author ?: "未适配"),
+                    style = MiuixTheme.textStyles.body2,
+                    color = colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
             }
 
             if (state.loading) {
@@ -175,7 +157,7 @@ fun SkywardScreenMiuix(
                     // 40 到 55 是 Skyward 自己的上下限（THERMAL_LIMIT_LEAST/MOST），
                     // 超出这个范围 recovery 会当作没设过。
                     StepperPreference(
-                        title = "温控上限",
+                        title = "温控",
                         value = settings.thermalLimit,
                         unit = "°C",
                         range = 40..55,
@@ -363,6 +345,45 @@ private fun PreferenceIcon(icon: ImageVector) {
         contentDescription = null,
         modifier = Modifier.padding(end = 6.dp).size(22.dp),
         tint = MiuixTheme.colorScheme.onBackground,
+    )
+}
+
+/**
+ * 机型选择。
+ *
+ * 样式和「自动灭屏」那些一样：一行标题加当前值，点开是选择框。认错机型时
+ * 可以手动换——改过 `ro.product.device` 的机器，或者拿别的机型的适配先用
+ * 着，都不该只能接受自动猜出来的那个。
+ *
+ * 第一项「自动」回到按代号匹配的结果。
+ */
+@Composable
+private fun DevicePicker(
+    current: SkywardDevice?,
+    known: List<SkywardDevice>,
+    codename: String,
+    onSelect: (SkywardDevice?) -> Unit,
+) {
+    if (known.isEmpty()) {
+        Text(
+            text = "机型：未适配（${codename.ifBlank { "未知代号" }}）",
+            style = MiuixTheme.textStyles.body1,
+        )
+        return
+    }
+
+    val items = listOf("自动（${codename.ifBlank { "未知代号" }}）") + known.map { it.name }
+    val selected = known.indexOfFirst { it.codename == current?.codename }
+        .let { if (it < 0) 0 else it + 1 }
+
+    OverlayDropdownPreference(
+        title = "机型",
+        summary = current?.name ?: "未适配",
+        items = items,
+        selectedIndex = selected,
+        onSelectedIndexChange = { index ->
+            onSelect(if (index == 0) null else known[index - 1])
+        },
     )
 }
 

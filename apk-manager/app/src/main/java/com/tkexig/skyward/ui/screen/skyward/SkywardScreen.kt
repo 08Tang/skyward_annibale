@@ -42,6 +42,7 @@ private fun skywardActions(viewModel: SkywardViewModel) = SkywardActions(
     onRefresh = viewModel::refresh,
     onSave = viewModel::save,
     onEdit = viewModel::edit,
+    onSelectDevice = viewModel::selectDevice,
     onStageImport = viewModel::stageImport,
     onDismissMessage = viewModel::clearMessage,
 )
@@ -52,4 +53,6 @@ data class SkywardActions(
     val onEdit: ((com.tkexig.skyward.data.skyward.SkywardSettings) -> com.tkexig.skyward.data.skyward.SkywardSettings) -> Unit,
     val onStageImport: (String) -> Unit,
     val onDismissMessage: () -> Unit,
+    /** 手动指定机型；null 表示回到按代号自动识别。 */
+    val onSelectDevice: (com.tkexig.skyward.data.skyward.SkywardDevice?) -> Unit,
 )

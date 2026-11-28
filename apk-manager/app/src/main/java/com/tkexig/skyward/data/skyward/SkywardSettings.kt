@@ -23,8 +23,8 @@ data class SkywardSettings(
     /** 上次说的语言，给命名不了语言的启动用（fastboot）。 */
     val spoken: String? = null,
     val dark: Boolean = false,
-    /** 亮度滑块的位置，0 到 1。 */
-    val brightness: Float = 0.6f,
+    /** 亮度滑块的位置，0 到 1；recovery 从 `SLIDER_START`（0.1）起步。 */
+    val brightness: Float = 0.1f,
     /**
      * 无操作多久灭屏，秒；0 表示不灭。
      *
@@ -32,7 +32,7 @@ data class SkywardSettings(
      * 值——这正是「灭屏时间识别不正常」的原因。
      */
     @SerialName("screen_off")
-    val screenOff: Long = 0L,
+    val screenOff: Long = 120L,
     /** 时钟跟随已安装系统设置的时区。 */
     @SerialName("follow_system_time_zone")
     val followSystemTimeZone: Boolean = true,
@@ -44,7 +44,7 @@ data class SkywardSettings(
     val systemTimeZone: String? = null,
     val vibrate: Boolean = true,
     /** 振动强度的位置，0 到 1。 */
-    val vibration: Float = 0.5f,
+    val vibration: Float = 0.1f,
     /** 插上电脑时把内部存储给它。 */
     @SerialName("file_transfer")
     val fileTransfer: Boolean = true,
@@ -59,13 +59,13 @@ data class SkywardSettings(
     @SerialName("thermal_guard")
     val thermalGuard: Boolean = true,
     @SerialName("thermal_limit")
-    val thermalLimit: Int = 40,
+    val thermalLimit: Int = 45,
     val install: Install = Install(),
     val backup: Backup = Backup(),
     val logs: Logs = Logs(),
     /** 安装后自动用哪个 Root 修补新槽：`none` / `kernelsu` / `magisk`。 */
     @SerialName("auto_root")
-    val autoRoot: String = "",
+    val autoRoot: String = "none",
     /** 手动指定的 IPv4；有它就不走 DHCP。 */
     @SerialName("wlan_static")
     val wlanStatic: StaticV4? = null,
@@ -74,7 +74,7 @@ data class SkywardSettings(
     data class Install(
         /** zip 的安装脚本只在签名匹配时才跑。 */
         @SerialName("check_signature")
-        val checkSignature: Boolean = true,
+        val checkSignature: Boolean = false,
         /** 安装写掉的 recovery 分区，Skyward 会再进一次。 */
         @SerialName("keep_recovery")
         val keepRecovery: Boolean = true,
@@ -95,7 +95,7 @@ data class SkywardSettings(
         /** 哪些日志：recovery、kernel。 */
         val kinds: List<String> = listOf("recovery", "kernel"),
         /** 存到哪：temporary 或 storage。 */
-        val to: String = "storage",
+        val to: String = "temporary",
     )
 
     @Serializable

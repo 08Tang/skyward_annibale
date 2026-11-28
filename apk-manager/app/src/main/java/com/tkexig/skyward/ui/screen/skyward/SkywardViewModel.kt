@@ -6,6 +6,7 @@ import com.tkexig.skyward.appContext
 import com.tkexig.skyward.data.skyward.SkywardDevice
 import com.tkexig.skyward.data.skyward.SkywardDevices
 import com.tkexig.skyward.data.skyward.SkywardConfig
+import com.tkexig.skyward.data.skyward.SkywardRead
 import com.tkexig.skyward.data.skyward.SkywardSettings
 import com.tkexig.skyward.ui.util.rootAvailable
 import kotlinx.coroutines.Dispatchers
@@ -70,42 +71,51 @@ class SkywardViewModel : ViewModel() {
                 }
                 return@launch
             }
-            val result = runCatching { withContext(Dispatchers.IO) { SkywardConfig.read() } }
-            result.fold(
-                onSuccess = { parsed ->
-                    _uiState.update {
-                        it.copy(
-                            loading = false,
-                            hasRoot = true,
-                            exists = parsed != null,
-                            settings = parsed ?: SkywardSettings(),
-                            // 文件在、但解析不出来：这是最需要说清楚的一种情况。
-                            // 界面上显示的仍是默认值，用户若直接点保存就会把一份
-                            // 读不懂的配置覆盖掉，所以要先讲明白。
-                            error = if (parsed == null && SkywardConfig.exists()) {
-                                "配置文件在，但读不懂。可能不是 Skyward 的 settings.json，" +
-                                    "或者来自更新版本。直接保存会覆盖它。"
-                            } else {
-                                null
-                            },
-                        )
-                    }
-                },
-                onFailure = { e ->
-                    _uiState.update {
-                        it.copy(
-                            loading = false,
-                            hasRoot = true,
-                            exists = false,
-                            error = e.message ?: "读配置失败",
-                        )
-                    }
-                },
-            )
+            val read = withContext(Dispatchers.IO) { SkywardConfig.read() }
+            _uiState.update {
+                when (read) {
+                    is SkywardRead.Loaded -> it.copy(
+                        loading = false,
+                        hasRoot = true,
+                        exists = true,
+                        settings = read.settings,
+                        error = null,
+                    )
+
+                    SkywardRead.Missing -> it.copy(
+                        loading = false,
+                        hasRoot = true,
+                        exists = false,
+                        settings = SkywardSettings(),
+                        error = null,
+                        message = "还没有配置文件，下面是 Skyward 的默认值",
+                    )
+
+                    // 读失败时把原因摆出来：界面上是默认值，但用户得知道那不是
+                    // 他的配置。直接保存会覆盖原文件。
+                    is SkywardRead.Failed -> it.copy(
+                        loading = false,
+                        hasRoot = true,
+                        exists = true,
+                        settings = SkywardSettings(),
+                        error = read.reason + "。现在显示的是默认值，直接保存会覆盖原文件。",
+                    )
+                }
+            }
         }
     }
 
     /** 改一个字段。界面上的每次调整都走这里，再点保存才落盘。 */
+    /**
+     * 手动指定机型。
+     *
+     * 传 null 回到自动识别的结果。只影响界面显示哪些项，不动配置文件——
+     * 配置项是同一份，换机型只是换个视角。
+     */
+    fun selectDevice(device: SkywardDevice?) {
+        _uiState.update { it.copy(device = device) }
+    }
+
     fun edit(transform: (SkywardSettings) -> SkywardSettings) {
         _uiState.update { state ->
             val current = state.settings ?: return@update state

@@ -103,6 +103,15 @@ jobs:
             echo "SIGNED=true" >> "$GITHUB_ENV"
           fi
 
+      - name: Run unit tests
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: apk-manager
+        run: |
+          # 配置文件的字段名写错时解码不会失败，只会悄悄用默认值，所以这里
+          # 必须有测试盯着；纯 JVM 测试，不需要 SDK。
+          chmod +x ./gradlew || true
+          ./gradlew testReleaseUnitTest --no-daemon --stacktrace
+
       - name: Build release APK
         if: steps.guard.outputs.skip != 'true'
         working-directory: apk-manager
