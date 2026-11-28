@@ -1,8 +1,6 @@
 package com.tkexig.skyward.ui.screen.settings
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -14,32 +12,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Article
-import androidx.compose.material.icons.automirrored.rounded.Rule
-import androidx.compose.material.icons.rounded.Adb
-import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.DeveloperMode
 import androidx.compose.material.icons.rounded.DisplaySettings
-import androidx.compose.material.icons.rounded.FlashOn
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.LayersClear
-import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Policy
-import androidx.compose.material.icons.rounded.Security
-import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +42,6 @@ import com.tkexig.skyward.ui.component.dialog.rememberLoadingDialog
 import com.tkexig.skyward.ui.component.miuix.AppCard
 import com.tkexig.skyward.ui.component.miuix.AppScaffold
 import com.tkexig.skyward.ui.component.miuix.SendLogDialog
-import com.tkexig.skyward.ui.component.rebootlistpopup.rememberRebootAction
 import com.tkexig.skyward.ui.theme.LocalBackgroundImagePath
 import com.tkexig.skyward.ui.theme.LocalEnableBlur
 import com.tkexig.skyward.ui.theme.backgroundAwareCardColors
@@ -76,13 +58,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles
-import androidx.compose.ui.text.style.TextAlign
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import kotlin.time.Duration.Companion.milliseconds
@@ -242,280 +218,6 @@ fun SettingPagerMiuix(
                                 onClick = {
                                     actions.onOpenTools()
                                 }
-                            )
-                        }
-                    }
-
-                    KsuIsValid {
-                        val suCompatModeItems = listOf(
-                            stringResource(id = R.string.settings_mode_enable_by_default),
-                            stringResource(id = R.string.settings_mode_disable_until_reboot),
-                            stringResource(id = R.string.settings_mode_disable_always),
-                        )
-
-                        AppCard(
-                            modifier = Modifier
-                                .bringIntoViewRequester(requester(SettingsSection.SECURITY))
-                                .padding(top = 12.dp)
-                                .fillMaxWidth(),
-                            colors = backgroundAwareCardColors(),
-                        ) {
-                            val suSummary = when (uiState.suCompatStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_sucompat_summary)
-                            }
-                            OverlayDropdownPreference(
-                                title = customText(CustomTextKey.SETTING_SUCOMPAT),
-                                summary = suSummary,
-                                items = suCompatModeItems,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.AdminPanelSettings,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_SUCOMPAT),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                enabled = uiState.suCompatStatus == "supported",
-                                selectedIndex = uiState.suCompatMode,
-                                onSelectedIndexChange = actions.onSetSuCompatMode
-                            )
-
-                            val umountSummary = when (uiState.kernelUmountStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_kernel_umount_summary)
-                            }
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_KERNEL_UMOUNT),
-                                summary = umountSummary,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.LayersClear,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_KERNEL_UMOUNT),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                enabled = uiState.kernelUmountStatus == "supported",
-                                checked = uiState.isKernelUmountEnabled,
-                                onCheckedChange = actions.onSetKernelUmountEnabled
-                            )
-
-                            val selinuxHideSummary = when (uiState.selinuxHideStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_selinux_hide_summary)
-                            }
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_SELINUX_HIDE),
-                                summary = selinuxHideSummary,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Security,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_SELINUX_HIDE),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                enabled = uiState.selinuxHideStatus == "supported",
-                                checked = uiState.isSelinuxHideEnabled,
-                                onCheckedChange = actions.onSetSelinuxHideEnabled
-                            )
-
-                            val avcSummary = when (uiState.avcSpoofStatus) {
-                                "unsupported" -> stringResource(R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(R.string.feature_status_forced_summary)
-                                else -> stringResource(R.string.settings_avc_spoof_summary)
-                            }
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_AVC_SPOOF),
-                                summary = avcSummary,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Security,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_AVC_SPOOF),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                enabled = uiState.avcSpoofStatus == "supported",
-                                checked = uiState.isAvcSpoofEnabled,
-                                onCheckedChange = actions.onSetAvcSpoofEnabled
-                            )
-
-                            val mountHideSummary = when (uiState.mountHideStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_mount_hide_summary)
-                            }
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_MOUNT_HIDE),
-                                summary = mountHideSummary,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Policy,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_MOUNT_HIDE),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                enabled = uiState.mountHideStatus == "supported",
-                                checked = uiState.isMountHideEnabled,
-                                onCheckedChange = actions.onSetMountHideEnabled
-                            )
-
-                            val sulogSummary = when (uiState.sulogStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_sulog_summary)
-                            }
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_SULOG),
-                                summary = sulogSummary,
-                                startAction = {
-                                    Icon(
-                                        Icons.AutoMirrored.Rounded.Article,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_SULOG),
-                                        tint = if (uiState.sulogStatus == "supported") colorScheme.onBackground else colorScheme.disabledOnSecondaryVariant
-                                    )
-                                },
-                                enabled = uiState.sulogStatus == "supported",
-                                checked = uiState.isSulogEnabled,
-                                onCheckedChange = actions.onSetSulogEnabled
-                            )
-
-                            val adbRootSummary = when (uiState.adbRootStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_adb_root_summary)
-                            }
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_ADB_ROOT),
-                                summary = adbRootSummary,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Adb,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_ADB_ROOT),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                enabled = uiState.adbRootStatus == "supported",
-                                checked = uiState.isAdbRootEnabled,
-                                onCheckedChange = actions.onSetAdbRootEnabled
-                            )
-
-                            val shellSuAdbOnlySummary = when (uiState.shellSuAdbOnlyStatus) {
-                                "unsupported" -> stringResource(id = R.string.feature_status_unsupported_summary)
-                                "managed" -> stringResource(id = R.string.feature_status_managed_summary)
-                                "forced" -> stringResource(id = R.string.feature_status_forced_summary)
-                                else -> stringResource(id = R.string.settings_shell_su_adb_only_summary)
-                            }
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_SHELL_SU),
-                                summary = shellSuAdbOnlySummary,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.VerifiedUser,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_SHELL_SU),
-                                        tint = if (uiState.shellSuAdbOnlyStatus == "supported") colorScheme.onBackground else colorScheme.disabledOnSecondaryVariant
-                                    )
-                                },
-                                enabled = uiState.shellSuAdbOnlyStatus == "supported",
-                                checked = uiState.isShellSuAdbOnlyEnabled,
-                                onCheckedChange = actions.onSetShellSuAdbOnlyEnabled
-                            )
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_SOFT_REBOOT),
-                                summary = stringResource(id = R.string.settings_soft_reboot_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.RestartAlt,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_SOFT_REBOOT),
-                                        tint = if (uiState.isLateLoadMode) colorScheme.disabledOnSecondaryVariant else colorScheme.onBackground
-                                    )
-                                },
-                                enabled = !uiState.isLateLoadMode,
-                                checked = uiState.isLateLoadMode || uiState.useSoftReboot,
-                                onCheckedChange = actions.onSetUseSoftReboot
-                            )
-                        }
-
-                        AppCard(
-                            modifier = Modifier
-                                .bringIntoViewRequester(requester(SettingsSection.MODULE_BEHAVIOUR))
-                                .padding(top = 12.dp)
-                                .fillMaxWidth(),
-                            colors = backgroundAwareCardColors(),
-                        ) {
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_UMOUNT_MODULES_DEFAULT),
-                                summary = stringResource(id = R.string.settings_umount_modules_default_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.AutoMirrored.Rounded.Rule,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_UMOUNT_MODULES_DEFAULT),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                checked = uiState.isDefaultUmountModules,
-                                onCheckedChange = actions.onSetDefaultUmountModules
-                            )
-
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_AUTO_DELETE_MODULE_ZIP),
-                                summary = stringResource(id = R.string.settings_auto_delete_module_zip_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Delete,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_AUTO_DELETE_MODULE_ZIP),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                checked = uiState.autoDeleteModuleZip,
-                                onCheckedChange = actions.onSetAutoDeleteModuleZip
-                            )
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_AUTO_DELETE_UPDATE_APK),
-                                summary = stringResource(id = R.string.settings_auto_delete_update_apk_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Delete,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_AUTO_DELETE_UPDATE_APK),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                checked = uiState.autoDeleteUpdateApk,
-                                onCheckedChange = actions.onSetAutoDeleteUpdateApk
-                            )
-                            SwitchPreference(
-                                title = customText(CustomTextKey.SETTING_WEB_DEBUGGING),
-                                summary = stringResource(id = R.string.enable_web_debugging_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.DeveloperMode,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = customText(CustomTextKey.SETTING_WEB_DEBUGGING),
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                checked = uiState.enableWebDebugging,
-                                onCheckedChange = actions.onSetEnableWebDebugging
                             )
                         }
                     }

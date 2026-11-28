@@ -106,6 +106,7 @@ import com.tkexig.skyward.ui.screen.colorpalette.ColorPaletteScreen
 import com.tkexig.skyward.ui.screen.appearanceoverlay.AppearanceOverlayScreen
 import com.tkexig.skyward.ui.screen.home.HomePager
 import com.tkexig.skyward.ui.screen.settings.SettingPager
+import com.tkexig.skyward.ui.screen.install.InstallRouteScreen
 import com.tkexig.skyward.ui.screen.skyward.SkywardPager
 import com.tkexig.skyward.ui.screen.settings.tools.ToolsScreen
 import com.tkexig.skyward.ui.screen.sulog.SulogScreen
@@ -328,6 +329,9 @@ class MainActivity : ComponentActivity() {
                             entry<Route.Home>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.Settings>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                                 entry<Route.Tool>(swipeDismiss = swipeDismiss)  { ToolsScreen() }
+                                entry<Route.Install>(swipeDismiss = swipeDismiss) {
+                                    InstallRouteScreen(onBack = { navigator.pop() })
+                                }
                         }
                     }
 

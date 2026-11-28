@@ -17,9 +17,9 @@ import kotlinx.coroutines.withContext
  * Skyward 自己那份 settings.json 的读写。
  *
  * 配置在 /metadata/skyward/settings.json，由 Skyward 用 serde 序列化。那边
- * 有一半字段没有 #[serde(default)]，所以写回去时必须把每个字段都带上——
- * 缺一个 Skyward 就解析失败，用户的设置会被它当成损坏丢掉。Kotlin 这边
- * 靠 encodeDefaults 保证这一点。
+ * 的 `Settings` 整个结构体带 `#[serde(default)]`，缺字段不会读不出来；但写
+ * 回去时仍然把每个字段都带上（encodeDefaults），这样文件是完整的一份，人也
+ * 看得懂。
  */
 data class SkywardUiState(
     val loading: Boolean = true,
@@ -60,7 +60,15 @@ class SkywardViewModel : ViewModel() {
                             hasRoot = true,
                             exists = parsed != null,
                             settings = parsed ?: SkywardSettings(),
-                            error = null,
+                            // 文件在、但解析不出来：这是最需要说清楚的一种情况。
+                            // 界面上显示的仍是默认值，用户若直接点保存就会把一份
+                            // 读不懂的配置覆盖掉，所以要先讲明白。
+                            error = if (parsed == null && SkywardConfig.exists()) {
+                                "配置文件在，但读不懂。可能不是 Skyward 的 settings.json，" +
+                                    "或者来自更新版本。直接保存会覆盖它。"
+                            } else {
+                                null
+                            },
                         )
                     }
                 },

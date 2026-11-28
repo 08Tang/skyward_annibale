@@ -8,10 +8,11 @@ import kotlinx.serialization.json.Json
  * Skyward Recovery 的 settings.json，逐字段对应 crates/skyward-ui/src/settings.rs
  * 里的 `Settings`。
  *
- * 字段名和类型必须和 Rust 那边一致：那份文件由 serde 读写，多一个字段不会
- * 出错（serde 默认忽略未知字段），但类型写错（比如把数字写成字符串）会让
- * 整份配置读不出来，recovery 会当作没有配置、退回默认值。所以这里的默认值
- * 也照着 `Settings::of(&State::default())` 抄。
+ * 字段名和类型必须和 Rust 那边一致。Rust 的 `Settings` 整个结构体带
+ * `#[serde(default)]`，所以缺字段不会读不出来——缺的那个按 recovery 的默认值
+ * 补上。类型写错（比如把数字写成字符串）才会让整份配置读不出来，recovery
+ * 当作没有配置、退回默认值。这里每个字段的默认值都照 `Settings::of` 里
+ * 用的那几个常量抄：`SCREEN_OFF`、`THERMAL_LIMIT_LEAST/MOST`、`PARTS`。
  *
  * 路径：/metadata/skyward/settings.json
  */
@@ -72,8 +73,8 @@ data class SkywardSettings(
 
     @Serializable
     data class Backup(
-        /** 备份哪些分区：boot、system、data、modem。 */
-        val parts: List<String> = listOf("boot", "system", "data", "modem"),
+        /** 备份哪些分区：boot、system、data、media、modem，顺序同 recovery 的备份页。 */
+        val parts: List<String> = listOf("boot", "system", "data", "media", "modem"),
         /** 存到哪：storage 或 usb_drive。 */
         val to: String = "storage",
         val compress: Boolean = false,
@@ -98,8 +99,9 @@ data class SkywardSettings(
 
     companion object {
         /**
-         * `encodeDefaults` 打开：Rust 那边的字段没有 `#[serde(default)]`，缺一
-         * 个就整份读不出来，所以写回去时要把每个字段都带上。
+         * `encodeDefaults` 打开：写回去时把每个字段都带上，而不是只写和默认值
+         * 不同的那些。这样 recovery 读到的一定是完整的一份，也便于人直接看
+         * 文件；`ignoreUnknownKeys` 让新版 Skyward 多加的字段不影响这里读。
          */
         val json = Json {
             prettyPrint = true

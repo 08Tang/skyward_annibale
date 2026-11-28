@@ -10,8 +10,6 @@ object SettingsSection {
 
     const val GENERAL = "general"
     const val TOOLS = "tools"
-    const val SECURITY = "security"
-    const val MODULE_BEHAVIOUR = "module_behaviour"
     const val UNINSTALL = "uninstall"
     const val DIAGNOSTICS = "diagnostics"
 
@@ -20,13 +18,12 @@ object SettingsSection {
     const val THEME = "theme"
 
     val ALL: Set<String> = setOf(
-        GENERAL, TOOLS, SECURITY, MODULE_BEHAVIOUR, UNINSTALL, DIAGNOSTICS,
+        GENERAL, TOOLS, UNINSTALL, DIAGNOSTICS,
         UI_MODE, LANGUAGE, THEME,
     )
 
     fun cardFor(anchor: String): String = when (anchor.trim().lowercase().replace('-', '_')) {
         UI_MODE, LANGUAGE, THEME -> GENERAL
-        MODULE_BEHAVIOUR -> MODULE_BEHAVIOUR
         UNINSTALL -> UNINSTALL
         DIAGNOSTICS -> DIAGNOSTICS
         else -> GENERAL

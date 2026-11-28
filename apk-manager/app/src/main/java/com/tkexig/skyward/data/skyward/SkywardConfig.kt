@@ -21,20 +21,32 @@ object SkywardConfig {
 
     /** /metadata 挂上了没有。 */
     private fun mounted(): Boolean =
-        ShellUtils.fastCmd(getRootShell(), "mountpoint -q /metadata && echo yes || echo no")
+        ShellUtils.fastCmd(getRootShell(globalMnt = true), "mountpoint -q /metadata && echo yes || echo no")
             .trim() == "yes"
 
     /**
      * 让 /metadata 可读：没挂就挂上。
      *
-     * `metadata` 这个 fstab 名字是 Skyward 自己用的；挂不上就返回 false，调用
-     * 方据此报「读不到」，而不是编一份默认配置出来覆盖用户的。
+     * 不能用 `mount /metadata`：那是按 fstab 里的条目挂，而 fstab 是 recovery
+     * 自己的，系统跑起来之后 /metadata 往往根本没有这一条。Skyward 自己是按
+     * 分区设备挂的（`/dev/block/by-name/metadata`），文件系统依次试 erofs、
+     * ext4、f2fs——这里照它的顺序试，因为同一台机器上分区是什么格式要看
+     * 厂商，猜错就是挂不上。
+     *
+     * 挂不上就返回 false，调用方据此报「读不到」，而不是编一份默认配置出来
+     * 覆盖用户的。
      */
     private fun ensureMounted(): Boolean {
         if (mounted()) return true
-        val out = ShellUtils.fastCmd(getRootShell(), "mount /metadata 2>&1")
-        if (mounted()) return true
-        Log.w(TAG, "mount /metadata: $out")
+        val dev = "/dev/block/by-name/metadata"
+        for (fs in listOf("erofs", "ext4", "f2fs")) {
+            ShellUtils.fastCmd(
+                getRootShell(globalMnt = true),
+                "mkdir -p /metadata; mount -t $fs -o ro $dev /metadata 2>&1"
+            )
+            if (mounted()) return true
+        }
+        Log.w(TAG, "cannot mount $dev on /metadata as erofs, ext4 or f2fs")
         return false
     }
 
@@ -48,7 +60,7 @@ object SkywardConfig {
     fun read(): SkywardSettings? {
         if (!ensureMounted()) return null
         val text = runCatching {
-            ShellUtils.fastCmd(getRootShell(), "cat ${FILE.shellQuote()}")
+            ShellUtils.fastCmd(getRootShell(globalMnt = true), "cat ${FILE.shellQuote()}")
         }.getOrElse {
             Log.w(TAG, "cat $FILE", it)
             return null
@@ -67,12 +79,18 @@ object SkywardConfig {
      */
     fun write(settings: SkywardSettings): Result<Unit> = runCatching {
         if (!ensureMounted()) error("/metadata 挂不上，配置写不进去")
+        // 读的时候是只读挂的，写之前要重挂成可写；remount 不动里面的内容。
+        val remount = ShellUtils.fastCmd(
+            getRootShell(globalMnt = true),
+            "mount -o remount,rw /metadata 2>&1 && echo ok"
+        ).trim()
+        if (remount != "ok") error("/metadata 挂不成可写：$remount")
         val text = SkywardSettings.json.encodeToString(SkywardSettings.serializer(), settings)
         val tmp = "$FILE.new"
         // base64 传内容：配置里有中文和换行，直接拼进 shell 会被拆开。
         val b64 = android.util.Base64.encodeToString(text.toByteArray(), android.util.Base64.NO_WRAP)
         val out = ShellUtils.fastCmd(
-            getRootShell(),
+            getRootShell(globalMnt = true),
             "mkdir -p $DIR && echo $b64 | base64 -d > ${tmp.shellQuote()} && " +
                 "chmod 600 ${tmp.shellQuote()} && mv -f ${tmp.shellQuote()} ${FILE.shellQuote()} && echo ok"
         ).trim()
@@ -82,7 +100,7 @@ object SkywardConfig {
     /** 配置文件在不在（挂上 /metadata 之后看）。 */
     fun exists(): Boolean {
         if (!ensureMounted()) return false
-        val out = ShellUtils.fastCmd(getRootShell(), "[ -f ${FILE.shellQuote()} ] && echo yes || echo no")
+        val out = ShellUtils.fastCmd(getRootShell(globalMnt = true), "[ -f ${FILE.shellQuote()} ] && echo yes || echo no")
         return out.trim() == "yes"
     }
 

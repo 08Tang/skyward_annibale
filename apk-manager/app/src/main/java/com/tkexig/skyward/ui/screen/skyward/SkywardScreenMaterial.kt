@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -126,7 +129,7 @@ fun SkywardScreenMaterial(
                         title = "温控上限",
                         value = settings.thermalLimit,
                         unit = "°C",
-                        range = 35..50,
+                        range = 40..55,
                         onChange = { v -> actions.onEdit { it.copy(thermalLimit = v) } },
                     )
                 }
@@ -154,14 +157,36 @@ fun SkywardScreenMaterial(
                 )
             }
             item {
-                StepperItem(
-                    title = "自动灭屏",
-                    value = settings.screenOff.toInt(),
-                    unit = "秒",
-                    range = 0..300,
-                    step = 15,
-                    onChange = { v -> actions.onEdit { it.copy(screenOff = v.toLong()) } },
-                )
+                // 灭屏不是连续秒数：Skyward 那边是七个固定档（15 秒到 10 分钟，
+                // 加一个「不灭屏」）。按档给，滑块停不到 recovery 不认的值上。
+                val steps = listOf(15L to "15 秒", 30L to "30 秒", 60L to "1 分钟",
+                    120L to "2 分钟", 300L to "5 分钟", 600L to "10 分钟", 0L to "不灭屏")
+                var expanded by remember { mutableStateOf(false) }
+                val current = steps.firstOrNull { it.first == settings.screenOff } ?: steps[2]
+                Box {
+                    SegmentedListItem(
+                        headlineContent = { Text("自动灭屏") },
+                        trailingContent = {
+                            Text(
+                                text = current.second,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        onClick = { expanded = true },
+                    )
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        steps.forEach { (secs, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    actions.onEdit { it.copy(screenOff = secs) }
+                                    expanded = false
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
 

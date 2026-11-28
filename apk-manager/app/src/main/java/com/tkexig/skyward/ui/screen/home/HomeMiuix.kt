@@ -423,14 +423,14 @@ private fun ActiveStatusCard(
                             fontSize = 36.sp,
                             fontWeight = FontWeight.Bold,
                         )
-                        Text(
-                            text = stringResource(
-                                R.string.home_working_version,
-                                "${state.ksuVersion}-${state.kernelUAPIVersion}"
-                            ),
-                            fontSize = 14.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = colorScheme.onSurfaceVariantSummary,
+                    }
+                    // 安装入口放在「工作中」里：没有 root 时刷不了机，那个按钮
+                    // 就不该出现，免得点了只得到一句「没有权限」。
+                    if (!state.isLateLoadMode) {
+                        TextButton(
+                            text = customText(CustomTextKey.HOME_BTN_INSTALL),
+                            onClick = actions.onInstallClick,
+                            colors = ButtonDefaults.textButtonColorsPrimary(),
                         )
                     }
                 }
@@ -490,15 +490,6 @@ private fun InactiveStatusCard(
                 fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
             )
-            if (notInstalled) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TextButton(
-                        text = customText(CustomTextKey.HOME_BTN_INSTALL),
-                        onClick = actions.onInstallClick,
-                        colors = ButtonDefaults.textButtonColorsPrimary()
-                    )
-                }
-            }
         }
     }
 }

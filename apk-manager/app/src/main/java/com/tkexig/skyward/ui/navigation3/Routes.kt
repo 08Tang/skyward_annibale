@@ -87,4 +87,9 @@ sealed interface Route : NavKey, Parcelable {
     @Parcelize
     @Serializable
     data object Tool : Route
+
+    /** 刷入 Skyward 的 recovery 镜像。 */
+    @Parcelize
+    @Serializable
+    data object Install : Route
 }

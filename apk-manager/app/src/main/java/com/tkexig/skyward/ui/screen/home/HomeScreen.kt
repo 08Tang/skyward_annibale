@@ -132,9 +132,7 @@ fun HomePager(
         onConfirm = { navigator.push(Route.ThemeStore()) }
     )
     val actions = HomeActions(
-        // 安装页随模块/内核那套一起删了：这一版没有内核模块可装，
-        // 这个入口留着不动，点了不做事，免得首页少一块。
-        onInstallClick = {},
+        onInstallClick = { navigator.push(Route.Install()) },
         onOpenUrl = uriHandler::openUri,
         onCiUpdateClick = { startUpdate(true) },
         onReleaseUpdateClick = { startUpdate(false) },
