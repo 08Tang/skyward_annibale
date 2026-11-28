@@ -104,7 +104,7 @@ class SkywardSettingsDecodeTest {
      */
     @Test
     fun writesEveryNameTheRustSideReads() {
-        val text = SkywardSettings.json.encodeToString(SkywardSettings(), SkywardSettings.serializer())
+        val text = SkywardSettings.json.encodeToString(SkywardSettings.serializer(), SkywardSettings())
         val expected = listOf(
             "language", "spoken", "dark", "brightness", "screen_off",
             "follow_system_time_zone", "time_zone", "system_time_zone",
