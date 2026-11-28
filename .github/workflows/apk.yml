@@ -134,7 +134,11 @@ jobs:
           zipalign -p -f 4 "$apk" "$aligned"
 
           signed="${apk%.apk}-signed.apk"
+          # --min-sdk-version 是关键：apksigner 按这个值判断要不要生成 v1，
+          # APK 里写的是 24，它就认为 v1 多余而跳过，哪怕显式开了
+          # --v1-signing-enabled。这里报低到 21，v1 才会真的写进去。
           apksigner sign \
+            --min-sdk-version 21 \
             --ks "$KEYSTORE_FILE" \
             --ks-pass "pass:$KEYSTORE_PASSWORD" \
             --ks-key-alias "$KEY_ALIAS" \
@@ -154,7 +158,7 @@ jobs:
         run: |
           apk=$(find apk-manager/app/build/outputs/apk/release -name '*.apk' \
             ! -name '*-aligned.apk' ! -name '*-signed.apk' | head -1)
-          out=$(apksigner verify --verbose --print-certs "$apk")
+          out=$(apksigner verify --min-sdk-version 21 --verbose --print-certs "$apk")
           echo "$out"
           # 三种签名缺一个就失败：只签 v2/v3 的话老系统装不上，而这件事
           # 在真机上才会发现，不能在 CI 里放过。
