@@ -1,6 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
 import com.google.protobuf.gradle.id
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
 
@@ -42,13 +43,13 @@ val keyAliasValue: String? = (project.findProperty("KEY_ALIAS") as String?)
 val keyPasswordValue: String? = (project.findProperty("KEY_PASSWORD") as String?)
     ?: System.getenv("KEY_PASSWORD")
 
-val hasKeystore = !keystorePath.isNullOrBlank() && java.io.File(keystorePath).isFile
+val hasKeystore = !keystorePath.isNullOrBlank() && File(keystorePath).isFile
 
 android {
     signingConfigs {
         if (hasKeystore) {
             create("release") {
-                storeFile = java.io.File(keystorePath!!)
+                storeFile = File(keystorePath!!)
                 storePassword = keystorePassword
                 keyAlias = keyAliasValue
                 keyPassword = keyPasswordValue
