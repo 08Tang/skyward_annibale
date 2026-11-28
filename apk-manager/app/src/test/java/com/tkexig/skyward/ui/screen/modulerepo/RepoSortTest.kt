@@ -2,6 +2,7 @@ package com.tkexig.skyward.ui.screen.modulerepo
 
 import com.tkexig.skyward.R
 import com.tkexig.skyward.data.model.RepoModule
+import com.tkexig.skyward.data.model.RepoSort
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
