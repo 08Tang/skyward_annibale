@@ -110,6 +110,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
         run: |
+          # gradlew 的可执行位在 git 里不一定保得住，自己补一下最稳。
+          chmod +x gradlew
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       - name: Verify signature (v1 + v2 + v3)
