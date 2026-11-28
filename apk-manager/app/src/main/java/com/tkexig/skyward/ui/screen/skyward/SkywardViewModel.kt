@@ -2,6 +2,8 @@ package com.tkexig.skyward.ui.screen.skyward
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tkexig.skyward.data.skyward.SkywardDevice
+import com.tkexig.skyward.data.skyward.SkywardDevices
 import com.tkexig.skyward.data.skyward.SkywardConfig
 import com.tkexig.skyward.data.skyward.SkywardSettings
 import com.tkexig.skyward.ui.util.rootAvailable
@@ -30,6 +32,12 @@ data class SkywardUiState(
     /** 刚导入但还没写回去的内容，用来先让用户看一眼再决定。 */
     val pendingImport: String? = null,
     val message: String? = null,
+    /** 这台机器是哪一个；认不出来就是 null。 */
+    val device: SkywardDevice? = null,
+    /** 所有已知机型，用来在认不出来时说一句「只有这些」。 */
+    val knownDevices: List<SkywardDevice> = emptyList(),
+    /** 这台机器的代号，认不出机型时显示，方便用户报适配。 */
+    val codenameOfThisDevice: String = "",
 )
 
 class SkywardViewModel : ViewModel() {
@@ -44,6 +52,16 @@ class SkywardViewModel : ViewModel() {
     fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true, error = null) }
+            // 机型不依赖 root，先认出来，读配置失败时也能显示是哪个机型。
+            val device = withContext(Dispatchers.IO) { SkywardDevices.current(appContext) }
+            val known = withContext(Dispatchers.IO) { SkywardDevices.all(appContext) }
+            _uiState.update {
+                it.copy(
+                    device = device,
+                    knownDevices = known,
+                    codenameOfThisDevice = SkywardDevices.deviceCodename(),
+                )
+            }
             val hasRoot = withContext(Dispatchers.IO) { rootAvailable() }
             if (!hasRoot) {
                 _uiState.update {

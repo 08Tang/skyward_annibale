@@ -35,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tkexig.skyward.data.skyward.Feature
+import com.tkexig.skyward.data.skyward.StaticV4
 import com.tkexig.skyward.data.skyward.SkywardConfig
 import com.tkexig.skyward.data.skyward.SkywardSettings
 import com.tkexig.skyward.ui.component.miuix.AppCard
@@ -67,6 +69,8 @@ fun SkywardScreenMiuix(
     val scrollState = rememberScrollState()
     var importText by remember { mutableStateOf("") }
     var showImport by remember { mutableStateOf(false) }
+    var showWlan by remember { mutableStateOf(false) }
+    var showTimeZone by remember { mutableStateOf(false) }
 
     // 这一页没有 topBar，状态栏的区域就得自己让开：不给 windowInsets 的话
     // 第一张卡会钻到通知栏底下。
@@ -84,6 +88,44 @@ fun SkywardScreenMiuix(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Spacer(Modifier.height(8.dp))
+
+            // 机型卡片。认不出来就说清楚，不猜——配置项的可用性跟着它走。
+            AppCard {
+                val device = state.device
+                if (device != null) {
+                    Text(text = device.name, style = MiuixTheme.textStyles.title4)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "${device.codename} · 适配 ${device.author}",
+                        style = MiuixTheme.textStyles.body2,
+                        color = colorScheme.onSurfaceVariantSummary,
+                    )
+                    if (device.note.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = device.note,
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
+                } else {
+                    Text(text = "未适配的机型", style = MiuixTheme.textStyles.title4)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "代号 ${state.codenameOfThisDevice.ifBlank { "未知" }}。下面的配置项按通用处理。",
+                        style = MiuixTheme.textStyles.body2,
+                        color = colorScheme.onSurfaceVariantSummary,
+                    )
+                    if (state.knownDevices.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "已适配：" + state.knownDevices.joinToString("、") { it.name },
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
+                }
+            }
 
             if (state.loading) {
                 Row(
@@ -110,20 +152,14 @@ fun SkywardScreenMiuix(
                 return@Column
             }
 
-            state.error?.let { message ->
-                AppCard {
-                    Text(
-                        text = message,
-                        style = MiuixTheme.textStyles.body1,
-                        color = colorScheme.error,
-                    )
-                }
-            }
-
             val settings = state.settings ?: SkywardSettings()
 
+            // 认不出机型时全给：这台机器上的配置项本来就都在，藏起来反而让人
+            // 以为读不到。认出来了就只给这份适配支持的。
+            fun has(feature: Feature): Boolean = state.device?.supports(feature) ?: true
+
             // ---- 充电 ----
-            AppCard {
+            if (has(Feature.ChargeMode) || has(Feature.ThermalGuard)) AppCard {
                 ChargeModePreference(
                     current = settings.chargeMode,
                     onSelect = { mode -> actions.onEdit { it.copy(chargeMode = mode) } },
@@ -149,7 +185,7 @@ fun SkywardScreenMiuix(
             }
 
             // ---- 显示 ----
-            AppCard {
+            if (has(Feature.Brightness)) AppCard {
                 SwitchPreference(
                     title = "深色模式",
                     summary = "Skyward Recovery 界面用深色",
@@ -172,7 +208,7 @@ fun SkywardScreenMiuix(
             }
 
             // ---- 时间 ----
-            AppCard {
+            if (has(Feature.TimeZone)) AppCard {
                 SwitchPreference(
                     title = "跟随系统时区",
                     summary = "关闭后用手动指定的时区",
@@ -185,29 +221,49 @@ fun SkywardScreenMiuix(
                         title = "时区",
                         value = settings.timeZone,
                         icon = Icons.Rounded.Language,
+                        onClick = { showTimeZone = !showTimeZone },
                     )
+                    if (showTimeZone) {
+                        Spacer(Modifier.height(8.dp))
+                        TimeZoneEditor(
+                            initial = settings.timeZone,
+                            onApply = { zone ->
+                                actions.onEdit { it.copy(timeZone = zone) }
+                                showTimeZone = false
+                            },
+                        )
+                    }
                 }
             }
 
             // ---- 网络 ----
-            AppCard {
+            if (has(Feature.WlanStatic)) AppCard {
                 val wlan = settings.wlanStatic
-                if (wlan == null) {
-                    ArrowValuePreference(
-                        title = "静态 IP",
-                        value = "使用 DHCP",
-                        icon = Icons.Rounded.Wifi,
+                ArrowValuePreference(
+                    title = "静态 IP",
+                    value = if (wlan == null) "使用 DHCP" else wlan.address,
+                    icon = Icons.Rounded.Wifi,
+                    onClick = { showWlan = !showWlan },
+                )
+                if (wlan != null) {
+                    ArrowValuePreference("掩码", wlan.mask, null, onClick = { showWlan = true })
+                    ArrowValuePreference("网关", wlan.gateway, null, onClick = { showWlan = true })
+                    ArrowValuePreference("DNS", wlan.dns, null, onClick = { showWlan = true })
+                }
+                if (showWlan) {
+                    Spacer(Modifier.height(8.dp))
+                    WlanStaticEditor(
+                        initial = wlan,
+                        onApply = { v ->
+                            actions.onEdit { it.copy(wlanStatic = v) }
+                            showWlan = false
+                        },
                     )
-                } else {
-                    ArrowValuePreference("静态 IP", wlan.address, Icons.Rounded.Wifi)
-                    ArrowValuePreference("掩码", wlan.mask, null)
-                    ArrowValuePreference("网关", wlan.gateway, null)
-                    ArrowValuePreference("DNS", wlan.dns, null)
                 }
             }
 
             // ---- 备份 ----
-            AppCard {
+            if (has(Feature.Backup)) AppCard {
                 ArrowValuePreference(
                     title = "配置文件",
                     value = if (state.exists) "已存在" else "还没创建",
@@ -242,6 +298,29 @@ fun SkywardScreenMiuix(
                         onClick = { actions.onStageImport(importText) },
                         modifier = Modifier.fillMaxWidth(),
                     )
+                }
+            }
+
+            // 出错时也在底部提示，不在顶上压一条红字：读配置失败时整页都没
+            // 内容，顶上一条红字既显眼又说不出该做什么。
+            state.error?.let { msg ->
+                AppCard {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = colorScheme.onSurfaceVariantSummary,
+                        )
+                        Text(
+                            text = msg,
+                            style = MiuixTheme.textStyles.body2,
+                            color = colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
                 }
             }
 
@@ -332,18 +411,121 @@ private fun ScreenOffPreference(seconds: Long, onChange: (Long) -> Unit) {
     )
 }
 
-/** 一行只读的值，右边跟箭头的样子和设置页一致。 */
+/**
+ * 手填时区。
+ *
+ * 不做下拉列表：Skyward 认的是 tz 数据库里的名字，几百个，下拉里翻起来
+ * 比打字慢。填错了 `ZoneId.of` 会抛，那就把错误显示出来而不是悄悄写进去。
+ */
+@Composable
+private fun TimeZoneEditor(
+    initial: String,
+    onApply: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    val valid = runCatching { java.time.ZoneId.of(text.trim()) }.isSuccess
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        TextField(
+            value = text,
+            onValueChange = { text = it },
+            label = "时区，例如 Asia/Shanghai",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (!valid && text.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "这不是一个时区名",
+                style = MiuixTheme.textStyles.footnote1,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        TextButton(
+            text = "应用",
+            onClick = { onApply(text.trim()) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = valid,
+        )
+    }
+}
+
+/**
+ * 手动指定 IPv4。
+ *
+ * 四项填全就写进配置（Skyward 就不再走 DHCP），清空地址就退回 DHCP。
+ * 只校验是不是像个 IPv4：能不能通要看实际网络，拦在这里没有意义。
+ */
+@Composable
+private fun WlanStaticEditor(
+    initial: StaticV4?,
+    onApply: (StaticV4?) -> Unit,
+) {
+    var address by remember { mutableStateOf(initial?.address.orEmpty()) }
+    var mask by remember { mutableStateOf(initial?.mask ?: "255.255.255.0") }
+    var gateway by remember { mutableStateOf(initial?.gateway.orEmpty()) }
+    var dns by remember { mutableStateOf(initial?.dns.orEmpty()) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        TextField(value = address, onValueChange = { address = it }, label = "地址",
+            modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        TextField(value = mask, onValueChange = { mask = it }, label = "掩码",
+            modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        TextField(value = gateway, onValueChange = { gateway = it }, label = "网关",
+            modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        TextField(value = dns, onValueChange = { dns = it }, label = "DNS（可空，空则用网关）",
+            modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(
+                text = "用 DHCP",
+                onClick = { onApply(null) },
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                text = "应用",
+                onClick = {
+                    val addr = address.trim()
+                    if (addr.isEmpty()) {
+                        onApply(null)
+                    } else {
+                        onApply(
+                            StaticV4(
+                                address = addr,
+                                mask = mask.trim().ifBlank { "255.255.255.0" },
+                                gateway = gateway.trim(),
+                                dns = dns.trim(),
+                            )
+                        )
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/**
+ * 一行值，右边跟箭头，和设置页一致。
+ *
+ * [onClick] 为空时是只读的；给了就可以点进去改——之前全都写死成空操作，
+ * 所以「静态 IP」「时区」这些点了没反应。
+ */
 @Composable
 private fun ArrowValuePreference(
     title: String,
     value: String,
     icon: ImageVector?,
+    onClick: (() -> Unit)? = null,
 ) {
     top.yukonga.miuix.kmp.preference.ArrowPreference(
         title = title,
         summary = value.ifBlank { "—" },
         startAction = icon?.let { { PreferenceIcon(it) } },
-        onClick = {},
+        onClick = onClick ?: {},
     )
 }
 

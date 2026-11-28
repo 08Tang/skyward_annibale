@@ -29,8 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tkexig.skyward.data.skyward.Feature
 import com.tkexig.skyward.data.skyward.SkywardConfig
 import com.tkexig.skyward.data.skyward.SkywardSettings
+import com.tkexig.skyward.data.skyward.StaticV4
 import com.tkexig.skyward.ui.component.material.SegmentedColumn
 import com.tkexig.skyward.ui.component.material.SegmentedListItem
 import com.tkexig.skyward.ui.component.material.SegmentedSwitchItem
@@ -50,6 +52,7 @@ fun SkywardScreenMaterial(
     val scrollState = rememberScrollState()
     var importText by remember { mutableStateOf("") }
     var showImport by remember { mutableStateOf(false) }
+    var showWlan by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -70,13 +73,22 @@ fun SkywardScreenMaterial(
             return@Column
         }
 
-        state.error?.let { message ->
-            SegmentedColumn {
-                item {
-                    SegmentedListItem(
-                        headlineContent = { Text(message) },
-                    )
-                }
+        // 机型卡片
+        SegmentedColumn {
+            item {
+                val device = state.device
+                SegmentedListItem(
+                    headlineContent = {
+                        Text(device?.name ?: "未适配的机型")
+                    },
+                    supportingContent = {
+                        if (device != null) {
+                            Text("${device.codename} · 适配 ${device.author}")
+                        } else {
+                            Text("代号 ${state.codenameOfThisDevice.ifBlank { "未知" }}，配置项按通用处理")
+                        }
+                    },
+                )
             }
         }
 
@@ -95,8 +107,10 @@ fun SkywardScreenMaterial(
 
         val settings = state.settings ?: SkywardSettings()
 
+        fun has(feature: Feature): Boolean = state.device?.supports(feature) ?: true
+
         // ---- 充电 ----
-        SegmentedColumn(title = "充电") {
+        if (has(Feature.ChargeMode) || has(Feature.ThermalGuard)) SegmentedColumn(title = "充电") {
             item {
                 SegmentedListItem(
                     headlineContent = { Text("充电档位") },
@@ -140,7 +154,7 @@ fun SkywardScreenMaterial(
         }
 
         // ---- 显示 ----
-        SegmentedColumn(title = "显示") {
+        if (has(Feature.Brightness)) SegmentedColumn(title = "显示") {
             item {
                 SegmentedSwitchItem(
                     title = "深色模式",
@@ -194,7 +208,7 @@ fun SkywardScreenMaterial(
         }
 
         // ---- 时间 ----
-        SegmentedColumn(title = "时间") {
+        if (has(Feature.TimeZone)) SegmentedColumn(title = "时间") {
             item {
                 SegmentedSwitchItem(
                     title = "跟随系统时区",
@@ -214,15 +228,14 @@ fun SkywardScreenMaterial(
         }
 
         // ---- 网络 ----
-        SegmentedColumn(title = "静态 IP") {
+        if (has(Feature.WlanStatic)) SegmentedColumn(title = "静态 IP") {
             val wlan = settings.wlanStatic
             if (wlan == null) {
                 item {
                     SegmentedListItem(
                         headlineContent = { Text("当前用 DHCP") },
-                        supportingContent = {
-                            Text("要固定地址的话，在 Skyward Recovery 里设一次，这里就会显示出来。")
-                        },
+                        supportingContent = { Text("点一下手动指定地址") },
+                        onClick = { showWlan = !showWlan },
                     )
                 }
             } else {
@@ -236,13 +249,20 @@ fun SkywardScreenMaterial(
                     SegmentedListItem(
                         headlineContent = { Text(wlan.gateway.ifBlank { "—" }) },
                         supportingContent = { Text("网关") },
+                        onClick = { showWlan = true },
                     )
                 }
+            }
+            if (showWlan) {
+                item { WlanStaticEditor(initial = wlan, onApply = { v ->
+                    actions.onEdit { it.copy(wlanStatic = v) }
+                    showWlan = false
+                }) }
             }
         }
 
         // ---- 备份 ----
-        SegmentedColumn(title = "配置备份") {
+        if (has(Feature.Backup)) SegmentedColumn(title = "配置备份") {
             item {
                 SegmentedListItem(
                     headlineContent = {
@@ -338,6 +358,51 @@ private fun StepperItem(
             OutlinedButton(
                 onClick = { onChange((value + step).coerceIn(range.first, range.last)) },
             ) { Text("+") }
+        }
+    }
+}
+
+/**
+ * 手动指定 IPv4（Material 版）。
+ *
+ * 和 Miuix 版逻辑一样，只是控件换成 Material 的——两套界面不共用组件。
+ */
+@Composable
+private fun WlanStaticEditor(
+    initial: StaticV4?,
+    onApply: (StaticV4?) -> Unit,
+) {
+    var address by remember { mutableStateOf(initial?.address.orEmpty()) }
+    var mask by remember { mutableStateOf(initial?.mask ?: "255.255.255.0") }
+    var gateway by remember { mutableStateOf(initial?.gateway.orEmpty()) }
+    var dns by remember { mutableStateOf(initial?.dns.orEmpty()) }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        OutlinedTextField(value = address, onValueChange = { address = it },
+            label = { Text("地址") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(value = mask, onValueChange = { mask = it },
+            label = { Text("掩码") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(value = gateway, onValueChange = { gateway = it },
+            label = { Text("网关") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(value = dns, onValueChange = { dns = it },
+            label = { Text("DNS（可空）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { onApply(null) }, modifier = Modifier.weight(1f)) {
+                Text("用 DHCP")
+            }
+            Button(
+                onClick = {
+                    val addr = address.trim()
+                    if (addr.isEmpty()) onApply(null) else onApply(
+                        StaticV4(addr, mask.trim().ifBlank { "255.255.255.0" }, gateway.trim(), dns.trim())
+                    )
+                },
+                modifier = Modifier.weight(1f),
+            ) { Text("应用") }
         }
     }
 }

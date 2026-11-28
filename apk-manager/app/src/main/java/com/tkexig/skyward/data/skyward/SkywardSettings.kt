@@ -25,8 +25,14 @@ data class SkywardSettings(
     val dark: Boolean = false,
     /** 亮度滑块的位置，0 到 1。 */
     val brightness: Float = 0.6f,
-    /** 无操作多久灭屏，秒；0 表示不灭。 */
-    val screenOff: Long = 60L,
+    /**
+     * 无操作多久灭屏，秒；0 表示不灭。
+     *
+     * 少了 [SerialName] 的话 JSON 里的 `screen_off` 对不上，读出来永远是默认
+     * 值——这正是「灭屏时间识别不正常」的原因。
+     */
+    @SerialName("screen_off")
+    val screenOff: Long = 0L,
     /** 时钟跟随已安装系统设置的时区。 */
     @SerialName("follow_system_time_zone")
     val followSystemTimeZone: Boolean = true,
@@ -57,6 +63,9 @@ data class SkywardSettings(
     val install: Install = Install(),
     val backup: Backup = Backup(),
     val logs: Logs = Logs(),
+    /** 安装后自动用哪个 Root 修补新槽：`none` / `kernelsu` / `magisk`。 */
+    @SerialName("auto_root")
+    val autoRoot: String = "",
     /** 手动指定的 IPv4；有它就不走 DHCP。 */
     @SerialName("wlan_static")
     val wlanStatic: StaticV4? = null,
