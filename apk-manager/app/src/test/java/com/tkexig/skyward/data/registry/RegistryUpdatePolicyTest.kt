@@ -8,7 +8,8 @@ import org.junit.Test
 class RegistryUpdatePolicyTest {
 
     private val base = RegistryUrls.DEFAULT_BASE_URL
-    private val registryUpdateJson = "https://modules.kernelsu.org/api/v1/modules/foo/update.json"
+    // 跟着 base 走：这个 updateJson 必须和 base 同源，才算是 registry 托管的。
+    private val registryUpdateJson = RegistryUrls.DEFAULT_BASE_URL + "api/v1/modules/foo/update.json"
     private val authorUpdateJson = "https://raw.githubusercontent.com/owner/repo/main/update.json"
     private val sha1 = "1".repeat(64)
     private val sha2 = "2".repeat(64)

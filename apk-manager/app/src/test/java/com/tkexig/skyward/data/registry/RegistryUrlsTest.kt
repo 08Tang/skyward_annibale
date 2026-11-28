@@ -52,8 +52,9 @@ class RegistryUrlsTest {
 
     @Test
     fun resolvesApiPathsAgainstSiteRoot() {
+        // 跟着 DEFAULT_BASE_URL 走：换仓库地址不该让这条断掉。
         assertEquals(
-            "https://modules.kernelsu.org/api/v1/modules.json",
+            RegistryUrls.DEFAULT_BASE_URL + "api/v1/modules.json",
             RegistryUrls.resolve(RegistryUrls.DEFAULT_BASE_URL, "api/v1/modules.json")
         )
         assertEquals(
@@ -63,7 +64,7 @@ class RegistryUrlsTest {
         for (bad in listOf("/api/v1/x.json", "../x.json", "api/../x.json", "https://evil.com/x", "a?b", "")) {
             assertThrows(bad, RegistryFormatException::class.java) { RegistryUrls.resolve(RegistryUrls.DEFAULT_BASE_URL, bad) }
         }
-        assertThrows(IllegalArgumentException::class.java) { RegistryUrls.normalizeBaseUrl("http://modules.kernelsu.org/") }
+        assertThrows(IllegalArgumentException::class.java) { RegistryUrls.normalizeBaseUrl("http://modules.example.org/") }
     }
 
     @Test
@@ -87,29 +88,31 @@ class RegistryUrlsTest {
 
     @Test
     fun sameOriginComparesSchemeHostAndPort() {
-        val base = RegistryUrls.DEFAULT_BASE_URL
-        assertTrue(RegistryUrls.isSameOrigin("https://modules.kernelsu.org/assets/a.png", base))
-        assertTrue(RegistryUrls.isSameOrigin("HTTPS://Modules.KernelSU.org:443/assets/a.png", base))
-        assertFalse(RegistryUrls.isSameOrigin("http://modules.kernelsu.org/assets/a.png", base))
-        assertFalse(RegistryUrls.isSameOrigin("https://modules.kernelsu.org:8443/assets/a.png", base))
-        assertFalse(RegistryUrls.isSameOrigin("https://evil.modules.kernelsu.org/a.png", base))
-        assertFalse(RegistryUrls.isSameOrigin("https://modules.kernelsu.org.evil.com/a.png", base))
-        assertFalse(RegistryUrls.isSameOrigin("ftp://modules.kernelsu.org/a.png", "ftp://modules.kernelsu.org/"))
+        // 用固定的域名，不用 DEFAULT_BASE_URL：这条测的是规则本身，换掉
+        // 仓库地址不该让规则变。
+        val base = "https://modules.example.org/"
+        assertTrue(RegistryUrls.isSameOrigin("https://modules.example.org/assets/a.png", base))
+        assertTrue(RegistryUrls.isSameOrigin("HTTPS://Modules.Example.ORG:443/assets/a.png", base))
+        assertFalse(RegistryUrls.isSameOrigin("http://modules.example.org/assets/a.png", base))
+        assertFalse(RegistryUrls.isSameOrigin("https://modules.example.org:8443/assets/a.png", base))
+        assertFalse(RegistryUrls.isSameOrigin("https://evil.modules.example.org/a.png", base))
+        assertFalse(RegistryUrls.isSameOrigin("https://modules.example.org.evil.com/a.png", base))
+        assertFalse(RegistryUrls.isSameOrigin("ftp://modules.example.org/a.png", "ftp://modules.example.org/"))
         assertFalse(RegistryUrls.isSameOrigin("not a url", base))
     }
 
     @Test
     fun restrictedResourcesAndRedirectHops() {
-        val base = RegistryUrls.DEFAULT_BASE_URL
+        val base = "https://modules.example.org/"
         // Every hop of a redirect chain is checked with the same rule.
         val chain = listOf(
-            "https://modules.kernelsu.org/assets/a.png" to true,
-            "https://modules.kernelsu.org/assets/b.png?v=2" to true,
+            "https://modules.example.org/assets/a.png" to true,
+            "https://modules.example.org/assets/b.png?v=2" to true,
             "https://github.com/owner/repo/raw/main/a.png" to false,
             "https://objects.githubusercontent.com/x" to false,
-            "http://modules.kernelsu.org/assets/a.png" to false,
-            "https://modules.kernelsu.org:444/assets/a.png" to false,
-            "https://user@modules.kernelsu.org/assets/a.png" to false,
+            "http://modules.example.org/assets/a.png" to false,
+            "https://modules.example.org:444/assets/a.png" to false,
+            "https://user@modules.example.org/assets/a.png" to false,
             "data:image/png;base64,AAAA" to false,
             "file:///data/data/x" to false,
             "javascript:alert(1)" to false,
@@ -121,12 +124,12 @@ class RegistryUrlsTest {
 
     @Test
     fun inPageAnchors() {
-        val base = RegistryUrls.DEFAULT_BASE_URL
-        assertTrue(RegistryUrls.isInPageAnchor("https://modules.kernelsu.org/#install", base))
-        assertFalse(RegistryUrls.isInPageAnchor("https://modules.kernelsu.org/#", base))
-        assertFalse(RegistryUrls.isInPageAnchor("https://modules.kernelsu.org/", base))
-        assertFalse(RegistryUrls.isInPageAnchor("https://modules.kernelsu.org/en/#install", base))
-        assertFalse(RegistryUrls.isInPageAnchor("https://evil.com/#https://modules.kernelsu.org/", base))
+        val base = "https://modules.example.org/"
+        assertTrue(RegistryUrls.isInPageAnchor("https://modules.example.org/#install", base))
+        assertFalse(RegistryUrls.isInPageAnchor("https://modules.example.org/#", base))
+        assertFalse(RegistryUrls.isInPageAnchor("https://modules.example.org/", base))
+        assertFalse(RegistryUrls.isInPageAnchor("https://modules.example.org/en/#install", base))
+        assertFalse(RegistryUrls.isInPageAnchor("https://evil.com/#https://modules.example.org/", base))
     }
 
     @Test
