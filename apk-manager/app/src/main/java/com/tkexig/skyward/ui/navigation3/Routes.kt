@@ -91,5 +91,5 @@ sealed interface Route : NavKey, Parcelable {
     /** 刷入 Skyward 的 recovery 镜像。 */
     @Parcelize
     @Serializable
-    data object Install : Route
+    data object FlashRecovery : Route
 }

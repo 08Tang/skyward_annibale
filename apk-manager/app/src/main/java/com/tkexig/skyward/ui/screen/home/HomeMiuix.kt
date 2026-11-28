@@ -297,7 +297,7 @@ private fun StatusCard(
             onClick = onClick,
         )
 
-        state.ksuVersion != null -> ActiveStatusCard(state = state, onClick = onClick)
+        state.ksuVersion != null -> ActiveStatusCard(state = state, actions = actions, onClick = onClick)
         else -> InactiveStatusCard(
             state = state,
             actions = actions,
@@ -310,6 +310,7 @@ private fun StatusCard(
 @Composable
 private fun ActiveStatusCard(
     state: HomeUiState,
+    actions: HomeActions,
     onClick: () -> Unit,
 ) {
     val isDark = isInDarkTheme()

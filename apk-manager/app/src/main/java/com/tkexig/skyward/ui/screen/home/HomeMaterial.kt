@@ -271,7 +271,7 @@ private fun StatusCard(
     if (ksuActive && state.homeLayout == HomeLayout.IMMERSIVE) {
         ImmersiveStatusCardMaterial(state = state, onClick = onClick)
     } else if (ksuActive) {
-        ActiveStatusCard(state = state, onClick = onClick)
+        ActiveStatusCard(state = state, actions = actions, onClick = onClick)
     } else {
         InactiveStatusCard(
             state = state,
@@ -285,6 +285,7 @@ private fun StatusCard(
 @Composable
 private fun ActiveStatusCard(
     state: HomeUiState,
+    actions: HomeActions,
     onClick: () -> Unit,
 ) {
     val containerColor = backgroundAwareColor(MaterialTheme.colorScheme.primary)

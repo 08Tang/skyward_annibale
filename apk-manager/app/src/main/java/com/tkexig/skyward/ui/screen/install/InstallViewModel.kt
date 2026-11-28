@@ -141,26 +141,26 @@ class InstallViewModel : ViewModel() {
             }
 
             // 1. 拿到镜像：用户选的那个优先。
-            val image: File? = state.pickedImage ?: run {
+            val image: File
+            val picked = state.pickedImage
+            if (picked != null) {
+                image = picked
+            } else {
                 val release = state.release
                 if (release == null || release.downloadUrl.isBlank()) {
                     _uiState.update {
-                        it.copy(
-                            phase = InstallPhase.Failed,
-                            error = "没有可下载的刷机包，也没有选镜像",
-                        )
+                        it.copy(phase = InstallPhase.Failed, error = "没有可下载的刷机包，也没有选镜像")
                     }
                     return@launch
                 }
-                withContext(Dispatchers.IO) { downloadRelease(release) }.fold(
-                    onSuccess = { it },
-                    onFailure = { e ->
-                        _uiState.update {
-                            it.copy(phase = InstallPhase.Failed, error = e.message ?: "下载失败")
-                        }
-                        return@launch
-                    },
-                )
+                val downloaded = withContext(Dispatchers.IO) { downloadRelease(release) }
+                val file = downloaded.getOrElse { e ->
+                    _uiState.update {
+                        it.copy(phase = InstallPhase.Failed, error = e.message ?: "下载失败")
+                    }
+                    return@launch
+                }
+                image = file
             }
 
             // 2. 如果是 zip，解出里面的 img。

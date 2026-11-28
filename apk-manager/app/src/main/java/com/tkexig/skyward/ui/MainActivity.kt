@@ -329,7 +329,7 @@ class MainActivity : ComponentActivity() {
                             entry<Route.Home>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.Settings>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                                 entry<Route.Tool>(swipeDismiss = swipeDismiss)  { ToolsScreen() }
-                                entry<Route.Install>(swipeDismiss = swipeDismiss) {
+                                entry<Route.FlashRecovery>(swipeDismiss = swipeDismiss) {
                                     InstallRouteScreen(onBack = { navigator.pop() })
                                 }
                         }

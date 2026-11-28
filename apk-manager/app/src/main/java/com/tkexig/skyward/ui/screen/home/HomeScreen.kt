@@ -132,7 +132,7 @@ fun HomePager(
         onConfirm = { navigator.push(Route.ThemeStore()) }
     )
     val actions = HomeActions(
-        onInstallClick = { navigator.push(Route.Install()) },
+        onInstallClick = { navigator.push(Route.FlashRecovery()) },
         onOpenUrl = uriHandler::openUri,
         onCiUpdateClick = { startUpdate(true) },
         onReleaseUpdateClick = { startUpdate(false) },

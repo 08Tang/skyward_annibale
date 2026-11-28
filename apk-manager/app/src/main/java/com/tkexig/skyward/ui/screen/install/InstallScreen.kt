@@ -230,8 +230,13 @@ fun InstallScreen(
     }
 }
 
-/** 版本号、大小、发布时间、更新内容。 */
-@Composable
+/**
+ * 版本号、大小、发布时间、更新内容。
+ *
+ * 不是 @Composable：`SegmentedColumn` 的 content 是普通 lambda，里面的
+ * `item { }` 才带 @Composable。写成 @Composable 会在调用处报「只能从
+ * @Composable 上下文调用」。
+ */
 private fun SegmentedColumnScope.ReleaseRows(release: SkywardRelease) {
     item {
         SegmentedListItem(

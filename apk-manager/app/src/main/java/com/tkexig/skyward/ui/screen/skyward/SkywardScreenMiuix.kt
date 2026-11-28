@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccessTime
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.FlashOn
@@ -163,7 +163,7 @@ fun SkywardScreenMiuix(
                 SwitchPreference(
                     title = "跟随系统时区",
                     summary = "关闭后用手动指定的时区",
-                    startAction = { PreferenceIcon(Icons.Rounded.AccessTime) },
+                    startAction = { PreferenceIcon(Icons.Rounded.Schedule) },
                     checked = settings.followSystemTimeZone,
                     onCheckedChange = { on -> actions.onEdit { it.copy(followSystemTimeZone = on) } },
                 )
