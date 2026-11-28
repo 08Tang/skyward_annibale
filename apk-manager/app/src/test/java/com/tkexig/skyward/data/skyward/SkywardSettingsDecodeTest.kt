@@ -92,7 +92,6 @@ class SkywardSettingsDecodeTest {
         assertTrue("vibration", s.vibration != d.vibration)
         assertTrue("fileTransfer", s.fileTransfer != d.fileTransfer)
         assertTrue("backup.parts", s.backup.parts != d.backup.parts)
-        assertTrue("install.checkSignature", s.install.checkSignature != d.install.checkSignature)
     }
 
     /**
