@@ -2,6 +2,7 @@ package com.tkexig.skyward.ui.screen.skyward
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.data.skyward.SkywardDevice
 import com.tkexig.skyward.data.skyward.SkywardDevices
 import com.tkexig.skyward.data.skyward.SkywardConfig

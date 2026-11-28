@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import com.tkexig.skyward.data.skyward.Feature
 import com.tkexig.skyward.data.skyward.SkywardConfig
 import com.tkexig.skyward.data.skyward.SkywardSettings
-import com.tkexig.skyward.data.skyward.StaticV4
 import com.tkexig.skyward.ui.component.material.SegmentedColumn
 import com.tkexig.skyward.ui.component.material.SegmentedListItem
 import com.tkexig.skyward.ui.component.material.SegmentedSwitchItem
@@ -229,7 +228,7 @@ fun SkywardScreenMaterial(
 
         // ---- 网络 ----
         if (has(Feature.WlanStatic)) SegmentedColumn(title = "静态 IP") {
-            val wlan = settings.wlanStatic
+            val wlan: SkywardSettings.StaticV4? = settings.wlanStatic
             if (wlan == null) {
                 item {
                     SegmentedListItem(
@@ -369,8 +368,8 @@ private fun StepperItem(
  */
 @Composable
 private fun WlanStaticEditor(
-    initial: StaticV4?,
-    onApply: (StaticV4?) -> Unit,
+    initial: SkywardSettings.StaticV4?,
+    onApply: (SkywardSettings.StaticV4?) -> Unit,
 ) {
     var address by remember { mutableStateOf(initial?.address.orEmpty()) }
     var mask by remember { mutableStateOf(initial?.mask ?: "255.255.255.0") }
@@ -398,7 +397,7 @@ private fun WlanStaticEditor(
                 onClick = {
                     val addr = address.trim()
                     if (addr.isEmpty()) onApply(null) else onApply(
-                        StaticV4(addr, mask.trim().ifBlank { "255.255.255.0" }, gateway.trim(), dns.trim())
+                        SkywardSettings.StaticV4(addr, mask.trim().ifBlank { "255.255.255.0" }, gateway.trim(), dns.trim())
                     )
                 },
                 modifier = Modifier.weight(1f),

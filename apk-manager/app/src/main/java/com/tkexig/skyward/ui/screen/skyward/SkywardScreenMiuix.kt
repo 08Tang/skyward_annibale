@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.DarkMode
@@ -36,7 +37,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tkexig.skyward.data.skyward.Feature
-import com.tkexig.skyward.data.skyward.StaticV4
 import com.tkexig.skyward.data.skyward.SkywardConfig
 import com.tkexig.skyward.data.skyward.SkywardSettings
 import com.tkexig.skyward.ui.component.miuix.AppCard
@@ -238,7 +238,7 @@ fun SkywardScreenMiuix(
 
             // ---- 网络 ----
             if (has(Feature.WlanStatic)) AppCard {
-                val wlan = settings.wlanStatic
+                val wlan: SkywardSettings.StaticV4? = settings.wlanStatic
                 ArrowValuePreference(
                     title = "静态 IP",
                     value = if (wlan == null) "使用 DHCP" else wlan.address,
@@ -458,8 +458,8 @@ private fun TimeZoneEditor(
  */
 @Composable
 private fun WlanStaticEditor(
-    initial: StaticV4?,
-    onApply: (StaticV4?) -> Unit,
+    initial: SkywardSettings.StaticV4?,
+    onApply: (SkywardSettings.StaticV4?) -> Unit,
 ) {
     var address by remember { mutableStateOf(initial?.address.orEmpty()) }
     var mask by remember { mutableStateOf(initial?.mask ?: "255.255.255.0") }
@@ -493,7 +493,7 @@ private fun WlanStaticEditor(
                         onApply(null)
                     } else {
                         onApply(
-                            StaticV4(
+                            SkywardSettings.StaticV4(
                                 address = addr,
                                 mask = mask.trim().ifBlank { "255.255.255.0" },
                                 gateway = gateway.trim(),
