@@ -1157,11 +1157,11 @@ class ThemeStoreRepository(
 
                 // The upload screen's "current preset" export lives directly in cacheDir and
                 // is not covered by the theme_import_* temporary-file rule above.
-                file.name == "theme_upload_preset.sukisu" &&
+                file.name == "theme_upload_preset.skyward" &&
                     file.isOlderThan(day, now) -> runCatching { file.delete() }
 
                 file.name.startsWith("theme_upload_adaptive_") &&
-                    file.name.endsWith(".sukisu") &&
+                    (file.name.endsWith(".skyward") || file.name.endsWith(".sukisu")) &&
                     file.isOlderThan(day, now) -> runCatching { file.delete() }
             }
         }

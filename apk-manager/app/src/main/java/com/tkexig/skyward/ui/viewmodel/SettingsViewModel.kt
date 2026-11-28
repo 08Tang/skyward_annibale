@@ -774,7 +774,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
         runCatching {
             val options = pendingThemeUploadOptions ?: ThemePackageOptions()
             val payload = currentThemePayload(options, preferDraft = false)
-            val file = File(context.cacheDir, "theme_upload_preset.sukisu")
+            val file = File(context.cacheDir, "theme_upload_preset.skyward")
             ThemePackageStorage.exportToFile(
                 file = file,
                 data = payload.data,
@@ -2251,7 +2251,7 @@ homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else nul
                 requireNotNull(payload.adaptive) { "No adaptive theme available" }
                 val file = File(
                     context.cacheDir,
-                    "theme_upload_adaptive_${System.currentTimeMillis()}.sukisu",
+                    "theme_upload_adaptive_${System.currentTimeMillis()}.skyward",
                 )
                 ThemePackageStorage.exportToFile(
                     file = file,
