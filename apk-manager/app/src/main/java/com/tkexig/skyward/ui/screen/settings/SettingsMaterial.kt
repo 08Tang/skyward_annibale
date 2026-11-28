@@ -193,27 +193,7 @@ fun SettingPagerMaterial(
             )
             }
 
-            val profileTemplate = customText(CustomTextKey.PAGE_TEMPLATE)
             KsuIsValid {
-                SettingsAnchor(SettingsSection.PROFILE_TEMPLATES, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        SegmentedListItem(
-                            onClick = actions.onOpenProfileTemplate,
-                            headlineContent = { Text(profileTemplate) },
-                            supportingContent = { Text(stringResource(id = R.string.settings_profile_template_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Description, profileTemplate) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                )
-                }
                 val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
                 SettingsAnchor(SettingsSection.TOOLS, anchorRequesters) {
                 SegmentedColumn(

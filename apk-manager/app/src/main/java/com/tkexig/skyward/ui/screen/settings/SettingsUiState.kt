@@ -234,7 +234,6 @@ data class SettingsScreenActions(
     val onOpenTheme: () -> Unit,
     val onOpenThemeStore: () -> Unit = {},
     val onSetUiModeIndex: (Int) -> Unit,
-    val onOpenProfileTemplate: () -> Unit,
     val onSetLanguage: (String) -> Unit,
     val onSetSuCompatMode: (Int) -> Unit,
     val onSetKernelUmountEnabled: (Boolean) -> Unit,

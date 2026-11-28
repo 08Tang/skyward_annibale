@@ -265,13 +265,6 @@ class MainActivity : ComponentActivity() {
                     } else {
                         NavSwipeDirection.None
                     }
-                    val flashRoute = navigator.current() as? Route.Flash
-                    var flashBackEnabled by remember(flashRoute) { mutableStateOf(false) }
-                    val scriptRunRoute = navigator.current() as? Route.ScriptRun
-                    var scriptRunBackEnabled by remember(scriptRunRoute) { mutableStateOf(true) }
-                    // Read here, not inside the NavDisplay builder: NavDisplay only rebuilds its entries
-                    // (and their swipeDismiss) when the builder lambda changes, so it must capture the value.
-                    val scriptRunSwipeDismiss = if (scriptRunBackEnabled) swipeDismiss else NavSwipeDirection.None
                     val mainScreenEntry = @Composable {
                         MainScreen(
                             initialPage = selectedMainPage,
@@ -295,19 +288,7 @@ class MainActivity : ComponentActivity() {
                                 // opaque page hid it, but a transparent one would stay darkened.
                                 dimAmount = if (backgroundActive) 0f else 0.5f,
                             ),
-                            onBack = {
-                                when (val top = navigator.current()) {
-                                    is Route.TemplateEditor -> {
-                                        if (!top.readOnly) {
-                                            navigator.setResult("template_edit", true)
-                                        } else {
-                                            navigator.pop()
-                                        }
-                                    }
-
-                                    else -> navigator.pop()
-                                }
-                            }) {
+                            onBack = { navigator.pop() }) {
                             entry<Route.Main>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.About>(swipeDismiss = swipeDismiss) { AboutScreen() }
                             entry<Route.Sulog>(swipeDismiss = swipeDismiss) { SulogScreen() }

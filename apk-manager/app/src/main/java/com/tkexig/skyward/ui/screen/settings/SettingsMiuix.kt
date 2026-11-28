@@ -220,28 +220,6 @@ fun SettingPagerMiuix(
                     }
 
                     KsuIsValid {
-                        AppCard(
-                            modifier = Modifier
-                                .bringIntoViewRequester(requester(SettingsSection.PROFILE_TEMPLATES))
-                                .padding(top = 12.dp)
-                                .fillMaxWidth(),
-                            colors = backgroundAwareCardColors(),
-                        ) {
-                            val profileTemplate = customText(CustomTextKey.PAGE_TEMPLATE)
-                            ArrowPreference(
-                                title = profileTemplate,
-                                summary = stringResource(id = R.string.settings_profile_template_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Description,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = profileTemplate,
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                onClick = actions.onOpenProfileTemplate
-                            )
-                        }
                         val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
                         AppCard(
                             modifier = Modifier
