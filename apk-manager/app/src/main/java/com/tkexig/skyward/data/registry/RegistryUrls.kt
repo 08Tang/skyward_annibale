@@ -6,7 +6,7 @@ import java.net.URLDecoder
 object RegistryUrls {
 
     
-    const val DEFAULT_BASE_URL = "https://modules.kernelsu.org/"
+    const val DEFAULT_BASE_URL = "https://github.com/08Tang/skyward_annibale/"
 
     const val INDEX_PATH = "api/v1/index.json"
 

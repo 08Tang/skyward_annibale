@@ -849,7 +849,7 @@ class AccountRepository(
                 val api = apiBase(current.baseUrl)
                     ?: throw IOException(appContext.getString(R.string.theme_store_invalid_url))
                 val url = api + "my-themes/" + id + "/download?history=0"
-                downloadToFile(current, url, editDir(id), "package.sukisu")
+                downloadToFile(current, url, editDir(id), "package.skyward")
             }
         }
 

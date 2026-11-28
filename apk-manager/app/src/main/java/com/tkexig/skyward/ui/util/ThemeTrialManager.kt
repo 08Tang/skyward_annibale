@@ -27,7 +27,7 @@ object ThemeTrialManager {
 
     fun trialDir(context: Context): File = File(context.filesDir, "theme_trial")
 
-    fun backupFile(context: Context): File = File(trialDir(context), "backup.sukisu")
+    fun backupFile(context: Context): File = File(trialDir(context), "backup.skyward")
 
     fun markActive(context: Context, backup: File, taskId: Int?) {
         prefs(context).edit {

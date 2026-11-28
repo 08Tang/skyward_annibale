@@ -16,7 +16,7 @@ import com.tkexig.skyward.ui.util.ThemePackageStorage
 import com.tkexig.skyward.ui.util.getFileName
 import androidx.core.net.toUri
 
-private const val THEME_SCHEME = "sukisu-theme"
+private const val THEME_SCHEME = "skyward-theme"
 private val THEME_ID_PATTERN = Regex("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 
 private fun parseThemeStoreLink(intent: Intent): Route.ThemeStore? {

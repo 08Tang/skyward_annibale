@@ -1832,7 +1832,7 @@ class ThemeStoreViewModel(application: Application) : AndroidViewModel(applicati
             }
             return direct
         }
-        val target = File(directory, "package.sukisu")
+        val target = File(directory, "package.skyward")
         val stream = app.contentResolver.openInputStream(uri)
             ?: throw IllegalArgumentException(app.getString(R.string.theme_store_upload_file_invalid, displayName))
         stream.use { input ->
