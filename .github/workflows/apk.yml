@@ -115,12 +115,40 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
+      - name: Re-sign with v1 + v2 + v3
+        if: steps.guard.outputs.skip != 'true' && env.SIGNED == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: |
+          # AGP 在 minSdk >= 24 时不生成 v1（JAR）签名，理由是 v2 已经够用。
+          # 但要求是三种都签：v1 让老系统也认，同一个包在各代 Android 上都
+          # 装得上。所以这里用 apksigner 重新签一遍，显式打开 v1。
+          apk=$(find apk-manager/app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "apk: $apk"
+          apksigner sign \
+            --ks "$KEYSTORE_FILE" \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            "$apk"
+
       - name: Verify signature (v1 + v2 + v3)
         if: steps.guard.outputs.skip != 'true' && env.SIGNED == 'true'
         run: |
           apk=$(find apk-manager/app/build/outputs/apk/release -name '*.apk' | head -1)
-          echo "apk: $apk"
-          apksigner verify --verbose --print-certs "$apk"
+          out=$(apksigner verify --verbose --print-certs "$apk")
+          echo "$out"
+          # 三种签名缺一个就失败：只签 v2/v3 的话老系统装不上，而这件事
+          # 在真机上才会发现，不能在 CI 里放过。
+          for scheme in v1 v2 v3; do
+            echo "$out" | grep -q "Verified using $scheme scheme.*: true" \
+              || { echo "::error::缺少 $scheme 签名"; exit 1; }
+          done
 
       - name: Upload APK
         if: steps.guard.outputs.skip != 'true'
