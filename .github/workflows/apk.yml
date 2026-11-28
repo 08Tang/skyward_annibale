@@ -110,8 +110,9 @@ jobs:
           # 配置文件的字段名写错时解码不会失败，只会悄悄用默认值，所以这里
           # 必须有测试盯着；纯 JVM 测试，不需要 SDK。
           chmod +x ./gradlew || true
-          ./gradlew :app:tasks --all --no-daemon | grep -i "test" || true
-          ./gradlew :app:testReleaseUnitTest --no-daemon --stacktrace
+          # 只有 testDebugUnitTest：release 变体开了 minify，AGP 不为它生成
+          # 单元测试任务。测试是纯 JVM 的，debug 跑一遍就够。
+          ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build release APK
         if: steps.guard.outputs.skip != 'true'
