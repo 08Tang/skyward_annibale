@@ -3,7 +3,7 @@ package com.tkexig.skyward.data.repository
 import android.content.Context
 import coil.ImageLoader
 import coil.memory.MemoryCache
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import okhttp3.Dispatcher
 
 /**
@@ -33,7 +33,7 @@ object ThemeStorePreviewLoader {
             maxRequests = MAX_PARALLEL_PREVIEWS
             maxRequestsPerHost = MAX_PARALLEL_PREVIEWS
         }
-        val client = ksuApp.okhttpClient.newBuilder()
+        val client = appContext.okhttpClient.newBuilder()
             .dispatcher(dispatcher)
             .build()
         return ImageLoader.Builder(context)

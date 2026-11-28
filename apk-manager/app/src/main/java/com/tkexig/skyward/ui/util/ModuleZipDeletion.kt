@@ -5,7 +5,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
 import com.tkexig.skyward.data.registry.RegistryDownloadStore
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import java.io.File
 
 
@@ -24,11 +24,11 @@ fun deleteInstalledModuleZip(uri: Uri): Boolean {
     val deleted = deleteModuleZip(
         scheme = uri.scheme,
         filePath = uri.path,
-        filesDir = ksuApp.filesDir,
-        cacheDir = ksuApp.cacheDir,
-        isDocument = { DocumentsContract.isDocumentUri(ksuApp, uri) },
-        deleteDocument = { DocumentsContract.deleteDocument(ksuApp.contentResolver, uri) },
-        deleteRow = { ksuApp.contentResolver.delete(uri, null, null) },
+        filesDir = appContext.filesDir,
+        cacheDir = appContext.cacheDir,
+        isDocument = { DocumentsContract.isDocumentUri(appContext, uri) },
+        deleteDocument = { DocumentsContract.deleteDocument(appContext.contentResolver, uri) },
+        deleteRow = { appContext.contentResolver.delete(uri, null, null) },
     )
     if (!deleted) Log.w("ModuleZipDeletion", "Module zip was not deleted: $uri")
     return deleted

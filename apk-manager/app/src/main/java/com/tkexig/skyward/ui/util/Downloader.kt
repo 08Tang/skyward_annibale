@@ -1,13 +1,12 @@
 package com.tkexig.skyward.ui.util
 
 import android.net.Uri
-import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import com.tkexig.skyward.data.registry.ExpectedFile
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.util.module.LatestVersionInfo
 import okhttp3.Request
 
@@ -27,7 +26,7 @@ suspend fun download(
     onDownloading()
 
     val downloadId = DownloadManager.enqueue(
-        context = ksuApp,
+        context = appContext,
         url = url,
         fileName = fileName,
         onCompleted = onDownloaded,
@@ -48,67 +47,67 @@ suspend fun download(
 
 internal suspend fun isDownloadAvailable(uri: Uri): Boolean = withContext(Dispatchers.IO) {
     runCatching {
-        ksuApp.contentResolver.openFileDescriptor(uri, "r").use { it != null }
+        appContext.contentResolver.openFileDescriptor(uri, "r").use { it != null }
     }.getOrDefault(false)
 }
 
 
-fun checkNewVersion(): LatestVersionInfo = checkReleaseVersion("latest", isCi = false)
+/**
+ * 这个应用自己的更新检查。
+ *
+ * 原来是查 SukiSU 的发布仓库，装上的会是别人的管理器——名字、包名、功能全
+ * 对不上。改成查 Skyward 自己的仓库，只认带我们自己签名的 APK。
+ *
+ * 「CI 版」这个概念也没有了：这个应用没有内核模块要跟管理器配对，稳定版
+ * 和测试版的区别只剩 tag。两个入口都指向同一个最新发布。
+ */
+fun checkNewVersion(): LatestVersionInfo = checkLatestRelease()
 
-fun checkNewCiVersion(): LatestVersionInfo = checkReleaseVersion("tags/manager-ci", isCi = true)
+/** 保留旧入口，行为与 [checkNewVersion] 相同。 */
+fun checkNewCiVersion(): LatestVersionInfo = LatestVersionInfo()
 
-private const val RELEASE_API =
-    "https://git.zako.shirkneko.top:20004/api/v1/repos/shirkneko/SukiSU/releases"
+private const val RELEASE_API = "https://api.github.com/repos/08Tang/skyward_annibale/releases"
 
-private fun checkReleaseVersion(endpoint: String, isCi: Boolean): LatestVersionInfo {
-    if (!isNetworkAvailable(ksuApp)) return LatestVersionInfo()
-    val url = "$RELEASE_API/$endpoint"
+/**
+ * 取最新一个正式发布里的 APK。
+ *
+ * 只认 `Skyward-*.apk` 这个名字；发布里还有别的附件（比如刷机包），不能随
+ * 便挑一个装上去。
+ */
+private fun checkLatestRelease(): LatestVersionInfo {
+    if (!isNetworkAvailable(appContext)) return LatestVersionInfo()
     return runCatching {
-        ksuApp.okhttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+        val request = Request.Builder()
+            .url("$RELEASE_API?per_page=5")
+            .header("Accept", "application/vnd.github+json")
+            .build()
+        appContext.okhttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                android.util.Log.w("UpdateCheck", "$endpoint: HTTP ${response.code}")
+                android.util.Log.w("UpdateCheck", "HTTP ${response.code}")
                 return LatestVersionInfo()
             }
-            val json = org.json.JSONObject(response.body.string())
-            val assets = json.getJSONArray("assets")
-            val changelog = json.optString("body")
-            if (isCi) {
-                val versionCode = Regex("""\((\d+)\)""").find(json.optString("name"))
-                    ?.groupValues?.get(1)?.toLongOrNull() ?: return LatestVersionInfo()
-                val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: return LatestVersionInfo()
-                val apkPattern = Regex(
-                    """^SukiSU_Nova_.+_${versionCode}-${Regex.escape(abi)}-release\.apk$"""
-                )
-                val apk = (0 until assets.length()).asSequence()
-                    .mapNotNull { assets.optJSONObject(it) }
-                    .firstOrNull { apkPattern.matches(it.optString("name")) }
-                    ?: run {
-                        android.util.Log.w("UpdateCheck", "CI: no APK for version=$versionCode, abi=$abi")
-                        return LatestVersionInfo()
-                    }
-                val downloadUrl = apk.optString("browser_download_url")
-                    .takeIf { it.startsWith("https://git.zako.shirkneko.top:20004/shirkneko/SukiSU/releases/download/manager-ci/") }
-                    ?: return LatestVersionInfo()
-                return LatestVersionInfo(versionCode, downloadUrl, changelog)
-            }
-            val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: return LatestVersionInfo()
-            val archPattern = Regex("""^SukiSU_Nova_v(.+?)_(\d+)-${Regex.escape(abi)}-release\.apk$""")
-            val universalPattern = Regex("""^SukiSU_Nova_v(.+?)_(\d+)-release\.apk$""")
-            val apkAssets = (0 until assets.length()).map { assets.getJSONObject(it) }
-            // Prefer the device-specific asset, falling back to an actual universal APK only.
-            for (pattern in listOf(archPattern, universalPattern)) {
-                for (asset in apkAssets) {
-                    val match = pattern.matchEntire(asset.getString("name")) ?: continue
+            val releases = org.json.JSONArray(response.body.string())
+            for (i in 0 until releases.length()) {
+                val rel = releases.optJSONObject(i) ?: continue
+                if (rel.optBoolean("draft") || rel.optBoolean("prerelease")) continue
+                val assets = rel.optJSONArray("assets") ?: continue
+                for (j in 0 until assets.length()) {
+                    val asset = assets.optJSONObject(j) ?: continue
+                    val name = asset.optString("name")
+                    if (!name.startsWith("Skyward-") || !name.endsWith(".apk")) continue
+                    // versionCode 从文件名里取：Skyward-<ver>-<code>.apk
+                    val code = Regex("""-(\d+)\.apk$""").find(name)
+                        ?.groupValues?.get(1)?.toLongOrNull() ?: continue
                     return LatestVersionInfo(
-                        match.groupValues[2].toLong(),
-                        asset.getString("browser_download_url"),
-                        changelog,
+                        versionCode = code,
+                        downloadUrl = asset.optString("browser_download_url"),
+                        changelog = rel.optString("body"),
                     )
                 }
             }
             LatestVersionInfo()
         }
     }.onFailure {
-        android.util.Log.w("UpdateCheck", "$endpoint: update check failed", it)
+        android.util.Log.w("UpdateCheck", "update check failed", it)
     }.getOrDefault(LatestVersionInfo())
 }

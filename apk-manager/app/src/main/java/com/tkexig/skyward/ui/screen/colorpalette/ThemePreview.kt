@@ -119,7 +119,7 @@ import com.tkexig.skyward.ui.theme.appearanceImageEffects
 import com.tkexig.skyward.ui.theme.backgroundAwareCardColors
 import com.tkexig.skyward.ui.theme.backgroundAwareColor
 import com.tkexig.skyward.ui.theme.effectiveFor
-import com.tkexig.skyward.ui.theme.rememberKernelSUColorScheme
+import com.tkexig.skyward.ui.theme.rememberSkywardColorScheme
 import com.tkexig.skyward.ui.theme.withAppearance
 import com.tkexig.skyward.ui.util.ImageStorage
 import com.tkexig.skyward.ui.util.HomeCardSticker
@@ -301,7 +301,7 @@ internal fun ThemePreviewMaterial(
     expanded: Boolean = false,
 ) {
     val ambientColors = MaterialTheme.colorScheme
-    val colorScheme = rememberKernelSUColorScheme(
+    val colorScheme = rememberSkywardColorScheme(
         seedColor = if (spec.keyColor == 0) Color.Unspecified else Color(spec.keyColor),
         isDark = spec.isDark,
         isAmoled = spec.isAmoled,
@@ -309,7 +309,7 @@ internal fun ThemePreviewMaterial(
         colorSpec = spec.colorSpec,
     )
     val hasCustomBackground = spec.backgroundPath.isNotEmpty()
-    // Matches MaterialKernelSUTheme: default Card/Surface containers bypass backgroundAwareColor().
+    // Matches MaterialSkywardTheme: default Card/Surface containers bypass backgroundAwareColor().
     val previewScheme = remember(colorScheme, hasCustomBackground, spec.cardAlpha) {
         if (!hasCustomBackground) {
             colorScheme

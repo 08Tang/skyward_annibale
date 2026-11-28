@@ -34,7 +34,7 @@ import com.tkexig.skyward.data.model.ThemeComment
 import com.tkexig.skyward.data.model.ThemeCommentCreateRequest
 import com.tkexig.skyward.data.model.ThemeCommentCreatedResponse
 import com.tkexig.skyward.data.model.ThemeCommentsResponse
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,7 +53,7 @@ import java.io.IOException
 
 class AccountRepository(
     context: Context,
-    private val client: OkHttpClient = ksuApp.okhttpClient,
+    private val client: OkHttpClient = appContext.okhttpClient,
 ) {
     private companion object {
         const val PREFS = "theme_account"

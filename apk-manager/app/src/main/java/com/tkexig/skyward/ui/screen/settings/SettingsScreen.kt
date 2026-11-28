@@ -71,18 +71,9 @@ fun SettingPager(
         },
         onSetLanguage = { tag -> viewModel.setLanguage(context, tag) },
         onSetSuCompatMode = viewModel::setSuCompatMode,
-        onSetKernelUmountEnabled = viewModel::setKernelUmountEnabled,
-        onSetSelinuxHideEnabled = viewModel::setSelinuxHideEnabled,
-        onSetAvcSpoofEnabled = viewModel::setAvcSpoofEnabled,
-        onSetMountHideEnabled = viewModel::setMountHideEnabled,
-        onSetSulogEnabled = viewModel::setSulogEnabled,
-        onSetAdbRootEnabled = viewModel::setAdbRootEnabled,
-        onSetShellSuAdbOnlyEnabled = viewModel::setShellSuAdbOnlyEnabled,
-        onSetDefaultUmountModules = viewModel::setDefaultUmountModules,
         onSetEnableWebDebugging = viewModel::setEnableWebDebugging,
         onSetUseSoftReboot = viewModel::setUseSoftReboot,
         onOpenAbout = { navigator.push(Route.About) },
-        onOpenTools = { navigator.push(Route.Tool) },
     )
 
     when (LocalUiMode.current) {

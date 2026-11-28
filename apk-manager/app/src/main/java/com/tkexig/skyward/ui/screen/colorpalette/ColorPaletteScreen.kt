@@ -15,7 +15,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.tkexig.skyward.KernelSUApplication
+import com.tkexig.skyward.SkywardApplication
 import com.tkexig.skyward.ui.LocalUiMode
 import com.tkexig.skyward.ui.UiMode
 import com.tkexig.skyward.ui.navigation3.LocalNavigator
@@ -68,7 +68,7 @@ fun ColorPaletteScreen(section: String? = null, importUri: String? = null) {
         onSetEnableNavigationBadge = viewModel::setEnableNavigationBadge,
         onSetEnablePredictiveBack = {
             viewModel.setEnablePredictiveBack(it)
-            KernelSUApplication.setEnableOnBackInvokedCallback(context.applicationInfo, it)
+            SkywardApplication.setEnableOnBackInvokedCallback(context.applicationInfo, it)
             activity?.recreate()
         },
         onSetEnableSwipeDismiss = viewModel::setEnableSwipeDismiss,

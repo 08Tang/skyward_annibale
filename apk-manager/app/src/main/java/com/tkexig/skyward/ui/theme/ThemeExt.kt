@@ -27,7 +27,7 @@ fun ColorScheme.amoledBackground(amoled: Boolean): ColorScheme =
     )
 
 @Composable
-fun rememberKernelSUColorScheme(
+fun rememberSkywardColorScheme(
     seedColor: Color,
     isDark: Boolean,
     isAmoled: Boolean,

@@ -21,7 +21,7 @@ object SuGrants {
 
     /** 名单文件：APK 自己的私有目录，不需要 root 就能读。 */
     private fun file() = java.io.File(
-        com.tkexig.skyward.ksuApp.filesDir,
+        com.tkexig.skyward.appContext.filesDir,
         "su_grants.json"
     )
 

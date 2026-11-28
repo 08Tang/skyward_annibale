@@ -23,7 +23,7 @@ import com.tkexig.skyward.ui.webui.MonetColorsProvider
 /**
  * Material 3 Expressive colours for pages that stay MD3 inside the Miuix shell
  * (the AI assistant, theme store and source management). Same pipeline as
- * [MaterialKernelSUTheme] so light/dark, AMOLED, key colour and monet follow the
+ * [MaterialSkywardTheme] so light/dark, AMOLED, key colour and monet follow the
  * manager's appearance settings, without touching the window bars the outer
  * shell already owns.
  */
@@ -34,7 +34,7 @@ fun MaterialExpressivePalette(
     val appSettings = LocalAppSettings.current ?: ThemeController.getAppSettings()
     val systemDarkTheme = isSystemInDarkTheme()
     val darkTheme = appSettings.colorMode.isDark || (appSettings.colorMode.isSystem && systemDarkTheme)
-    val colorScheme = rememberKernelSUColorScheme(
+    val colorScheme = rememberSkywardColorScheme(
         seedColor = if (appSettings.keyColor == 0) Color.Unspecified else Color(appSettings.keyColor),
         isDark = darkTheme,
         isAmoled = appSettings.colorMode.isAmoled,
@@ -55,7 +55,7 @@ fun MaterialExpressivePalette(
 }
 
 @Composable
-fun MaterialKernelSUTheme(
+fun MaterialSkywardTheme(
     appSettings: AppSettings,
     content: @Composable () -> Unit
 ) {
@@ -65,7 +65,7 @@ fun MaterialKernelSUTheme(
     val amoledMode = appSettings.colorMode.isAmoled
     val dynamicColor = appSettings.keyColor == 0
 
-    val colorScheme = rememberKernelSUColorScheme(
+    val colorScheme = rememberSkywardColorScheme(
         seedColor = if (dynamicColor) Color.Unspecified else Color(appSettings.keyColor),
         isDark = darkTheme,
         isAmoled = amoledMode,

@@ -18,17 +18,36 @@ import java.io.File
 object RecoveryFlasher {
     private const val TAG = "RecoveryFlasher"
 
-    /** 分区设备路径。A/B 机器上 recovery 通常合在 boot 里，没有单独这个分区。 */
-    private fun partitionDevice(): String = "/dev/block/by-name/recovery"
-
-    /** 这个分区在不在。 */
-    fun hasRecoveryPartition(): Boolean {
-        val out = ShellUtils.fastCmd(
-            getRootShell(globalMnt = true),
-            "[ -e ${partitionDevice()} ] && echo yes || echo no"
-        )
-        return out.trim() == "yes"
+    /**
+     * 分区设备路径。
+     *
+     * A/B 机器上分区名带槽位后缀（`recovery_a`、`recovery_b`），不带后缀的那
+     * 个往往只是指向当前槽的符号链接；要刷另一槽就得指名道姓。非 A/B 机器
+     * 只有 `recovery`。
+     */
+    private fun partitionDevice(slot: String = ""): String {
+        val base = "/dev/block/by-name/recovery"
+        if (slot.isBlank()) return base
+        val slotted = "$base$slot"
+        // 设备节点在应用自己的命名空间里看不到，要用 shell 判。
+        val exists = ShellUtils.fastCmd(
+            getRootShell(globalMnt = true), "[ -e $slotted ] && echo y || echo n"
+        ).trim() == "y"
+        return if (exists) slotted else base
     }
+
+    /**
+     * A/B 机器上的两个槽。
+     *
+     * 靠 `ro.boot.slot_suffix` 有没有值判断是不是 A/B：有的话就是 `_a`/`_b`
+     * 两个，没有就返回空表，界面上不给选。
+     */
+    fun availableSlots(): List<String> {
+        val current = currentSlotSuffix()
+        if (current.isBlank()) return emptyList()
+        return listOf("_a", "_b")
+    }
+
 
     /**
      * 当前槽位，形如 `_a`。
@@ -49,15 +68,14 @@ object RecoveryFlasher {
      * 存到 filesDir 而不是外部存储：这是救命用的文件，不该被清理工具扫走，
      * 也不需要存储权限。
      */
-    fun backupCurrent(destDir: File): Result<File> = runCatching {
-        if (!hasRecoveryPartition()) error("这台机器没有独立的 recovery 分区（可能是 A/B 机型）")
+    fun backupCurrent(destDir: File, slot: String = ""): Result<File> = runCatching {
         destDir.mkdirs()
         val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
             .format(java.util.Date())
         val dest = File(destDir, "recovery-backup-$stamp.img")
         val out = ShellUtils.fastCmd(
             getRootShell(globalMnt = true),
-            "dd if=${partitionDevice()} of=${dest.absolutePath.shellQuote()} bs=4M 2>&1 && echo ok"
+            "dd if=${partitionDevice(slot)} of=${dest.absolutePath.shellQuote()} bs=4M 2>&1 && echo ok"
         ).trim()
         if (!out.contains("ok")) error("备份失败：${out.takeLast(200)}")
         if (!dest.isFile || dest.length() == 0L) error("备份文件是空的")
@@ -70,15 +88,15 @@ object RecoveryFlasher {
      * `dd` 到 by-name 设备而不是挂载点：分区没有文件系统，直接按字节写。
      * 写完 sync 再回话，不然断电时可能只写了一半。
      */
-    fun flash(image: File): Result<Unit> = runCatching {
+    fun flash(image: File, slot: String = ""): Result<Unit> = runCatching {
         if (!image.isFile) error("找不到要刷入的文件：${image.absolutePath}")
         if (image.length() == 0L) error("文件是空的")
-        if (!hasRecoveryPartition()) error("这台机器没有独立的 recovery 分区（可能是 A/B 机型）")
 
-        Log.i(TAG, "flashing ${image.absolutePath} (${image.length()} bytes) -> ${partitionDevice()}")
+        val device = partitionDevice(slot)
+        Log.i(TAG, "flashing ${image.absolutePath} (${image.length()} bytes) -> $device")
         val out = ShellUtils.fastCmd(
             getRootShell(globalMnt = true),
-            "dd if=${image.absolutePath.shellQuote()} of=${partitionDevice()} bs=4M 2>&1 && sync && echo ok"
+            "dd if=${image.absolutePath.shellQuote()} of=$device bs=4M 2>&1 && sync && echo ok"
         ).trim()
         if (!out.contains("ok")) error("刷入失败：${out.takeLast(200)}")
     }

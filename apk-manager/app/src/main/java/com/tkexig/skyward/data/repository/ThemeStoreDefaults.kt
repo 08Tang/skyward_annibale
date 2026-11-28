@@ -3,7 +3,7 @@ package com.tkexig.skyward.data.repository
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import java.net.NetworkInterface
 import java.util.Locale
 import java.util.TimeZone
@@ -99,7 +99,7 @@ object ThemeStoreDefaults {
         val now = System.currentTimeMillis()
         if (now - vpnCheckedAtMs < VPN_CACHE_MS) return vpnDetected
         val detected = runCatching {
-            val manager = ksuApp.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val manager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             val network = manager?.activeNetwork ?: return@runCatching false
             val capabilities = manager.getNetworkCapabilities(network) ?: return@runCatching false
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||

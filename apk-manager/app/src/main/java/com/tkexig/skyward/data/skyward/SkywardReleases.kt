@@ -1,7 +1,7 @@
 package com.tkexig.skyward.data.skyward
 
 import android.util.Log
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -22,8 +22,13 @@ data class SkywardRelease(
     val sizeBytes: Long = 0,
     /** 发布时间，ISO 8601，原样保留以便按 locale 显示。 */
     val publishedAt: String = "",
-    /** 更新内容，markdown 原文。 */
-    val body: String = "",
+    /**
+     * 更新内容，只取发布说明里「本次更新」那一节。
+     *
+     * 发布说明里还有适配信息和下载说明，那些是给刷机的人看的，不是这次改了
+     * 什么。整段贴进安装页会把真正要看的东西淹掉。
+     */
+    val changelog: String = "",
 )
 
 /**
@@ -39,7 +44,7 @@ object SkywardReleases {
 
     suspend fun latest(): SkywardRelease? = withContext(Dispatchers.IO) {
         runCatching {
-            ksuApp.okhttpClient.newCall(
+            appContext.okhttpClient.newCall(
                 Request.Builder()
                     .url(API)
                     .header("Accept", "application/vnd.github+json")
@@ -60,12 +65,29 @@ object SkywardReleases {
                         assetName = zip.second,
                         sizeBytes = zip.third,
                         publishedAt = rel.optString("published_at"),
-                        body = rel.optString("body"),
+                        changelog = extractChangelog(rel.optString("body")),
                     )
                 }
                 null
             }
         }.onFailure { Log.w(TAG, "cannot read releases", it) }.getOrNull()
+    }
+
+    /**
+     * 从发布说明里取出「本次更新」那一节。
+     *
+     * 找 `## 本次更新` 这个标题，取到下一个 `##` 标题为止。没有这一节就把
+     * 整段正文当更新内容——那说明写说明的人没分节，正文就是全部内容。
+     */
+    private fun extractChangelog(body: String): String {
+        if (body.isBlank()) return ""
+        val lines = body.replace("\r\n", "\n").split('\n')
+        val start = lines.indexOfFirst { it.trim().startsWith("##") && it.contains("本次更新") }
+        if (start < 0) return body.trim()
+        val end = lines.drop(start + 1)
+            .indexOfFirst { it.trim().startsWith("## ") }
+            .let { if (it < 0) lines.size else start + 1 + it }
+        return lines.subList(start + 1, end).joinToString("\n").trim()
     }
 
     /**

@@ -9,7 +9,6 @@ package com.tkexig.skyward.ui.screen.settings
 object SettingsSection {
 
     const val GENERAL = "general"
-    const val TOOLS = "tools"
     const val UNINSTALL = "uninstall"
     const val DIAGNOSTICS = "diagnostics"
 
@@ -18,7 +17,7 @@ object SettingsSection {
     const val THEME = "theme"
 
     val ALL: Set<String> = setOf(
-        GENERAL, TOOLS, UNINSTALL, DIAGNOSTICS,
+        GENERAL, UNINSTALL, DIAGNOSTICS,
         UI_MODE, LANGUAGE, THEME,
     )
 

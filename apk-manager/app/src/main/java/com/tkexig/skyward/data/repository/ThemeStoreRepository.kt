@@ -8,7 +8,7 @@ import com.tkexig.skyward.data.model.ThemeStoreEntry
 import com.tkexig.skyward.data.model.ThemeStoreHealth
 import com.tkexig.skyward.data.model.ThemeStoreSubmitResponse
 import com.tkexig.skyward.data.repository.ThemeStoreRepository.Companion.MAX_DOWNLOAD_CACHE_BYTES
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -148,7 +148,7 @@ private class ProgressRequestBody(
  */
 class ThemeStoreRepository(
     context: Context,
-    private val client: OkHttpClient = ksuApp.okhttpClient,
+    private val client: OkHttpClient = appContext.okhttpClient,
 ) {
     companion object {
         const val TOKEN_HEADER = "X-Sukisu-Theme-Token"

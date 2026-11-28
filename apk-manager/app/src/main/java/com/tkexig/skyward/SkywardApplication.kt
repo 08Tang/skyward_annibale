@@ -33,12 +33,12 @@ import java.io.File
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
-lateinit var ksuApp: KernelSUApplication
+lateinit var appContext: SkywardApplication
 
-class KernelSUApplication : Application(), ViewModelStoreOwner {
+class SkywardApplication : Application(), ViewModelStoreOwner {
 
     companion object {
-        private const val TAG = "KernelSUApplication"
+        private const val TAG = "SkywardApplication"
         private const val LAUNCHER_RESTORE_DELAY_MS = 1_500L
 
         @SuppressLint("PrivateApi")
@@ -74,7 +74,11 @@ class KernelSUApplication : Application(), ViewModelStoreOwner {
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun onCreate() {
         super.onCreate()
-        ksuApp = this
+        appContext = this
+        // 日志要在别的初始化之前就位：那些初始化本身也可能出错，而它们的
+        // 失败正是最需要看的东西。
+        com.tkexig.skyward.data.log.AppLog.init(this)
+        com.tkexig.skyward.data.log.AppLog.i("Skyward Manager started")
 
         if (!isUserUnlocked()) {
             return
@@ -103,7 +107,7 @@ class KernelSUApplication : Application(), ViewModelStoreOwner {
                     runCatching {
                         val settings = SettingsRepositoryImpl()
                         BuiltinAppIcons.applyIfNeeded(
-                            context = this@KernelSUApplication,
+                            context = this@SkywardApplication,
                             icon = BuiltinAppIcons.find(settings.appIconId),
                             dynamicColor = settings.appIconDynamicColor,
                         )

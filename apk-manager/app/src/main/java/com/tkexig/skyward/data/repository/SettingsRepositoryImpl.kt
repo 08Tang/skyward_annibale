@@ -11,7 +11,7 @@ import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import com.topjohnwu.superuser.ShellUtils
 import com.tkexig.skyward.Natives
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.UiMode
 import com.tkexig.skyward.data.model.ModuleNameSort
 import com.tkexig.skyward.data.model.RepoSort
@@ -52,12 +52,12 @@ internal const val KEY_CUSTOM_APPEARANCE = "custom_appearance_json"
 
 
 fun isSoftRebootPreferred(): Boolean =
-    Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+    Natives.isLateLoadMode || appContext.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .getBoolean(KEY_USE_SOFT_REBOOT, false)
 
 
 fun isAutoDeleteModuleZipEnabled(): Boolean =
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+    appContext.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .getBoolean(KEY_AUTO_DELETE_MODULE_ZIP, false)
 
 class SettingsRepositoryImpl : SettingsRepository {
@@ -68,13 +68,13 @@ class SettingsRepositoryImpl : SettingsRepository {
     }
 
     private val prefs by lazy {
-        ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
     }
 
     // Imported credentials may contain refresh secrets. Keep their original
     // settings alongside generated credentials, outside Android backup/transfer.
     private val themeAccessPrefs by lazy {
-        ksuApp.getSharedPreferences("theme_device_access", Context.MODE_PRIVATE)
+        appContext.getSharedPreferences("theme_device_access", Context.MODE_PRIVATE)
     }
 
     // commit()'s Boolean is checked, so the KTX edit helper (which discards it) is not used here.
@@ -119,7 +119,7 @@ class SettingsRepositoryImpl : SettingsRepository {
     override var customBackgroundBlurPercent: Int
         get() = prefs.getInt(
             "custom_bg_blur_percent",
-            ImageStorage.defaultBackgroundBlurPercent(ksuApp),
+            ImageStorage.defaultBackgroundBlurPercent(appContext),
         )
         set(value) = prefs.edit {
             putInt(
@@ -328,15 +328,15 @@ class SettingsRepositoryImpl : SettingsRepository {
     // Fresh installations default to Material; upgrades that never picked a mode keep the previous Miuix default.
     private fun initialUiMode(): String {
         val freshInstall = runCatching {
-            val info = ksuApp.packageManager.getPackageInfo(ksuApp.packageName, 0)
+            val info = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
             info.firstInstallTime == info.lastUpdateTime
         }.getOrDefault(false)
         return if (freshInstall) UiMode.DEFAULT_VALUE else UiMode.Miuix.value
     }
 
     override var appLanguage: String
-        get() = LocaleHelper.getCurrentLanguage(ksuApp)
-        set(value) = LocaleHelper.setLanguage(ksuApp, value)
+        get() = LocaleHelper.getCurrentLanguage(appContext)
+        set(value) = LocaleHelper.setLanguage(appContext, value)
 
     override var checkUpdate: Boolean
         get() = prefs.getBoolean("check_update", true)
@@ -361,7 +361,7 @@ class SettingsRepositoryImpl : SettingsRepository {
     override var appIconId: String
         get() = prefs.getString("app_icon_id", null)
             ?: if (prefs.getBoolean("use_alt_icon", false)) {
-                BuiltinAppIcons.KERNELSU_ID
+                BuiltinAppIcons.SKYWARD_ID
             } else {
                 BuiltinAppIcons.DEFAULT_ID
             }
@@ -369,7 +369,7 @@ class SettingsRepositoryImpl : SettingsRepository {
         set(value) = prefs.edit(commit = true) {
             putString("app_icon_id", value)
             // Keep the legacy flag in sync so downgrading still restores the KernelSU icon.
-            putBoolean("use_alt_icon", value == BuiltinAppIcons.KERNELSU_ID)
+            putBoolean("use_alt_icon", value == BuiltinAppIcons.SKYWARD_ID)
         }
 
     override var appIconDynamicColor: Boolean

@@ -1,6 +1,12 @@
 package com.tkexig.skyward.ui.screen.skyward
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.add
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,12 +68,19 @@ fun SkywardScreenMiuix(
     var importText by remember { mutableStateOf("") }
     var showImport by remember { mutableStateOf(false) }
 
-    AppScaffold {
+    // 这一页没有 topBar，状态栏的区域就得自己让开：不给 windowInsets 的话
+    // 第一张卡会钻到通知栏底下。
+    AppScaffold(
+        contentWindowInsets = WindowInsets.systemBars
+            .add(WindowInsets.displayCutout)
+            .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp)
+                .padding(top = innerPadding.calculateTopPadding()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Spacer(Modifier.height(8.dp))

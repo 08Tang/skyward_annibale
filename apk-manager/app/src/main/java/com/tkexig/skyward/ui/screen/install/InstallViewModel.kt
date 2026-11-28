@@ -6,7 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.tkexig.skyward.data.skyward.RecoveryFlasher
 import com.tkexig.skyward.data.skyward.SkywardRelease
 import com.tkexig.skyward.data.skyward.SkywardReleases
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.util.rootAvailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,10 +26,12 @@ data class InstallUiState(
     val releaseError: String? = null,
 
     val hasRoot: Boolean = false,
-    /** 这台机器有没有独立的 recovery 分区；A/B 机型通常没有。 */
-    val hasRecoveryPartition: Boolean = false,
-    /** 当前槽位，非 A/B 机型是空的。 */
+    /** 可选的槽位，非 A/B 机器是空的。 */
+    val slots: List<String> = emptyList(),
+    /** 当前启动槽，形如 `_a`；非 A/B 机器是空的。 */
     val slotSuffix: String = "",
+    /** 要刷进去的槽位，默认就是当前启动那个。 */
+    val selectedSlot: String = "",
 
     val phase: InstallPhase = InstallPhase.Idle,
     val progress: Int = 0,
@@ -66,14 +68,13 @@ class InstallViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(loadingRelease = true, releaseError = null) }
             val root = withContext(Dispatchers.IO) { rootAvailable() }
-            val partition = withContext(Dispatchers.IO) {
-                if (root) RecoveryFlasher.hasRecoveryPartition() else false
-            }
-            val slot = withContext(Dispatchers.IO) {
-                if (root) RecoveryFlasher.currentSlotSuffix() else ""
+            val slot = withContext(Dispatchers.IO) { if (root) RecoveryFlasher.currentSlotSuffix() else "" }
+            // A/B 机器有两个槽，两个都能刷；非 A/B 没有槽位可选。
+            val slots = withContext(Dispatchers.IO) {
+                if (slot.isBlank()) emptyList() else RecoveryFlasher.availableSlots()
             }
             _uiState.update {
-                it.copy(hasRoot = root, hasRecoveryPartition = partition, slotSuffix = slot)
+                it.copy(hasRoot = root, slotSuffix = slot, slots = slots, selectedSlot = slot)
             }
             val release = SkywardReleases.latest()
             _uiState.update {
@@ -91,10 +92,10 @@ class InstallViewModel : ViewModel() {
         viewModelScope.launch {
             val copied = withContext(Dispatchers.IO) {
                 runCatching {
-                    val dir = File(ksuApp.cacheDir, "skyward-install").apply { mkdirs() }
+                    val dir = File(appContext.cacheDir, "skyward-install").apply { mkdirs() }
                     val name = queryDisplayName(uri) ?: "picked.img"
                     val dest = File(dir, name)
-                    ksuApp.contentResolver.openInputStream(uri)?.use { input ->
+                    appContext.contentResolver.openInputStream(uri)?.use { input ->
                         dest.outputStream().use { input.copyTo(it) }
                     } ?: error("打不开这个文件")
                     dest
@@ -115,6 +116,11 @@ class InstallViewModel : ViewModel() {
         _uiState.update { it.copy(pickedImage = null, pickedName = "") }
     }
 
+    /** 选要刷进去的槽。 */
+    fun selectSlot(slot: String) {
+        _uiState.update { it.copy(selectedSlot = slot) }
+    }
+
     fun setBackupFirst(on: Boolean) {
         _uiState.update { it.copy(backupFirst = on) }
     }
@@ -124,15 +130,6 @@ class InstallViewModel : ViewModel() {
         val state = _uiState.value
         if (!state.hasRoot) {
             _uiState.update { it.copy(error = "没有 root，写不了分区", phase = InstallPhase.Failed) }
-            return
-        }
-        if (!state.hasRecoveryPartition) {
-            _uiState.update {
-                it.copy(
-                    error = "这台机器没有独立的 recovery 分区（A/B 机型把 recovery 合在 boot 里），刷不了",
-                    phase = InstallPhase.Failed,
-                )
-            }
             return
         }
         viewModelScope.launch {
@@ -169,7 +166,7 @@ class InstallViewModel : ViewModel() {
                     _uiState.update { it.copy(phase = InstallPhase.Extracting, status = "解出镜像") }
                     RecoveryFlasher.extractImageFromZip(
                         image,
-                        File(ksuApp.cacheDir, "skyward-install"),
+                        File(appContext.cacheDir, "skyward-install"),
                     )
                 } else {
                     Result.success(image)
@@ -188,7 +185,10 @@ class InstallViewModel : ViewModel() {
             if (_uiState.value.backupFirst) {
                 _uiState.update { it.copy(phase = InstallPhase.BackingUp, status = "备份当前 recovery") }
                 withContext(Dispatchers.IO) {
-                    RecoveryFlasher.backupCurrent(File(ksuApp.filesDir, "recovery-backup"))
+                    RecoveryFlasher.backupCurrent(
+                        File(appContext.filesDir, "recovery-backup"),
+                        _uiState.value.selectedSlot,
+                    )
                 }.fold(
                     onSuccess = { file -> _uiState.update { it.copy(backupFile = file) } },
                     onFailure = { e ->
@@ -205,7 +205,9 @@ class InstallViewModel : ViewModel() {
 
             // 4. 写分区。
             _uiState.update { it.copy(phase = InstallPhase.Flashing, status = "写入 recovery 分区") }
-            withContext(Dispatchers.IO) { RecoveryFlasher.flash(resolved) }.fold(
+            withContext(Dispatchers.IO) {
+                RecoveryFlasher.flash(resolved, _uiState.value.selectedSlot)
+            }.fold(
                 onSuccess = {
                     _uiState.update {
                         it.copy(
@@ -232,13 +234,13 @@ class InstallViewModel : ViewModel() {
      * 内存——刷机包有四十多兆。
      */
     private fun downloadRelease(release: SkywardRelease): Result<File> = runCatching {
-        val dir = File(ksuApp.cacheDir, "skyward-install").apply { mkdirs() }
+        val dir = File(appContext.cacheDir, "skyward-install").apply { mkdirs() }
         val dest = File(dir, release.assetName.ifBlank { "skyward.zip" })
         if (dest.isFile && dest.length() == release.sizeBytes && release.sizeBytes > 0) {
             return@runCatching dest
         }
         val request = okhttp3.Request.Builder().url(release.downloadUrl).build()
-        ksuApp.okhttpClient.newCall(request).execute().use { response ->
+        appContext.okhttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("下载失败：HTTP ${response.code}")
             val body = response.body
             val total = body.contentLength().takeIf { it > 0 } ?: release.sizeBytes
@@ -263,7 +265,7 @@ class InstallViewModel : ViewModel() {
     }
 
     private fun queryDisplayName(uri: Uri): String? = runCatching {
-        ksuApp.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        appContext.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
             if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
         }

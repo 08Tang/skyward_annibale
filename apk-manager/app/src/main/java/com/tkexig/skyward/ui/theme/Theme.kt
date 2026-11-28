@@ -112,19 +112,19 @@ object ThemeController {
 }
 
 @Composable
-fun KernelSUTheme(
+fun SkywardTheme(
     appSettings: AppSettings = ThemeController.getAppSettings(),
     uiMode: UiMode = LocalUiMode.current,
     content: @Composable () -> Unit
 ) {
 
     when (uiMode) {
-        UiMode.Miuix -> MiuixKernelSUTheme(
+        UiMode.Miuix -> MiuixSkywardTheme(
             appSettings = appSettings,
             content = content
         )
 
-        UiMode.Material -> MaterialKernelSUTheme(
+        UiMode.Material -> MaterialSkywardTheme(
             appSettings = appSettings,
             content = content
         )

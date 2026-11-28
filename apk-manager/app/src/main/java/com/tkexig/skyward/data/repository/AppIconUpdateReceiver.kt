@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.UserManager
 import android.util.Log
-import com.tkexig.skyward.KernelSUApplication
+import com.tkexig.skyward.SkywardApplication
 import com.tkexig.skyward.ui.util.BuiltinAppIcons
 
 /**
@@ -17,7 +17,7 @@ import com.tkexig.skyward.ui.util.BuiltinAppIcons
  * user taps the icon, so the first launch no longer has to change components underneath itself.
  *
  * The broadcast is not guaranteed (a locked user skips it, some ROMs defer it), so
- * [com.tkexig.skyward.KernelSUApplication] repeats the check once the manager is backgrounded.
+ * [com.tkexig.skyward.SkywardApplication] repeats the check once the manager is backgrounded.
  * Neither path touches components while the launching task is starting: disabling the alias
  * that hosts it kills the app on several ROMs.
  */
@@ -27,8 +27,8 @@ class AppIconUpdateReceiver : BroadcastReceiver() {
         if (context.getSystemService(UserManager::class.java)?.isUserUnlocked != true) return
         // A deferred update broadcast can arrive while the user is already launching the
         // manager. Moving components under a visible task kills it on some ROMs, so let the
-        // background repair in KernelSUApplication do it once the app leaves the screen.
-        if ((context.applicationContext as? KernelSUApplication)?.isAppInForeground == true) return
+        // background repair in SkywardApplication do it once the app leaves the screen.
+        if ((context.applicationContext as? SkywardApplication)?.isAppInForeground == true) return
         runCatching {
             val settings = SettingsRepositoryImpl()
             BuiltinAppIcons.applyIfNeeded(

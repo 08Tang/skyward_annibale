@@ -1438,7 +1438,7 @@
     <string name="theme_store_upload_markdown_hint">支援 Markdown：**粗體**、*斜體*、`代碼`、[連結](https://example.com)。使用「使用者名稱@github」格式（使用者名稱支援中文等任意語言，例如 小明@github）可跳轉至對應使用者；@github 仍可跳轉至網站首頁。</string>
     <string name="theme_store_upload_markdown_hint_short">這裡同樣支援 Markdown 和 @ 網站提及。</string>
     <string name="theme_store_upload_changelog">更新說明</string>
-    <string name="theme_store_upload_package">主題包（必填，.sukisu）</string>
+    <string name="theme_store_upload_package">主題包（必填，.skyward）</string>
     <string name="theme_store_upload_preview">預覽圖（必填）</string>
     <string name="theme_store_upload_screenshots">螢幕截圖（選填，最多 6 張）</string>
     <string name="theme_store_upload_choose_file">選擇檔案</string>
@@ -1631,7 +1631,7 @@
     <string name="settings_home_card_sticker_remove">移除貼紙</string>
     <string name="settings_home_card_sticker_rotation">旋轉</string>
     <string name="settings_home_card_sticker_size">大小</string>
-    <string name="theme_export_dialog_message">選擇要寫入此 .sukisu 主題包的項目：</string>
+    <string name="theme_export_dialog_message">選擇要寫入此 .skyward 主題包的項目：</string>
     <string name="theme_package_format_version">主題包格式 v%1$d</string>
     <string name="theme_clear_all">清除全部外觀</string>
     <string name="theme_clear_all_summary">移除全部背景、狀態卡圖片、貼紙與自訂文字，配色與圖示恢復預設</string>

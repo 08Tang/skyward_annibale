@@ -47,36 +47,6 @@ data class SettingsUiState(
     val suCompatMode: Int = 0, // 0: enable default, 1: disable until reboot, 2: disable always
     val isSuEnabled: Boolean = false,
 
-    // Kernel Umount
-    val kernelUmountStatus: String = "",
-    val isKernelUmountEnabled: Boolean = false,
-
-    // SELinux Hide
-    val selinuxHideStatus: String = "",
-    val isSelinuxHideEnabled: Boolean = false,
-
-    // AVC log spoofing
-    val avcSpoofStatus: String = "",
-    val isAvcSpoofEnabled: Boolean = false,
-
-    // Mount Hide
-    val mountHideStatus: String = "",
-    val isMountHideEnabled: Boolean = false,
-
-    // SU Log
-    val sulogStatus: String = "",
-    val isSulogEnabled: Boolean = false,
-
-    // Umount Modules
-    val isDefaultUmountModules: Boolean = false,
-
-    // ADB Root
-    val adbRootStatus: String = "",
-    val isAdbRootEnabled: Boolean = false,
-
-    // Shell SU ADB Only
-    val shellSuAdbOnlyStatus: String = "",
-    val isShellSuAdbOnlyEnabled: Boolean = false,
 
     val isLkmMode: Boolean = false,
     val isLateLoadMode: Boolean = false,
@@ -236,16 +206,7 @@ data class SettingsScreenActions(
     val onSetUiModeIndex: (Int) -> Unit,
     val onSetLanguage: (String) -> Unit,
     val onSetSuCompatMode: (Int) -> Unit,
-    val onSetKernelUmountEnabled: (Boolean) -> Unit,
-    val onSetSelinuxHideEnabled: (Boolean) -> Unit,
-    val onSetAvcSpoofEnabled: (Boolean) -> Unit,
-    val onSetMountHideEnabled: (Boolean) -> Unit,
-    val onSetSulogEnabled: (Boolean) -> Unit,
-    val onSetAdbRootEnabled: (Boolean) -> Unit,
-    val onSetShellSuAdbOnlyEnabled: (Boolean) -> Unit,
-    val onSetDefaultUmountModules: (Boolean) -> Unit,
     val onSetEnableWebDebugging: (Boolean) -> Unit,
     val onSetUseSoftReboot: (Boolean) -> Unit,
     val onOpenAbout: () -> Unit,
-    val onOpenTools: () -> Unit,
 )

@@ -7,7 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.tkexig.skyward.R
-import com.tkexig.skyward.ui.component.KsuIsValid
+import com.tkexig.skyward.ui.component.RootReadyCheck
 import com.tkexig.skyward.ui.component.ListPopupDefaults
 import com.tkexig.skyward.ui.component.miuix.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
@@ -25,7 +25,7 @@ fun RebootListPopupMiuix(
     alignment: PopupPositionProvider.Align = PopupPositionProvider.Align.TopEnd
 ) {
     val showTopPopup = remember { mutableStateOf(false) }
-    KsuIsValid {
+    RootReadyCheck {
         val onReboot = rememberRebootAction()
         IconButton(
             modifier = modifier,

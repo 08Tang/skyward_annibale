@@ -16,7 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import com.tkexig.skyward.R
-import com.tkexig.skyward.ui.component.KsuIsValid
+import com.tkexig.skyward.ui.component.RootReadyCheck
 
 @Composable
 fun RebootDropdownItems(onItemClick: (String) -> Unit) {
@@ -35,7 +35,7 @@ fun RebootDropdownItems(onItemClick: (String) -> Unit) {
 fun RebootListPopupMaterial() {
     var expanded by remember { mutableStateOf(false) }
 
-    KsuIsValid {
+    RootReadyCheck {
         val onReboot = rememberRebootAction()
 
         IconButton(onClick = { expanded = true }) {

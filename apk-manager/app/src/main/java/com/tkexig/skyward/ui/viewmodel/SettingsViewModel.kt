@@ -15,7 +15,7 @@ import com.tkexig.skyward.Natives
 import com.tkexig.skyward.R
 import com.tkexig.skyward.data.repository.SettingsRepository
 import com.tkexig.skyward.data.repository.SettingsRepositoryImpl
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.screen.colorpalette.ColorPaletteUiState
 import com.tkexig.skyward.data.model.ModuleNameSort
 import com.tkexig.skyward.ui.screen.settings.SettingsUiState
@@ -186,38 +186,11 @@ class SettingsViewModel(
                 else -> 0
             }
 
-            val kernelUmountStatus = repo.getKernelUmountStatus()
-            val isKernelUmountEnabled = repo.isKernelUmountEnabled()
-            val selinuxHideStatus = repo.getSelinuxHideStatus()
-            val isSelinuxHideEnabled = repo.isSelinuxHideEnabled()
-            val avcSpoofStatus = repo.getAvcSpoofStatus()
-            val isAvcSpoofEnabled = repo.isAvcSpoofEnabled()
-            val mountHideStatus = repo.getMountHideStatus()
-            val isMountHideEnabled = repo.isMountHideEnabled()
-            val sulogStatus = repo.getSulogStatus()
-            val isSulogEnabled = if (sulogStatus == "forced") {
-                repo.getSulogValue() == 1L
-            } else {
-                repo.getSulogPersistValue() == 1L
-            }
-            val adbRootStatus = repo.getAdbRootStatus()
-            val isAdbRootEnabled = if (adbRootStatus == "forced") {
-                repo.getAdbRootValue() == 1L
-            } else {
-                repo.getAdbRootPersistValue() == 1L
-            }
-            val shellSuAdbOnlyStatus = repo.getShellSuAdbOnlyStatus()
-            val isShellSuAdbOnlyEnabled = if (shellSuAdbOnlyStatus == "forced") {
-                repo.getShellSuAdbOnlyValue() == 1L
-            } else {
-                repo.getShellSuAdbOnlyPersistValue() == 1L
-            }
-            val isDefaultUmountModules = repo.isDefaultUmountModules()
             val uiMode = repo.uiMode
             val appLanguage = repo.appLanguage
             val useSoftReboot = repo.useSoftReboot
             val isLateLoadMode = Natives.isLateLoadMode
-            val systemWallpaperPath = ImageStorage.systemWallpaperFile(ksuApp)
+            val systemWallpaperPath = ImageStorage.systemWallpaperFile(appContext)
                 .takeIf { it.isFile }?.absolutePath.orEmpty()
 
             _uiState.update {
@@ -284,21 +257,6 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
                     suCompatStatus = suCompatStatus,
                     suCompatMode = suCompatMode,
                     isSuEnabled = isSuEnabled,
-                    adbRootStatus = adbRootStatus,
-                    isAdbRootEnabled = isAdbRootEnabled,
-                    shellSuAdbOnlyStatus = shellSuAdbOnlyStatus,
-                    isShellSuAdbOnlyEnabled = isShellSuAdbOnlyEnabled,
-                    kernelUmountStatus = kernelUmountStatus,
-                    isKernelUmountEnabled = isKernelUmountEnabled,
-                    selinuxHideStatus = selinuxHideStatus,
-                    isSelinuxHideEnabled = isSelinuxHideEnabled,
-                    avcSpoofStatus = avcSpoofStatus,
-                    isAvcSpoofEnabled = isAvcSpoofEnabled,
-                    mountHideStatus = mountHideStatus,
-                    isMountHideEnabled = isMountHideEnabled,
-                    sulogStatus = sulogStatus,
-                    isSulogEnabled = isSulogEnabled,
-                    isDefaultUmountModules = isDefaultUmountModules,
                     isLkmMode = isLkmMode,
                     useSoftReboot = useSoftReboot,
                     isLateLoadMode = isLateLoadMode,
@@ -320,7 +278,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
             val path = ImageStorage.stageUri(context, uri)
             if (path == null) {
                 Toast.makeText(
-                    ksuApp,
+                    appContext,
                     R.string.background_crop_prepare_failed,
                     Toast.LENGTH_SHORT,
                 ).show()
@@ -339,7 +297,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
             }
             if (path == null) {
                 Toast.makeText(
-                    ksuApp,
+                    appContext,
                     R.string.background_crop_prepare_failed,
                     Toast.LENGTH_SHORT,
                 ).show()
@@ -396,7 +354,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
     private suspend fun refreshSystemWallpaperCache() {
         val generation = wallpaperGeneration
         val derivesKeyColor = repo.derivesKeyColorFromBackground()
-        val result = ImageStorage.captureSystemWallpaper(ksuApp, force = false)
+        val result = ImageStorage.captureSystemWallpaper(appContext, force = false)
         if (generation != wallpaperGeneration) return
         if (result.changed) {
             repo.customBackgroundUpdatedAt = System.currentTimeMillis()
@@ -412,7 +370,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
 
     private fun updateBackgroundAppearanceState() {
         val useSystemWallpaper = repo.useSystemWallpaper
-        val systemWallpaperPath = ImageStorage.systemWallpaperFile(ksuApp)
+        val systemWallpaperPath = ImageStorage.systemWallpaperFile(appContext)
             .takeIf { it.isFile }?.absolutePath.orEmpty()
         _uiState.update {
             it.copy(
@@ -453,7 +411,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
                 if (generation != wallpaperGeneration) return@launch
                 if (result.path == null) {
                     Toast.makeText(
-                        ksuApp,
+                        appContext,
                         R.string.settings_system_wallpaper_failed,
                         Toast.LENGTH_SHORT,
                     ).show()
@@ -484,7 +442,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
                 throw cancelled
             } catch (_: Exception) {
                 Toast.makeText(
-                    ksuApp,
+                    appContext,
                     R.string.settings_system_wallpaper_failed,
                     Toast.LENGTH_SHORT,
                 ).show()
@@ -589,7 +547,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
     fun clearHomeCardImage() {
         deactivateAdaptiveTheme()
         viewModelScope.launch {
-            ImageStorage.clearHomeCardImage(ksuApp)
+            ImageStorage.clearHomeCardImage(appContext)
             repo.homeCardImagePath = ""
             repo.hideHomeCardStatusText = false
             repo.hideHomeCardDecoration = false
@@ -665,7 +623,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
             // Re-read after the save: another add/remove may have completed while it ran.
             val updated = _uiState.value.homeCardStickers + HomeCardSticker(path)
             if (updated.size > HomeCardSticker.MAX_COUNT) {
-                ImageStorage.deleteHomeCardSticker(ksuApp, path)
+                ImageStorage.deleteHomeCardSticker(appContext, path)
                 Toast.makeText(context, R.string.settings_home_card_sticker_limit, Toast.LENGTH_SHORT).show()
                 return@launch
             }
@@ -677,7 +635,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
     fun removeHomeCardSticker(index: Int) {
         val sticker = _uiState.value.homeCardStickers.getOrNull(index) ?: return
         viewModelScope.launch {
-            ImageStorage.deleteHomeCardSticker(ksuApp, sticker.path)
+            ImageStorage.deleteHomeCardSticker(appContext, sticker.path)
             // Re-read after the delete and remove by path so concurrent edits cannot resurrect it.
             val current = _uiState.value.homeCardStickers
             val updated = current.filterNot { it.path == sticker.path }
@@ -711,19 +669,19 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
                 .filter { it.isFile }
             if (backgroundFile == null && cardBackgroundFile == null && stickerFiles.isEmpty()) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(ksuApp, R.string.theme_export_failed, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(appContext, R.string.theme_export_failed, Toast.LENGTH_SHORT).show()
                 }
                 return@launch
             }
             ImageStorage.exportImages(context, uri, backgroundFile, cardBackgroundFile, stickerFiles)
                 .onSuccess {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(ksuApp, R.string.theme_export_success, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(appContext, R.string.theme_export_success, Toast.LENGTH_SHORT).show()
                     }
                 }
                 .onFailure {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(ksuApp, R.string.theme_export_failed, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(appContext, R.string.theme_export_failed, Toast.LENGTH_SHORT).show()
                     }
                 }
         }
@@ -793,10 +751,10 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
                 adaptive = payload.adaptive,
             )
                 .onSuccess {
-                    Toast.makeText(ksuApp, R.string.theme_export_success, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(appContext, R.string.theme_export_success, Toast.LENGTH_SHORT).show()
                 }
                 .onFailure {
-                    Toast.makeText(ksuApp, R.string.theme_export_failed, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(appContext, R.string.theme_export_failed, Toast.LENGTH_SHORT).show()
                 }
         }
     }
@@ -851,7 +809,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
         }
         val backgroundFile = if (options.backgroundImage) {
             if (repo.useSystemWallpaper) {
-                ImageStorage.systemWallpaperFile(ksuApp).takeIf { it.isFile }
+                ImageStorage.systemWallpaperFile(appContext).takeIf { it.isFile }
             } else {
                 repo.customBackgroundUri
                     .takeIf { it.isNotEmpty() }
@@ -879,7 +837,7 @@ homePillScale = HomeStatusStyle.coercePillScale(repo.homePillScale),
         }
         val builtinIconIds = setOf(
             BuiltinAppIcons.DEFAULT_ID,
-            BuiltinAppIcons.KERNELSU_ID,
+            BuiltinAppIcons.SKYWARD_ID,
             BuiltinAppIcons.LOGO_ID,
             BuiltinAppIcons.ZAKO_ID,
         )
@@ -1132,7 +1090,7 @@ homePillScale = if (options.homeCardDisplay) source.homePillScale else null,
                     }
                 }
                 .onFailure {
-                    Toast.makeText(ksuApp, R.string.theme_import_failed, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(appContext, R.string.theme_import_failed, Toast.LENGTH_SHORT).show()
                 }
         }
     }
@@ -1150,7 +1108,7 @@ homePillScale = if (options.homeCardDisplay) source.homePillScale else null,
                     }
                 }
                 .onFailure {
-                    Toast.makeText(ksuApp, R.string.theme_import_failed, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(appContext, R.string.theme_import_failed, Toast.LENGTH_SHORT).show()
                 }
             runCatching { file.delete() }
         }
@@ -1206,7 +1164,7 @@ homePillScale = if (options.homeCardDisplay) source.homePillScale else null,
                 }.isSuccess
                 rollbackPackage?.let { file -> runCatching { file.delete() } }
                 Toast.makeText(
-                    ksuApp,
+                    appContext,
                     if (rolledBack) R.string.theme_import_failed_restored else R.string.theme_import_failed,
                     Toast.LENGTH_LONG,
                 ).show()
@@ -1221,7 +1179,7 @@ homePillScale = if (options.homeCardDisplay) source.homePillScale else null,
                     showThemeImportDialog = false,
                 )
             }
-            Toast.makeText(ksuApp, R.string.theme_import_success, Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, R.string.theme_import_success, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1231,7 +1189,7 @@ homePillScale = if (options.homeCardDisplay) source.homePillScale else null,
         viewModelScope.launch {
             val result = beginThemeTrial(appContext, packageFile, taskId)
             Toast.makeText(
-                ksuApp,
+                appContext,
                 if (result.isSuccess) R.string.theme_store_trial_started
                 else R.string.theme_store_trial_failed,
                 Toast.LENGTH_LONG,
@@ -1709,13 +1667,13 @@ homePillScale = if (options.homeCardDisplay) source.homePillScale else null,
                     )
                 }.take(HomeCardSticker.MAX_COUNT)
                 if (importedStickers.isNotEmpty()) {
-                    current.homeCardStickers.forEach { ImageStorage.deleteHomeCardSticker(ksuApp, it.path) }
+                    current.homeCardStickers.forEach { ImageStorage.deleteHomeCardSticker(appContext, it.path) }
                     repo.homeCardStickers = importedStickers
                     homeCardStickers = importedStickers
                 }
             } else if (data.homeCardStickerTransforms != null) {
                 // A v2 package with an empty list explicitly clears the existing stickers.
-                current.homeCardStickers.forEach { ImageStorage.deleteHomeCardSticker(ksuApp, it.path) }
+                current.homeCardStickers.forEach { ImageStorage.deleteHomeCardSticker(appContext, it.path) }
                 repo.homeCardStickers = emptyList()
                 homeCardStickers = emptyList()
             }
@@ -1743,7 +1701,7 @@ homePillScale = if (options.homeCardDisplay) source.homePillScale else null,
         if (options.appIcon) {
             val builtinIconIds = setOf(
                 BuiltinAppIcons.DEFAULT_ID,
-                BuiltinAppIcons.KERNELSU_ID,
+                BuiltinAppIcons.SKYWARD_ID,
                 BuiltinAppIcons.LOGO_ID,
                 BuiltinAppIcons.ZAKO_ID,
             )
@@ -2117,8 +2075,8 @@ homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else nul
 
     fun refreshAdaptiveAppearance() {
         viewModelScope.launch {
-            AdaptiveThemeStore.sync(repo, isEffectiveDarkMode(ksuApp))
-            val systemWallpaperPath = ImageStorage.systemWallpaperFile(ksuApp)
+            AdaptiveThemeStore.sync(repo, isEffectiveDarkMode(appContext))
+            val systemWallpaperPath = ImageStorage.systemWallpaperFile(appContext)
                 .takeIf { it.isFile }?.absolutePath.orEmpty()
             _uiState.update {
                 it.copy(
@@ -2158,7 +2116,7 @@ homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else nul
         viewModelScope.launch {
             val variant = withContext(Dispatchers.IO) { buildDraftVariant(context, dark) }
             if (variant == null) {
-                Toast.makeText(ksuApp, R.string.theme_adaptive_capture_failed, Toast.LENGTH_SHORT).show()
+                Toast.makeText(appContext, R.string.theme_adaptive_capture_failed, Toast.LENGTH_SHORT).show()
                 return@launch
             }
             val current = AdaptiveThemeStore.loadDraft(repo) ?: AdaptiveThemeDraft()
@@ -2167,10 +2125,10 @@ homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else nul
             // The previously archived package no longer matches the edited draft.
             publishDraftFlags(updated)
             Toast.makeText(
-                ksuApp,
-                ksuApp.getString(
+                appContext,
+                appContext.getString(
                     R.string.theme_adaptive_capture_success,
-                    ksuApp.getString(
+                    appContext.getString(
                         if (dark) R.string.theme_adaptive_draft_dark
                         else R.string.theme_adaptive_draft_light,
                     ),
@@ -2192,7 +2150,7 @@ homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else nul
                 ImageStorage.clearAdaptiveHomeCardStickers(context, dark = true, draft = true)
             }
             publishDraftFlags(null)
-            Toast.makeText(ksuApp, R.string.theme_adaptive_draft_cleared, Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, R.string.theme_adaptive_draft_cleared, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -2200,7 +2158,7 @@ homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else nul
         viewModelScope.launch {
             val draft = AdaptiveThemeStore.loadDraft(repo)
             if (draft?.complete != true) {
-                Toast.makeText(ksuApp, R.string.theme_adaptive_draft_incomplete, Toast.LENGTH_SHORT).show()
+                Toast.makeText(appContext, R.string.theme_adaptive_draft_incomplete, Toast.LENGTH_SHORT).show()
                 return@launch
             }
             val light = withContext(Dispatchers.IO) {
@@ -2210,7 +2168,7 @@ homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else nul
                 promoteDraftVariant(context, draft.dark, dark = true)
             }
             if (light == null || darkVariant == null) {
-                Toast.makeText(ksuApp, R.string.theme_adaptive_capture_failed, Toast.LENGTH_SHORT).show()
+                Toast.makeText(appContext, R.string.theme_adaptive_capture_failed, Toast.LENGTH_SHORT).show()
                 return@launch
             }
             val state = AdaptiveThemeState(light = light, dark = darkVariant)
@@ -2219,7 +2177,7 @@ homePillScale = if (options.homeCardDisplay) variant.data.homePillScale else nul
             AdaptiveThemeStore.apply(repo, state.variant(dark))
             repo.adaptiveAppliedMode = if (dark) 1 else 0
             refreshAdaptiveAppearance()
-            Toast.makeText(ksuApp, R.string.theme_adaptive_applied, Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, R.string.theme_adaptive_applied, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -2420,9 +2378,9 @@ homePillScale = repo.homePillScale,
     }
 
     fun resetBackgroundAppearance() {
-        ThemeTrialManager.clear(ksuApp)
+        ThemeTrialManager.clear(appContext)
         viewModelScope.launch {
-            val defaultBlur = ImageStorage.defaultBackgroundBlurPercent(ksuApp)
+            val defaultBlur = ImageStorage.defaultBackgroundBlurPercent(appContext)
             repo.cardBackgroundAlphaPercent = ImageStorage.DEFAULT_CARD_ALPHA
             repo.customBackgroundBlurPercent = defaultBlur
             repo.customBackgroundScrimPercent = ImageStorage.DEFAULT_BACKGROUND_SCRIM
@@ -2440,25 +2398,25 @@ homePillScale = repo.homePillScale,
                 )
             }
 
-            Toast.makeText(ksuApp, R.string.theme_reset_done, Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, R.string.theme_reset_done, Toast.LENGTH_SHORT).show()
         }
     }
 
     fun clearAllAppearance() {
-        ThemeTrialManager.clear(ksuApp)
+        ThemeTrialManager.clear(appContext)
         deactivateAdaptiveTheme()
         seedGeneration++
         wallpaperGeneration++
         clearPendingSeed()
         viewModelScope.launch {
-            val defaultBlur = ImageStorage.defaultBackgroundBlurPercent(ksuApp)
-            ImageStorage.clear(ksuApp)
-            ImageStorage.clearHomeCardImage(ksuApp)
-            ImageStorage.clearHomeCardSticker(ksuApp)
-            ImageStorage.clearBottomBarIcons(ksuApp)
-            ImageStorage.clearAdaptiveImages(ksuApp)
+            val defaultBlur = ImageStorage.defaultBackgroundBlurPercent(appContext)
+            ImageStorage.clear(appContext)
+            ImageStorage.clearHomeCardImage(appContext)
+            ImageStorage.clearHomeCardSticker(appContext)
+            ImageStorage.clearBottomBarIcons(appContext)
+            ImageStorage.clearAdaptiveImages(appContext)
             AdaptiveThemeStore.clearDraft(repo)
-            runCatching { ImageStorage.systemWallpaperFile(ksuApp).delete() }
+            runCatching { ImageStorage.systemWallpaperFile(appContext).delete() }
 
             repo.customBackgroundUri = ""
             repo.customBackgroundUpdatedAt = 0L
@@ -2488,7 +2446,7 @@ homePillScale = repo.homePillScale,
             repo.customHomeTitle = ""
             repo.appIconId = BuiltinAppIcons.DEFAULT_ID
             BuiltinAppIcons.apply(
-                context = ksuApp,
+                context = appContext,
                 icon = BuiltinAppIcons.find(BuiltinAppIcons.DEFAULT_ID),
                 dynamicColor = repo.appIconDynamicColor,
             )
@@ -2530,7 +2488,7 @@ homePillScale = repo.homePillScale,
                 )
             }
 
-            Toast.makeText(ksuApp, R.string.theme_clear_all_done, Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, R.string.theme_clear_all_done, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -2898,60 +2856,8 @@ homePillScale = repo.homePillScale,
         }
     }
 
-    fun setKernelUmountEnabled(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (repo.setKernelUmountEnabled(enabled)) {
-                repo.execKsudFeatureSave()
-                _uiState.update { it.copy(isKernelUmountEnabled = enabled) }
-            }
-        }
-    }
 
-    fun setSelinuxHideEnabled(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val status = repo.setSelinuxHideEnabled(enabled)
-            repo.execKsudFeatureSave()
-            _uiState.update { it.copy(isSelinuxHideEnabled = enabled) }
-            when (status) {
-                0 -> {}
-                -OsConstants.EAGAIN -> {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(ksuApp, R.string.settings_selinux_hide_reboot_required,
-                            Toast.LENGTH_LONG).show()
-                    }
-                }
-                else -> {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(ksuApp, ksuApp.getString(R.string.settings_selinux_hide_failed, status),
-                            Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        }
-    }
 
-    fun setMountHideEnabled(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val status = repo.setMountHideEnabled(enabled)
-            repo.execKsudFeatureSave()
-            _uiState.update { it.copy(isMountHideEnabled = enabled) }
-            when (status) {
-                0 -> {}
-                -OsConstants.EAGAIN -> {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(ksuApp, R.string.settings_mount_hide_reboot_required,
-                            Toast.LENGTH_LONG).show()
-                    }
-                }
-                else -> {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(ksuApp, ksuApp.getString(R.string.settings_mount_hide_failed, status),
-                            Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        }
-    }
 
 
     fun setUseSoftReboot(enabled: Boolean) {
@@ -2959,61 +2865,18 @@ homePillScale = repo.homePillScale,
         _uiState.update { it.copy(useSoftReboot = enabled) }
     }
 
-    fun setSulogEnabled(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (repo.setSulogEnabled(enabled)) {
-                repo.execKsudFeatureSave()
-                _uiState.update { it.copy(isSulogEnabled = enabled) }
-            }
-        }
-    }
 
-    fun setShellSuAdbOnlyEnabled(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (repo.setShellSuAdbOnlyEnabled(enabled)) {
-                repo.execKsudFeatureSave()
-                _uiState.update { it.copy(isShellSuAdbOnlyEnabled = enabled) }
-            }
-        }
-    }
 
-    fun setAdbRootEnabled(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (repo.setAdbRootEnabled(enabled)) {
-                repo.execKsudFeatureSave()
-                _uiState.update { it.copy(isAdbRootEnabled = enabled) }
-            }
-        }
-    }
 
-    fun setDefaultUmountModules(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (repo.setDefaultUmountModules(enabled)) {
-                _uiState.update { it.copy(isDefaultUmountModules = enabled) }
-            }
-        }
-    }
 
-    fun setAvcSpoofEnabled(enabled: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (repo.setAvcSpoofEnabled(enabled)) {
-                repo.execKsudFeatureSave()
-                _uiState.update { it.copy(isAvcSpoofEnabled = repo.isAvcSpoofEnabled()) }
-            } else {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(ksuApp, R.string.settings_avc_spoof_failed, Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
 
     private fun publishPendingSeed(keyColor: Int) {
-        ksuApp.getSharedPreferences(MainActivityViewModel.SETTINGS_PREFS, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(MainActivityViewModel.SETTINGS_PREFS, Context.MODE_PRIVATE)
             .edit { putInt(MainActivityViewModel.KEY_COLOR_PENDING, keyColor) }
     }
 
     private fun clearPendingSeed() {
-        ksuApp.getSharedPreferences(MainActivityViewModel.SETTINGS_PREFS, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(MainActivityViewModel.SETTINGS_PREFS, Context.MODE_PRIVATE)
             .edit { remove(MainActivityViewModel.KEY_COLOR_PENDING) }
     }
 
@@ -3022,7 +2885,7 @@ homePillScale = repo.homePillScale,
 
     private fun SettingsRepository.activeBackgroundFile(): File? {
         val path = if (useSystemWallpaper) {
-            ImageStorage.systemWallpaperFile(ksuApp).takeIf { it.isFile }?.absolutePath
+            ImageStorage.systemWallpaperFile(appContext).takeIf { it.isFile }?.absolutePath
         } else {
             customBackgroundUri.takeIf { it.isNotEmpty() }
         } ?: return null

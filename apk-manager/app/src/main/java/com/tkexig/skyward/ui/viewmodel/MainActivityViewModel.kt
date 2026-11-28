@@ -9,7 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.tkexig.skyward.data.repository.SettingsRepository
 import com.tkexig.skyward.data.repository.SettingsRepositoryImpl
 import com.tkexig.skyward.data.repository.KEY_CUSTOM_APPEARANCE
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.UiMode
 import com.tkexig.skyward.ui.theme.ThemeController
 import com.tkexig.skyward.ui.util.AdaptiveThemeStore
@@ -26,7 +26,7 @@ class MainActivityViewModel(
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val prefs = ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+    private val prefs = appContext.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
     private val settingRepo: SettingsRepository = SettingsRepositoryImpl()
     private val mainPageState = MainPageState(savedStateHandle)
     @Volatile private var systemWallpaperCacheValidated = false
@@ -97,7 +97,7 @@ class MainActivityViewModel(
     fun refreshSystemWallpaper() {
         if (!settingRepo.useSystemWallpaper) return
         viewModelScope.launch {
-            val result = ImageStorage.captureSystemWallpaper(ksuApp, force = false)
+            val result = ImageStorage.captureSystemWallpaper(appContext, force = false)
             systemWallpaperCacheValidated = result.path != null
             if (result.changed) {
                 settingRepo.customBackgroundUpdatedAt = System.currentTimeMillis()
@@ -127,7 +127,7 @@ class MainActivityViewModel(
 
     private fun readUiState(): MainActivityUiState {
         val useSystemWallpaper = settingRepo.useSystemWallpaper
-        val systemWallpaperPath = ImageStorage.systemWallpaperFile(ksuApp)
+        val systemWallpaperPath = ImageStorage.systemWallpaperFile(appContext)
             .takeIf { it.isFile }?.absolutePath.orEmpty()
         return MainActivityUiState(
             appSettings = ThemeController.getAppSettings(),

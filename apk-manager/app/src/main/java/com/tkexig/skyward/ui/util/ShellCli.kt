@@ -10,7 +10,7 @@ import com.topjohnwu.superuser.ShellUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.tkexig.skyward.BuildConfig
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import java.io.File
 
 /**
@@ -22,19 +22,19 @@ import java.io.File
  * 特征），所以只剩纯 su 能做的事：开 shell、重启、读设备信息、看有没有
  * root。其余能力在对应的页面里已经删掉了。
  */
-private const val TAG = "KsuCli"
+private const val TAG = "ShellCli"
 
 // Single-quote a value for safe interpolation
 fun String.shellQuote(): String = "'" + replace("'", "'\\''") + "'"
 
-object KsuCli {
+object ShellCli {
     val SHELL: Shell = createRootShell()
     val GLOBAL_MNT_SHELL: Shell = createRootShell(true)
 }
 
 fun getRootShell(globalMnt: Boolean = false): Shell {
-    return if (globalMnt) KsuCli.GLOBAL_MNT_SHELL else {
-        KsuCli.SHELL
+    return if (globalMnt) ShellCli.GLOBAL_MNT_SHELL else {
+        ShellCli.SHELL
     }
 }
 

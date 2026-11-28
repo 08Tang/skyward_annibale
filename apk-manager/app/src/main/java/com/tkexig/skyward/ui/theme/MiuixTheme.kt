@@ -21,7 +21,7 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 
 @Composable
-fun MiuixKernelSUTheme(
+fun MiuixSkywardTheme(
     appSettings: AppSettings,
     content: @Composable () -> Unit
 ) {

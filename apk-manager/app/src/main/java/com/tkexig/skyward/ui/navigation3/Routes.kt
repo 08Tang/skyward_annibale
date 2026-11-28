@@ -84,10 +84,6 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data class BackgroundCrop(val sourcePath: String) : Route
 
-    @Parcelize
-    @Serializable
-    data object Tool : Route
-
     /** 刷入 Skyward 的 recovery 镜像。 */
     @Parcelize
     @Serializable

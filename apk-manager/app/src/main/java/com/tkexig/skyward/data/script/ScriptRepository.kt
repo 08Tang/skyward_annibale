@@ -20,7 +20,7 @@ import com.tkexig.skyward.Natives
 import com.tkexig.skyward.data.registry.DownloadVerificationException
 import com.tkexig.skyward.data.registry.RegistryDownloadStore
 import com.tkexig.skyward.data.registry.copyForInstall
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.util.removeAsRoot
 import java.io.File
 import java.io.IOException
@@ -54,7 +54,7 @@ object ScriptRepository {
     private const val PREFS = "oneshot_scripts"
     private const val MAX_SOURCE_CHARS = 256 * 1024
 
-    private fun root(): File = File(ksuApp.filesDir, DIR_NAME)
+    private fun root(): File = File(appContext.filesDir, DIR_NAME)
 
     /**
      * Extraction held by each owner (one preparation of a run page); everything else under
@@ -72,7 +72,7 @@ object ScriptRepository {
     private val prepareLock = Mutex()
 
     val history: ScriptRunHistory by lazy {
-        val prefs = ksuApp.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         ScriptRunHistory(object : ScriptRunStorage {
             override fun read(key: String): String? = prefs.getString(key, null)
             override fun write(key: String, value: String) {
@@ -92,7 +92,7 @@ object ScriptRepository {
     
     suspend fun peekOneshot(uri: Uri): ScriptManifest? = withContext(Dispatchers.IO) {
         runCatching {
-            ksuApp.contentResolver.openInputStream(uri)?.use { ScriptPackage.readOneshotManifest(it) }
+            appContext.contentResolver.openInputStream(uri)?.use { ScriptPackage.readOneshotManifest(it) }
         }.getOrNull()
     }
 
@@ -112,7 +112,7 @@ object ScriptRepository {
     }
 
     private fun prepareLocked(uri: Uri, registryId: String?, owner: String): PreparedScript {
-        val storeRoot = File(ksuApp.filesDir, RegistryDownloadStore.DIR_NAME)
+        val storeRoot = File(appContext.filesDir, RegistryDownloadStore.DIR_NAME)
         val expected = if (uri.scheme == ContentResolver.SCHEME_FILE) {
             uri.path?.let { RegistryDownloadStore.expectedFor(storeRoot, File(it)) }
         } else {
@@ -120,10 +120,10 @@ object ScriptRepository {
         }
         if (registryId != null && expected == null) throw UnverifiedScriptException()
 
-        val zip = File.createTempFile("oneshot-", ".zip", ksuApp.cacheDir)
+        val zip = File.createTempFile("oneshot-", ".zip", appContext.cacheDir)
         try {
             try {
-                val input = ksuApp.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri")
+                val input = appContext.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri")
                 // A local source has no verified size and may never end.
                 input.use { copyForInstall(if (expected == null) ScriptPackage.bounded(it, ScriptPackage.MAX_ZIP_BYTES) else it, zip, expected) }
             } catch (e: DownloadVerificationException) {

@@ -160,7 +160,7 @@ import com.tkexig.skyward.ui.screen.settings.ThemePackageOptionsSaver
 import com.tkexig.skyward.ui.theme.ColorMode
 import com.tkexig.skyward.ui.theme.backgroundAwareColor
 import com.tkexig.skyward.ui.theme.keyColorOptions
-import com.tkexig.skyward.ui.theme.rememberKernelSUColorScheme
+import com.tkexig.skyward.ui.theme.rememberSkywardColorScheme
 import com.tkexig.skyward.ui.util.BuiltinAppIcons
 import com.tkexig.skyward.ui.util.HomeCardSticker
 import com.tkexig.skyward.ui.util.HomeCardStickerTransform
@@ -2215,7 +2215,7 @@ private fun ColorButtonMaterial(
     onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    val colorScheme = rememberKernelSUColorScheme(
+    val colorScheme = rememberSkywardColorScheme(
         seedColor = color,
         isDark = isDark,
         isAmoled = isAmoled,

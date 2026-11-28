@@ -26,7 +26,7 @@ import com.tkexig.skyward.data.registry.ExpectedFile
 import com.tkexig.skyward.data.registry.RegistryDownloadStore
 import com.tkexig.skyward.data.registry.RegistryUrls
 import com.tkexig.skyward.data.repository.SettingsRepositoryImpl
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.MainActivity
 import okhttp3.Call
 import okhttp3.OkHttpClient
@@ -143,7 +143,7 @@ class DownloadService : Service() {
      * Registry downloads (those with an expected file) may only come from GitHub Release
      * download URLs and their CDN redirect targets; every hop is checked.
      */
-    private fun registryClient(): OkHttpClient = ksuApp.okhttpClient.newBuilder()
+    private fun registryClient(): OkHttpClient = appContext.okhttpClient.newBuilder()
         .followSslRedirects(false)
         .addNetworkInterceptor { chain ->
             val requestUrl = chain.request().url
@@ -175,7 +175,7 @@ class DownloadService : Service() {
                     // Already stored under its final name: delete it if cancelled before completion.
                     downloadVerified(id, url, fileName, expected).also { pendingUri = it }
                 } else {
-                    val call = ksuApp.okhttpClient.newCall(Request.Builder().url(url).apply {
+                    val call = appContext.okhttpClient.newCall(Request.Builder().url(url).apply {
                         cookie?.takeIf { it.isNotEmpty() }?.let { addHeader("Cookie", it) }
                         userAgent?.takeIf { it.isNotEmpty() }?.let { addHeader("User-Agent", it) }
                     }.build())

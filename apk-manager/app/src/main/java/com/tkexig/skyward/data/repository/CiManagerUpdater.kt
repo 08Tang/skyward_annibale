@@ -14,7 +14,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.tkexig.skyward.BuildConfig
 import com.tkexig.skyward.R
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.util.module.LatestVersionInfo
 import com.tkexig.skyward.ui.util.getRootShell
 import com.tkexig.skyward.ui.util.shellQuote
@@ -23,7 +23,6 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.util.zip.ZipFile
 
 
 class CiManagerUpdater(private val context: Context) {
@@ -35,8 +34,6 @@ class CiManagerUpdater(private val context: Context) {
         if (!update.downloadUrl.startsWith(RELEASE_ASSET_PREFIX)) {
             throw IOException(context.getString(R.string.ci_update_request_failed))
         }
-        val abi = Build.SUPPORTED_ABIS.firstOrNull()?.takeIf { it in SUPPORTED_ABIS }
-            ?: throw IOException(context.getString(R.string.ci_update_unsupported_arch))
         val apk = File.createTempFile("manager-ci-", ".apk", context.cacheDir)
         try {
             download(update.downloadUrl, apk)
@@ -114,7 +111,7 @@ class CiManagerUpdater(private val context: Context) {
     }
 
     private fun download(url: String, destination: File) {
-        ksuApp.okhttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+        appContext.okhttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException(context.getString(R.string.ci_update_http_error, response.code))
             }
@@ -144,9 +141,10 @@ class CiManagerUpdater(private val context: Context) {
     private fun verifyApk(apk: File, abi: String, expectedVersionCode: Long) {
         val candidate = archivePackageInfo(apk)
             ?: throw IOException(context.getString(R.string.ci_update_invalid_apk))
+        // 这个 APK 里没有 lib/ 目录（没有原生库），所以不能要求它带本机 ABI
+        // 的 .so。包名和 versionCode 对得上就够了。
         if (candidate.packageName != BuildConfig.APPLICATION_ID ||
-            candidate.longVersionCodeCompat() != expectedVersionCode ||
-            abi !in apkAbis(apk)) {
+            candidate.longVersionCodeCompat() != expectedVersionCode) {
             throw IOException(context.getString(R.string.ci_update_invalid_apk))
         }
         val installed = try {
@@ -171,15 +169,6 @@ class CiManagerUpdater(private val context: Context) {
     private fun archivePackageInfo(apk: File): PackageInfo? =
         context.packageManager.getPackageArchiveInfo(apk.absolutePath, packageInfoFlags())
 
-    private fun apkAbis(apk: File): Set<String> = ZipFile(apk).use { zip ->
-        val entries = zip.entries()
-        buildSet {
-            while (entries.hasMoreElements()) {
-                val parts = entries.nextElement().name.split('/')
-                if (parts.size >= 3 && parts[0] == "lib" && parts[1] in SUPPORTED_ABIS) add(parts[1])
-            }
-        }
-    }
 
     @Suppress("DEPRECATION")
     private fun PackageInfo.longVersionCodeCompat(): Long =
@@ -243,8 +232,7 @@ class CiManagerUpdater(private val context: Context) {
 
     companion object {
         private const val RELEASE_ASSET_PREFIX =
-            "https://git.zako.shirkneko.top:20004/shirkneko/SukiSU/releases/download/"
+            "https://github.com/08Tang/skyward_annibale/releases/download/"
         private const val MAX_APK_BYTES = 512L * 1024 * 1024
-        private val SUPPORTED_ABIS = setOf("arm64-v8a", "armeabi-v7a", "x86_64", "riscv64")
     }
 }

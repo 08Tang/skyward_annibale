@@ -108,9 +108,8 @@ import com.tkexig.skyward.ui.screen.home.HomePager
 import com.tkexig.skyward.ui.screen.settings.SettingPager
 import com.tkexig.skyward.ui.screen.install.InstallRouteScreen
 import com.tkexig.skyward.ui.screen.skyward.SkywardPager
-import com.tkexig.skyward.ui.screen.settings.tools.ToolsScreen
 import com.tkexig.skyward.ui.screen.sulog.SulogScreen
-import com.tkexig.skyward.ui.theme.KernelSUTheme
+import com.tkexig.skyward.ui.theme.SkywardTheme
 import com.tkexig.skyward.ui.theme.LocalColorMode
 import com.tkexig.skyward.ui.theme.LocalEnableBlur
 import com.tkexig.skyward.ui.theme.LocalEnableFloatingBottomBar
@@ -255,7 +254,7 @@ class MainActivity : ComponentActivity() {
                 LocalUiMode provides uiMode,
                 LocalCustomTexts provides uiState.customTexts,
             ) {
-                KernelSUTheme(appSettings = themedAppSettings, uiMode = uiMode) {
+                SkywardTheme(appSettings = themedAppSettings, uiMode = uiMode) {
                     IntentDispatcher(intentChannel = intentChannel)
                     val swipeDismiss = if (uiState.enableSwipeDismiss) {
                         if (LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) {
@@ -328,7 +327,6 @@ class MainActivity : ComponentActivity() {
                             }
                             entry<Route.Home>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.Settings>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
-                                entry<Route.Tool>(swipeDismiss = swipeDismiss)  { ToolsScreen() }
                                 entry<Route.FlashRecovery>(swipeDismiss = swipeDismiss) {
                                     InstallRouteScreen(onBack = { navigator.pop() })
                                 }

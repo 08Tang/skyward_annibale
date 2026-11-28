@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tkexig.skyward.R
 import com.tkexig.skyward.ui.UiMode
-import com.tkexig.skyward.ui.component.KsuIsValid
+import com.tkexig.skyward.ui.component.RootReadyCheck
 import com.tkexig.skyward.ui.component.Storefront
 import com.tkexig.skyward.ui.component.dialog.rememberLoadingDialog
 import com.tkexig.skyward.ui.component.miuix.AppCard
@@ -193,33 +193,6 @@ fun SettingPagerMiuix(
                             onClick = actions.onOpenThemeStore
                         )
 
-                    }
-
-                    KsuIsValid {
-                        val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
-                        AppCard(
-                            modifier = Modifier
-                                .bringIntoViewRequester(requester(SettingsSection.TOOLS))
-                                .padding(top = 12.dp)
-                                .fillMaxWidth(),
-                            colors = backgroundAwareCardColors(),
-                        ) {
-                            ArrowPreference(
-                                title = toolsTitle,
-                                summary = stringResource(id = R.string.settings_tools_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.DeveloperMode,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = toolsTitle,
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                onClick = {
-                                    actions.onOpenTools()
-                                }
-                            )
-                        }
                     }
 
                     if (uiState.isLkmMode) {

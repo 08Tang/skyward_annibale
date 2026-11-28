@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import com.tkexig.skyward.Natives
 
 @Composable
-fun KsuIsValid(
+fun RootReadyCheck(
     content: @Composable () -> Unit
 ) {
     val isManager = Natives.isManager

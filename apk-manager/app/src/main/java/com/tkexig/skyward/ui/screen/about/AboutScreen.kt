@@ -21,7 +21,7 @@ import com.tkexig.skyward.ui.theme.Shapes
 import com.tkexig.skyward.ui.theme.ThemeController
 import com.tkexig.skyward.ui.theme.Typography
 import com.tkexig.skyward.ui.theme.animateAsState
-import com.tkexig.skyward.ui.theme.rememberKernelSUColorScheme
+import com.tkexig.skyward.ui.theme.rememberSkywardColorScheme
 import com.tkexig.skyward.ui.util.BuiltinAppIcons
 import com.tkexig.skyward.ui.util.customText
 import com.tkexig.skyward.ui.util.CustomTextKey
@@ -76,7 +76,7 @@ private fun MiuixSkinMaterialTheme(content: @Composable () -> Unit) {
         colorMode.isMonet -> Color.Unspecified
         else -> MiuixDefaultSeed
     }
-    val colorScheme = rememberKernelSUColorScheme(
+    val colorScheme = rememberSkywardColorScheme(
         seedColor = seedColor,
         isDark = darkTheme,
         isAmoled = colorMode.isAmoled,

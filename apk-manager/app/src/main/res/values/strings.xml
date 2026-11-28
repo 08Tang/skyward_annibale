@@ -282,8 +282,8 @@
     <string name="settings_mount_hide_summary">Filter SukiSU and module mount records from the /proc mount views of isolated and app processes</string>
     <string name="settings_mount_hide_reboot_required">Reboot to take effect</string>
     <string name="settings_mount_hide_failed">Error: %d</string>
-    <string name="settings_sulog">SU Log</string>
-    <string name="settings_sulog_summary">Record Root-related events into SukiSU sulog files</string>
+    <string name="settings_sulog">Run log</string>
+    <string name="settings_sulog_summary">Skyward's own runtime log</string>
     <string name="feature_status_unsupported_summary">Kernel does not support this feature</string>
     <string name="feature_status_managed_summary">This feature is managed by a module</string>
     <string name="feature_status_forced_summary">This feature is forced by boot config</string>
@@ -1167,7 +1167,7 @@
     <string name="theme_store_upload_markdown_hint">Supports Markdown: **bold**, *italic*, `code`, [link](https://example.com). Use username@github (usernames may use any language, for example 小明@github) to link a platform user; @github still links to the site.</string>
     <string name="theme_store_upload_markdown_hint_short">Markdown and @ website mentions are supported here too.</string>
     <string name="theme_store_upload_changelog">Changelog</string>
-    <string name="theme_store_upload_package">Theme package (required, .sukisu)</string>
+    <string name="theme_store_upload_package">Theme package (required, .skyward)</string>
     <string name="theme_store_upload_preview">Preview image (required)</string>
     <string name="theme_store_upload_screenshots">Screenshots (optional, up to 6)</string>
     <string name="theme_store_upload_choose_file">Choose file</string>
@@ -1545,8 +1545,8 @@
     <string name="theme_category_details">Details</string>
     <string name="theme_category_theme_package">Theme</string>
     <string name="theme_export">Export theme package</string>
-    <string name="theme_export_summary">Save the current theme and background as a .sukisu theme package</string>
-    <string name="theme_export_dialog_message">Choose what to include in this .sukisu theme package:</string>
+    <string name="theme_export_summary">Save the current theme and background as a .skyward theme package</string>
+    <string name="theme_export_dialog_message">Choose what to include in this .skyward theme package:</string>
     <string name="theme_package_format_version">Package format v%1$d</string>
     <string name="theme_import">Import theme package</string>
     <string name="theme_import_summary">Import a theme package shared by another Skyward Manager.</string>

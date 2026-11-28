@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tkexig.skyward.R
 import com.tkexig.skyward.ui.UiMode
-import com.tkexig.skyward.ui.component.KsuIsValid
+import com.tkexig.skyward.ui.component.RootReadyCheck
 import com.tkexig.skyward.ui.component.material.ExpressiveScaffold
 import com.tkexig.skyward.ui.component.material.IconTile
 import com.tkexig.skyward.ui.component.material.SegmentedColumn
@@ -168,29 +168,6 @@ fun SettingPagerMaterial(
 
                 }
             )
-            }
-
-            KsuIsValid {
-                val toolsTitle = customText(CustomTextKey.PAGE_TOOLS)
-                SettingsAnchor(SettingsSection.TOOLS, anchorRequesters) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        SegmentedListItem(
-                            onClick = actions.onOpenTools,
-                            headlineContent = { Text(toolsTitle) },
-                            supportingContent = { Text(stringResource(id = R.string.settings_tools_summary)) },
-                            leadingContent = { IconTile(Icons.Filled.Fence, toolsTitle) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                )
-                }
             }
 
 

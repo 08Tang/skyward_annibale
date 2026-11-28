@@ -14,7 +14,7 @@ import com.materialkolor.dynamiccolor.ColorSpec
 import com.tkexig.skyward.ui.UiMode
 import com.tkexig.skyward.ui.theme.AppSettings
 import com.tkexig.skyward.ui.theme.ColorMode
-import com.tkexig.skyward.ui.theme.KernelSUTheme
+import com.tkexig.skyward.ui.theme.SkywardTheme
 import com.tkexig.skyward.ui.util.HomeCardImageStyle
 import com.tkexig.skyward.ui.util.HomeLayout
 
@@ -146,7 +146,7 @@ private fun ThemePreviewSample(
     isDark: Boolean,
     content: @Composable () -> Unit,
 ) {
-    KernelSUTheme(
+    SkywardTheme(
         appSettings = AppSettings(
             colorMode = if (isDark) ColorMode.DARK else ColorMode.LIGHT,
             keyColor = SampleKeyColor,

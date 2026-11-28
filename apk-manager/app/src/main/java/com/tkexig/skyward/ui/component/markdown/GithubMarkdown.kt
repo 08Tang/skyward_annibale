@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import com.tkexig.skyward.data.registry.RegistryUrls
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.LocalUiMode
 import com.tkexig.skyward.ui.UiMode
 import com.tkexig.skyward.ui.theme.isInDarkTheme
@@ -101,7 +101,7 @@ fun GithubMarkdown(
 
     val template = remember(isDark) {
         val name = if (isDark) "webview/template_dark.html" else "webview/template.html"
-        ksuApp.assets.open(name).bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        appContext.assets.open(name).bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
     }
     val extensions = remember {
         listOf(
@@ -310,7 +310,7 @@ fun GithubMarkdown(
                             }
                             val scheme = request.url.scheme ?: return if (restricted) blockedResponse() else null
                             if (!scheme.startsWith("http")) return if (restricted) blockedResponse() else null
-                            val client: OkHttpClient = restrictedClient ?: ksuApp.okhttpClient
+                            val client: OkHttpClient = restrictedClient ?: appContext.okhttpClient
                             val call = client.newCall(
                                 Request.Builder()
                                     .url(request.url.toString())
@@ -427,7 +427,7 @@ private val restrictedClients = java.util.concurrent.ConcurrentHashMap<String, O
  * stay on the registry origin (scheme + host + port); any other hop fails the request.
  */
 private fun restrictedResourceClient(origin: String): OkHttpClient = restrictedClients.getOrPut(origin) {
-    ksuApp.okhttpClient.newBuilder()
+    appContext.okhttpClient.newBuilder()
         .followSslRedirects(false)
         .addNetworkInterceptor { chain ->
             val url = chain.request().url.toString()

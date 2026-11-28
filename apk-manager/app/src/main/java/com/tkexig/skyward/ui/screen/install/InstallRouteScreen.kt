@@ -39,6 +39,7 @@ fun InstallRouteScreen(
                 picker.launch(arrayOf("image/*", "application/zip", "application/octet-stream"))
             },
             onSetBackupFirst = viewModel::setBackupFirst,
+            onSelectSlot = viewModel::selectSlot,
             onFlash = viewModel::flash,
             onRebootRecovery = { reboot("recovery") },
         ),

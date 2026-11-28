@@ -37,7 +37,7 @@ import com.tkexig.skyward.data.repository.KEY_HOME_STATUS_WIDTH_FRACTION
 import com.tkexig.skyward.data.repository.KEY_SHOW_HOME_CARD_IMAGE_WITHOUT_BACKGROUND
 import java.io.File
 import com.tkexig.skyward.getKernelVersion
-import com.tkexig.skyward.ksuApp
+import com.tkexig.skyward.appContext
 import com.tkexig.skyward.ui.screen.home.HomeLoadState
 import com.tkexig.skyward.ui.screen.home.HomeUiState
 import com.tkexig.skyward.ui.screen.home.SystemInfo
@@ -58,7 +58,7 @@ class HomeViewModel(
     private val settingsRepo: SettingsRepository = SettingsRepositoryImpl()
 ) : ViewModel() {
 
-    private val settingsPrefs = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val settingsPrefs = appContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val settingsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == null || key == KEY_CUSTOM_HOME_TITLE) {
             updateContent { it.copy(customHomeTitle = settingsRepo.customHomeTitle) }
@@ -205,18 +205,18 @@ class HomeViewModel(
         viewModelScope.launch {
             try {
                 val installed = withContext(Dispatchers.IO) {
-                    CiManagerUpdater(ksuApp).updateAndInstall(
+                    CiManagerUpdater(appContext).updateAndInstall(
                         info,
                         keepApk = !settingsRepo.autoDeleteUpdateApk,
                     )
                 }
                 val message = if (installed) R.string.ci_update_install_success
                     else R.string.ci_update_install_submitted
-                android.widget.Toast.makeText(ksuApp, message, android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(appContext, message, android.widget.Toast.LENGTH_LONG).show()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                android.widget.Toast.makeText(ksuApp, e.message ?: ksuApp.getString(R.string.ci_update_download_failed), android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(appContext, e.message ?: appContext.getString(R.string.ci_update_download_failed), android.widget.Toast.LENGTH_LONG).show()
             } finally {
                 updateContent { it.copy(ciUpdateBusy = false) }
             }
@@ -237,7 +237,7 @@ class HomeViewModel(
         val kernelUAPIVersion: Int? = null
         val managerUAPIVersion = 0
         val lkmMode: Boolean? = null
-        val managerVersion = getManagerVersion(ksuApp)
+        val managerVersion = getManagerVersion(appContext)
         val kernelFullVersion: String? = null
         val isPreviewMode = false
 
@@ -277,9 +277,9 @@ class HomeViewModel(
             homeStatusWidthFraction = HomeStatusStyle.coerceWidth(settingsRepo.homeStatusWidthFraction),
             homeCardImageStyle = HomeCardImageStyle.fromValue(settingsRepo.homeCardImageStyle),
             showHomeCardImageWithoutBackground = settingsRepo.showHomeCardImageWithoutBackground,
-            showFullStatus = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            showFullStatus = appContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
                 .getBoolean("show_fingerprint", true),
-            hideHomeWarnings = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            hideHomeWarnings = appContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
                 .getBoolean("hide_home_warnings", false),
             latestVersionInfo = LatestVersionInfo(),
             currentManagerVersionCode = managerVersion.versionCode,

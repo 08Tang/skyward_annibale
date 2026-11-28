@@ -23,7 +23,7 @@ data class BuiltinAppIcon(
 
 object BuiltinAppIcons {
     const val DEFAULT_ID = "default"
-    const val KERNELSU_ID = "kernelsu"
+    const val SKYWARD_ID = "kernelsu"
     const val LOGO_ID = "sukisu_logo"
     const val ZAKO_ID = "zako"
 
@@ -39,8 +39,8 @@ object BuiltinAppIcons {
             aliasClassName = mainActivityName + "AliasDefault",
         ),
         BuiltinAppIcon(
-            id = KERNELSU_ID,
-            nameRes = R.string.app_icon_builtin_kernelsu,
+            id = SKYWARD_ID,
+            nameRes = R.string.app_icon_builtin_skyward,
             iconRes = R.mipmap.ic_launcher_alt,
             foregroundRes = R.drawable.ic_launcher_foreground_alt,
             aliasClassName = mainActivityName + "Alias",
@@ -88,7 +88,7 @@ object BuiltinAppIcons {
      * components can restart the process on some ROMs, and disabling the alias that is
      * currently launching the task kills the first launch after an update — restore from
      * [com.tkexig.skyward.data.repository.AppIconUpdateReceiver] or from the background
-     * lifecycle callback in `KernelSUApplication` instead of from startup.
+     * lifecycle callback in `SkywardApplication` instead of from startup.
      */
     fun applyIfNeeded(
         context: Context,
@@ -155,7 +155,7 @@ object BuiltinAppIcons {
 
     private fun aliasSuffix(icon: BuiltinAppIcon): String = when (icon.id) {
         DEFAULT_ID -> "Default"
-        KERNELSU_ID -> ""
+        SKYWARD_ID -> ""
         LOGO_ID -> "Logo"
         ZAKO_ID -> "Zako"
         else -> "Default"

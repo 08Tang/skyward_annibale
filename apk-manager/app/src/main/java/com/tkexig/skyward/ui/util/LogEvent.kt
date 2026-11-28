@@ -3,112 +3,50 @@ package com.tkexig.skyward.ui.util
 import android.content.Context
 import android.os.Build
 import android.system.Os
-import com.topjohnwu.superuser.ShellUtils
-import com.tkexig.skyward.Natives
-import com.tkexig.skyward.ui.screen.home.getManagerVersion
+import com.tkexig.skyward.BuildConfig
+import com.tkexig.skyward.data.log.AppLog
 import java.io.File
 import java.io.FileWriter
 import java.io.PrintWriter
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+/**
+ * 出问题时导出的那一份东西。
+ *
+ * 只放这个应用自己的日志和一点设备信息。原来是 SukiSU 的 bugreport：它会去
+ * 抓 `/data/adb/ksu` 的内容、授权名单、kallsyms、内核模块列表——那些东西既
+ * 不是这个应用产生的，也不是排查它需要看的，还正好是 Root 管理器会碰的
+ * 位置。这里不碰。
+ *
+ * 不需要 root：全是应用自己目录里的文件加上 Build 常量。
+ */
 fun getBugreportFile(context: Context): File {
+    val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm"))
+    val target = File(context.cacheDir, "Skyward-log-$stamp.txt")
 
-    val bugreportDir = File(context.cacheDir, "bugreport")
-    bugreportDir.mkdirs()
-
-    val processFile = File(bugreportDir, "process.txt")
-    val dmesgFile = File(bugreportDir, "dmesg.txt")
-    val logcatFile = File(bugreportDir, "logcat.txt")
-    val tombstonesFile = File(bugreportDir, "tombstones.tar.gz")
-    val dropboxFile = File(bugreportDir, "dropbox.tar.gz")
-    val pstoreFile = File(bugreportDir, "pstore.tar.gz")
-    // Xiaomi/Readmi devices have diag in /data/vendor/diag
-    val diagFile = File(bugreportDir, "diag.tar.gz")
-    val oplusFile = File(bugreportDir, "oplus.tar.gz")
-    val bootlogFile = File(bugreportDir, "bootlog.tar.gz")
-    val mountsFile = File(bugreportDir, "mounts.txt")
-    val fileSystemsFile = File(bugreportDir, "filesystems.txt")
-    val adbFileTree = File(bugreportDir, "adb_tree.txt")
-    val adbFileDetails = File(bugreportDir, "adb_details.txt")
-    val ksuFileSize = File(bugreportDir, "ksu_size.txt")
-    val appListFile = File(bugreportDir, "packages.txt")
-    val propFile = File(bugreportDir, "props.txt")
-    val allowListFile = File(bugreportDir, "allowlist.bin")
-    val procModules = File(bugreportDir, "proc_modules.txt")
-    val bootConfig = File(bugreportDir, "boot_config.txt")
-    val kernelConfig = File(bugreportDir, "defconfig.gz")
-    val kallsyms = File(bugreportDir, "kallsyms.txt")
-
-    val shell = getRootShell(true)
-
-    // busybox ps has very few features for embed devices
-    shell.newJob().add("toybox ps -T -A -w -o PID,TID,UID,COMM,CMDLINE,CMD,LABEL,STAT,WCHAN > ${processFile.absolutePath}").exec()
-    shell.newJob().add("dmesg -r > ${dmesgFile.absolutePath}").exec()
-    shell.newJob().add("logcat -b all -v uid -d > ${logcatFile.absolutePath}").exec()
-    shell.newJob().add("tar -czf ${tombstonesFile.absolutePath} -C /data/tombstones .").exec()
-    shell.newJob().add("tar -czf ${dropboxFile.absolutePath} -C /data/system/dropbox .").exec()
-    shell.newJob().add("tar -czf ${pstoreFile.absolutePath} -C /sys/fs/pstore .").exec()
-    shell.newJob().add("tar -czf ${diagFile.absolutePath} -C /data/vendor/diag . --exclude=./minidump.gz").exec()
-    shell.newJob().add("tar -czf ${oplusFile.absolutePath} -C /mnt/oplus/op2/media/log/boot_log/ .").exec()
-    shell.newJob().add("tar -czf ${bootlogFile.absolutePath} -C /data/adb/ksu/log .").exec()
-
-    shell.newJob().add("cat /proc/1/mountinfo > ${mountsFile.absolutePath}").exec()
-    shell.newJob().add("cat /proc/filesystems > ${fileSystemsFile.absolutePath}").exec()
-    shell.newJob().add("busybox tree /data/adb > ${adbFileTree.absolutePath}").exec()
-    shell.newJob().add("ls -alRZ /data/adb > ${adbFileDetails.absolutePath}").exec()
-    shell.newJob().add("du -sh /data/adb/ksu/* > ${ksuFileSize.absolutePath}").exec()
-    shell.newJob().add("cp /data/system/packages.list ${appListFile.absolutePath}").exec()
-    shell.newJob().add("getprop > ${propFile.absolutePath}").exec()
-    shell.newJob().add("cp /data/adb/ksu/.allowlist ${allowListFile.absolutePath}").exec()
-    shell.newJob().add("cp /proc/modules ${procModules.absolutePath}").exec()
-    shell.newJob().add("cp /proc/bootconfig ${bootConfig.absolutePath}").exec()
-    shell.newJob().add("cp /proc/config.gz ${kernelConfig.absolutePath}").exec()
-    shell.newJob()
-        .add($$"ORIG=$(cat /proc/sys/kernel/kptr_restrict); echo 1 > /proc/sys/kernel/kptr_restrict; cat /proc/kallsyms > $${kallsyms.absolutePath}; echo $ORIG > /proc/sys/kernel/kptr_restrict")
-        .exec()
-
-    val selinux = ShellUtils.fastCmd(shell, "getenforce")
-
-    // basic information
-    val buildInfo = File(bugreportDir, "basic.txt")
-    PrintWriter(FileWriter(buildInfo)).use { pw ->
-        pw.println("Kernel: ${System.getProperty("os.version")}")
-        pw.println("BRAND: " + Build.BRAND)
-        pw.println("MODEL: " + Build.MODEL)
-        pw.println("PRODUCT: " + Build.PRODUCT)
-        pw.println("MANUFACTURER: " + Build.MANUFACTURER)
-        pw.println("SDK: " + Build.VERSION.SDK_INT)
-        pw.println("PREVIEW_SDK: " + Build.VERSION.PREVIEW_SDK_INT)
-        pw.println("FINGERPRINT: " + Build.FINGERPRINT)
-        pw.println("DEVICE: " + Build.DEVICE)
-        pw.println("Manager: " + getManagerVersion(context))
-        pw.println("SELinux: $selinux")
-
-        val uname = Os.uname()
-        pw.println("KernelRelease: ${uname.release}")
-        pw.println("KernelVersion: ${uname.version}")
-        pw.println("Machine: ${uname.machine}")
-        pw.println("Nodename: ${uname.nodename}")
-        pw.println("Sysname: ${uname.sysname}")
-
-        val ksuKernel = Natives.version
-        pw.println("KernelSU: $ksuKernel")
-        val safeMode = Natives.isSafeMode
-        pw.println("SafeMode: $safeMode")
-        val lkmMode = Natives.isLkmMode
-        pw.println("LKM: $lkmMode")
+    PrintWriter(FileWriter(target)).use { out ->
+        out.println("Skyward Manager ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+        out.println("Time: ${LocalDateTime.now()}")
+        out.println()
+        out.println("Device")
+        out.println("  brand: ${Build.BRAND}")
+        out.println("  model: ${Build.MODEL}")
+        out.println("  product: ${Build.PRODUCT}")
+        out.println("  manufacturer: ${Build.MANUFACTURER}")
+        out.println("  device: ${Build.DEVICE}")
+        out.println("  sdk: ${Build.VERSION.SDK_INT}")
+        out.println("  fingerprint: ${Build.FINGERPRINT}")
+        out.println("  abis: ${Build.SUPPORTED_ABIS.joinToString()}")
+        runCatching {
+            val uname = Os.uname()
+            out.println("  kernel: ${uname.release} (${uname.version})")
+        }
+        out.println()
+        out.println("App log")
+        out.println("-------")
+        val log = AppLog.read()
+        out.println(log.ifBlank { "(empty)" })
     }
-
-    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm")
-    val current = LocalDateTime.now().format(formatter)
-
-    val targetFile = File(context.cacheDir, "Skyward_bugreport_${current}.tar.gz")
-
-    shell.newJob().add("tar czf ${targetFile.absolutePath} -C ${bugreportDir.absolutePath} .").exec()
-    shell.newJob().add("rm -rf ${bugreportDir.absolutePath}").exec()
-    shell.newJob().add("chmod 0644 ${targetFile.absolutePath}").exec()
-
-    return targetFile
+    return target
 }
-
