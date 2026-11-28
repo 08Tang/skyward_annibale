@@ -37,11 +37,12 @@ jobs:
         id: guard
         run: |
           # 上一轮构建提交的只有 version.properties，别为它再构建一次。
+          # 手动 dispatch 时不跳：那是人主动要一个包，哪怕当前就在那个提交上。
           last=$(git log -1 --pretty=%s)
           changed=$(git diff-tree --no-commit-id --name-only -r HEAD || true)
           echo "last commit: $last"
           echo "changed: $changed"
-          if [ "$last" = "chore(apk): bump version" ]; then
+          if [ "${{ github.event_name }}" = "push" ] && [ "$last" = "chore(apk): bump version" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
