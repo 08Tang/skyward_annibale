@@ -4,9 +4,7 @@ import android.net.Uri
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
-import com.tkexig.skyward.ui.util.TemplateInfoSerializer
 import com.tkexig.skyward.ui.util.UriSerializer
-import com.tkexig.skyward.ui.viewmodel.TemplateViewModel
 import top.yukonga.miuix.kmp.nav.core.NavKey
 
 /**

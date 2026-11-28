@@ -11,17 +11,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.withContext
 import com.tkexig.skyward.Natives
-import com.tkexig.skyward.data.repository.SettingsRepositoryImpl
 import com.tkexig.skyward.ui.util.ThemePackageCrypto
 import com.tkexig.skyward.ui.util.ThemePackageStorage
 import com.tkexig.skyward.ui.util.getFileName
 import androidx.core.net.toUri
 
-private const val SCHEME_KSU = "ksu"
-private const val HOST_ACTION = "action"
-private const val HOST_WEBUI = "webui"
-private const val PARAM_ID = "id"
-private const val PARAM_TOKEN = "token"
 private const val THEME_SCHEME = "sukisu-theme"
 private val THEME_ID_PATTERN = Regex("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 
@@ -35,20 +29,6 @@ private fun parseThemeStoreLink(intent: Intent): Route.ThemeStore? {
         ?.takeIf { it.toUri().scheme in setOf("http", "https") }
         ?.trimEnd('/')
     return Route.ThemeStore(themeId = id, sourceBaseUrl = source)
-}
-
-private fun parseValidatedDeepLink(uri: Uri?): KsuDeepLink? {
-    if (uri?.scheme != SCHEME_KSU) return null
-
-    val moduleId = uri.getQueryParameter(PARAM_ID)?.takeIf { it.isNotBlank() } ?: return null
-    val token = uri.getQueryParameter(PARAM_TOKEN)?.takeIf { it.isNotBlank() } ?: return null
-    if (token != SettingsRepositoryImpl().intentToken) return null
-
-    return when (uri.host) {
-        HOST_ACTION -> KsuDeepLink.Action(moduleId)
-        HOST_WEBUI -> KsuDeepLink.WebUi(moduleId)
-        else -> null
-    }
 }
 
 private suspend fun extractThemePackageUri(context: Context, intent: Intent): Uri? =

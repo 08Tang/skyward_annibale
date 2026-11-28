@@ -129,24 +129,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/x-sukisu-theme" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-
-                <data
-                    android:host="action"
-                    android:scheme="ksu" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-
-                <data
-                    android:host="webui"
-                    android:scheme="ksu" />
-            </intent-filter>
         </activity>
         <activity-alias
             android:name=".ui.MainActivityAliasDefault"
@@ -255,15 +237,6 @@
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-
-        <activity
-            android:name=".ui.webui.WebUIActivity"
-            android:autoRemoveFromRecents="true"
-            android:configChanges="density|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|locale|layoutDirection|fontScale|keyboard|keyboardHidden"
-            android:documentLaunchMode="intoExisting"
-            android:exported="false"
-            android:taskAffinity="${applicationId}.webui"
-            android:theme="@style/Theme.KernelSU.WebUI" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

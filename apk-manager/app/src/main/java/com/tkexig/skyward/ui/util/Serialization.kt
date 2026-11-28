@@ -7,9 +7,6 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ByteArraySerializer
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
-import com.tkexig.skyward.ui.viewmodel.TemplateViewModel
-
-object TemplateInfoSerializer : BaseParcelableSerializer<TemplateViewModel.TemplateInfo>(TemplateViewModel.TemplateInfo::class.java)
 
 object UriSerializer : BaseParcelableSerializer<Uri>(Uri::class.java)
 
