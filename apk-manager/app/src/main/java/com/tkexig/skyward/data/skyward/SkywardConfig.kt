@@ -98,14 +98,22 @@ object SkywardConfig {
             // 不带它，折出来的行下面会拼回去。
             val shell = getRootShell(globalMnt = true)
             val quoted = FILE.shellQuote()
-            var out = shell.newJob().add("base64 -w0 $quoted 2>/dev/null").exec().out
-            if (out.isEmpty()) out = shell.newJob().add("base64 $quoted").exec().out
-            val b64 = out.joinToString("").filterNot { it.isWhitespace() }
+            // 必须 .to(...) 才有输出：Job.exec() 本身不会把 stdout 收进来，
+            // 少了这一步 out 永远是空的——之前"解出 0 字节"就是这么来的。
+            val job = shell.newJob().add("base64 -w0 $quoted").to(ArrayList(), null).exec()
+            val raw = job.out
+            var b64 = raw.joinToString("").filterNot { it.isWhitespace() }
+            if (b64.isEmpty()) {
+                // 老 toybox 不认 -w0，退回不带参数；同时把 stderr 留下来，
+                // 别再像之前那样把唯一的线索扔掉。
+                val retry = shell.newJob().add("base64 $quoted").to(ArrayList(), null).exec()
+                b64 = retry.out.joinToString("").filterNot { it.isWhitespace() }
+                if (b64.isEmpty()) {
+                    AppLog.w("base64 没有输出；stderr=${retry.err.joinToString(" ").ifBlank { "(空)" }}")
+                }
+            }
             b64Chars = b64.length
-            if (b64.isBlank()) "" else String(
-                android.util.Base64.decode(b64, android.util.Base64.DEFAULT),
-                Charsets.UTF_8,
-            )
+            decodeBase64(b64)
         }.getOrElse {
             AppLog.e("读 $FILE 失败", it)
             return SkywardRead.Failed("读 $FILE 出错：${it.message}")
@@ -166,6 +174,26 @@ object SkywardConfig {
             error("写 $FILE 失败：${said.ifBlank { "无输出" }}")
         }
         AppLog.i("写入完成")
+    }
+
+    /**
+     * base64 转回文本。
+     *
+     * 单独拿出来是为了能测：shell 那一段在这里测不了，但解码这一步可以，
+     * 而它正是「解出 0 字节」时该看清的地方。
+     */
+    internal fun decodeBase64(b64: String): String {
+        val clean = b64.filterNot { it.isWhitespace() }
+        if (clean.isEmpty()) return ""
+        return runCatching {
+            // 自己解，不用 android.util.Base64：那个在 JVM 单测里是空实现，
+            // 而这一段恰恰是最需要测的。也不用 java.util.Base64——minSdk 24，
+            // 它要 26。
+            String(Base64Codec.decode(clean), Charsets.UTF_8)
+        }.getOrElse {
+            AppLog.e("base64 解不开（${clean.length} 字符）", it)
+            ""
+        }
     }
 
     /** 配置文件在不在（挂上 /metadata 之后看）。 */

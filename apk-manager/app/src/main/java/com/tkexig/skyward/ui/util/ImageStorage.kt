@@ -261,7 +261,8 @@ object ImageStorage {
         val discovered = runCatching {
             getRootShell().newJob()
                 .add("find /data/system -maxdepth 7 -type f -iname 'home_wallpaper.*' 2>/dev/null | head -5")
-                .exec().out
+                // .to(...) 不能省：Job.exec() 不收 stdout，少了它 out 是空的。
+                .to(ArrayList(), null).exec().out
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
         }.getOrDefault(emptyList())
