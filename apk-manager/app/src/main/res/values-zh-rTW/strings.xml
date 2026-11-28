@@ -644,7 +644,7 @@
     <string name="custom_text_group_page_feature">功能與設定頁面抬頭</string>
     <string name="app_icon_builtin_section">內建圖示</string>
     <string name="app_icon_builtin_default">SukiSU</string>
-    <string name="app_icon_builtin_kernelsu">KernelSU</string>
+    <string name="app_icon_builtin_skyward">KernelSU</string>
     <string name="app_icon_builtin_logo">SukiSU 標誌</string>
     <string name="app_icon_import_title">匯入圖示包</string>
     <string name="app_icon_import_summary">支援包含 PNG、WebP 或 JPG 圖示的 ZIP 壓縮檔</string>

@@ -23,12 +23,18 @@ data class BuiltinAppIcon(
 
 object BuiltinAppIcons {
     const val DEFAULT_ID = "default"
-    const val SKYWARD_ID = "kernelsu"
+    const val SKYWARD_ID = "skyward"
+
+    /** 上一版把 Skyward 的图标存在 "kernelsu" 这个名字下，读的时候认一下。 */
+    private const val LEGACY_SKYWARD_ID = "kernelsu"
     const val LOGO_ID = "sukisu_logo"
     const val ZAKO_ID = "zako"
 
     private const val TAG = "BuiltinAppIcons"
     private val mainActivityName = MainActivity::class.java.name
+
+    /** 把旧版本存下来的 id 换成现在的。 */
+    fun migrateId(id: String?): String? = if (id == LEGACY_SKYWARD_ID) SKYWARD_ID else id
 
     val all: List<BuiltinAppIcon> = listOf(
         BuiltinAppIcon(

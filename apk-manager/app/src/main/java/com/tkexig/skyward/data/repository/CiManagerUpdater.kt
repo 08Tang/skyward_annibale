@@ -37,7 +37,7 @@ class CiManagerUpdater(private val context: Context) {
         val apk = File.createTempFile("manager-ci-", ".apk", context.cacheDir)
         try {
             download(update.downloadUrl, apk)
-            verifyApk(apk, abi, update.versionCode)
+            verifyApk(apk, update.versionCode)
             if (keepApk) {
                 saveToDownloads(apk, update.downloadUrl)
             }
@@ -138,7 +138,7 @@ class CiManagerUpdater(private val context: Context) {
         }
     }
 
-    private fun verifyApk(apk: File, abi: String, expectedVersionCode: Long) {
+    private fun verifyApk(apk: File, expectedVersionCode: Long) {
         val candidate = archivePackageInfo(apk)
             ?: throw IOException(context.getString(R.string.ci_update_invalid_apk))
         // 这个 APK 里没有 lib/ 目录（没有原生库），所以不能要求它带本机 ABI

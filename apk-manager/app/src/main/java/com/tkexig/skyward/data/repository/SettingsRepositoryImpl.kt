@@ -359,7 +359,7 @@ class SettingsRepositoryImpl : SettingsRepository {
         set(value) = prefs.edit { putBoolean(KEY_AUTO_DELETE_UPDATE_APK, value) }
 
     override var appIconId: String
-        get() = prefs.getString("app_icon_id", null)
+        get() = BuiltinAppIcons.migrateId(prefs.getString("app_icon_id", null))
             ?: if (prefs.getBoolean("use_alt_icon", false)) {
                 BuiltinAppIcons.SKYWARD_ID
             } else {

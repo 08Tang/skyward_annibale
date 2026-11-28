@@ -1327,7 +1327,7 @@
     <string name="theme_store_source_invalid">地址无效</string>
     <string name="app_icon_builtin_section">内置图标</string>
     <string name="app_icon_builtin_default">SukiSU</string>
-    <string name="app_icon_builtin_kernelsu">KernelSU</string>
+    <string name="app_icon_builtin_skyward">KernelSU</string>
     <string name="app_icon_builtin_logo">SukiSU 标志</string>
     <string name="app_icon_import_title">导入图标包</string>
     <string name="app_icon_import_summary">支持包含 PNG、WebP 或 JPG 图标的 ZIP 压缩包</string>
