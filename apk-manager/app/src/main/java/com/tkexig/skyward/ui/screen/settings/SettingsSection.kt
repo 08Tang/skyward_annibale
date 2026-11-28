@@ -1,62 +1,32 @@
 package com.tkexig.skyward.ui.screen.settings
 
 /**
- * Stable anchors used by the AI assistant to scroll the Settings page to an
- * exact card or row. Aliases let a precise setting id resolve to the card that
- * contains it when the row is not individually registered.
+ * 设置页里各张卡片的定位锚点。
+ *
+ * 页面上每张卡片注册一个 requester，滚动时按锚点找它。锚点也允许指到卡片
+ * 里面某一行，那种情况由 [cardFor] 折回所属的卡片。
  */
 object SettingsSection {
 
     const val GENERAL = "general"
-    const val PROFILE_TEMPLATES = "profile_templates"
-    const val EXTENSIONS = "extensions"
     const val TOOLS = "tools"
-    const val TEMPORARY_ROOT = "temporary_root"
     const val SECURITY = "security"
     const val MODULE_BEHAVIOUR = "module_behaviour"
     const val UNINSTALL = "uninstall"
     const val DIAGNOSTICS = "diagnostics"
 
-    // Individual security rows; they resolve to the security card unless the
-    // screen registers a finer requester.
-    const val SU_COMPAT = "su_compat"
-    const val KERNEL_UMOUNT = "kernel_umount"
-    const val SELINUX_HIDE = "selinux_hide"
-    const val AVC_SPOOF = "avc_spoof"
-    const val MOUNT_HIDE = "mount_hide"
-    const val SULOG = "sulog"
-    const val ADB_ROOT = "adb_root"
-    const val SHELL_SU_ADB_ONLY = "shell_su_adb_only"
-    const val SOFT_REBOOT = "soft_reboot"
-
-    const val DEFAULT_UMOUNT_MODULES = "default_umount_modules"
-    const val AUTO_DELETE_MODULE_ZIP = "auto_delete_module_zip"
-    const val WEB_DEBUGGING = "web_debugging"
-
     const val UI_MODE = "ui_mode"
     const val LANGUAGE = "language"
     const val THEME = "theme"
 
-    
     val ALL: Set<String> = setOf(
-        GENERAL, PROFILE_TEMPLATES, EXTENSIONS, TOOLS, TEMPORARY_ROOT, SECURITY,
-        MODULE_BEHAVIOUR, UNINSTALL, DIAGNOSTICS,
-        SU_COMPAT, KERNEL_UMOUNT, SELINUX_HIDE, AVC_SPOOF, MOUNT_HIDE, SULOG,
-        ADB_ROOT, SHELL_SU_ADB_ONLY, SOFT_REBOOT,
+        GENERAL, TOOLS, SECURITY, MODULE_BEHAVIOUR, UNINSTALL, DIAGNOSTICS,
         UI_MODE, LANGUAGE, THEME,
     )
 
-    
     fun cardFor(anchor: String): String = when (anchor.trim().lowercase().replace('-', '_')) {
         UI_MODE, LANGUAGE, THEME -> GENERAL
-        PROFILE_TEMPLATES -> PROFILE_TEMPLATES
-        EXTENSIONS -> EXTENSIONS
-        TOOLS -> TOOLS
-        TEMPORARY_ROOT -> TEMPORARY_ROOT
-        SU_COMPAT, KERNEL_UMOUNT, SELINUX_HIDE, AVC_SPOOF, MOUNT_HIDE, SULOG,
-        ADB_ROOT, SHELL_SU_ADB_ONLY, SOFT_REBOOT,
-        -> SECURITY
-        -> MODULE_BEHAVIOUR
+        MODULE_BEHAVIOUR -> MODULE_BEHAVIOUR
         UNINSTALL -> UNINSTALL
         DIAGNOSTICS -> DIAGNOSTICS
         else -> GENERAL

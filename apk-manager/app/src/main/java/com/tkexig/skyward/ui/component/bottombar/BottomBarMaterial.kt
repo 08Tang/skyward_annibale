@@ -41,14 +41,12 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.LocalContentColor
@@ -67,7 +65,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.tkexig.skyward.Natives
 import com.tkexig.skyward.ui.LocalMainPagerState
 import com.tkexig.skyward.ui.theme.backgroundAwareColor
 import com.tkexig.skyward.ui.util.CustomTextKey
@@ -80,17 +77,14 @@ fun BottomBarMaterial(
     navigationBadge: NavigationBadgeState,
     modifier: Modifier = Modifier,
 ) {
-    val fullFeatured = Natives.isFullFeatured()
-    if (!fullFeatured) return
-
     val mainPagerState = LocalMainPagerState.current
     val bottomBarIcons = rememberBottomBarIconPaths()
     val progressiveBlur = LocalEnableProgressiveBlur.current && isRuntimeShaderSupported()
 
     val items = listOf(
         MaterialNavItem(CustomTextKey.PAGE_HOME, Icons.Filled.Home, Icons.Outlined.Home, bottomBarIcons["home"]),
-        MaterialNavItem(CustomTextKey.PAGE_SUPERUSER, Icons.Filled.Shield, Icons.Outlined.Shield, bottomBarIcons["superuser"]),
-        MaterialNavItem(CustomTextKey.PAGE_MODULES, Icons.Filled.Extension, Icons.Outlined.Extension, bottomBarIcons["module"]),
+        // 「超级用户」和「模块」两页随 ksud 和内核模块一起删了，位置留给 Skyward 自己的设置。
+        MaterialNavItem(CustomTextKey.PAGE_SKYWARD, Icons.Filled.Tune, Icons.Outlined.Tune, bottomBarIcons["skyward"]),
         MaterialNavItem(CustomTextKey.PAGE_SETTINGS, Icons.Filled.Settings, Icons.Outlined.Settings, bottomBarIcons["setting"])
     )
 

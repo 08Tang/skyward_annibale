@@ -174,13 +174,16 @@ object Natives {
      * Root through some other means, no SukiSU kernel. Kernel calls just return defaults here,
      * so the pages can be opened and browsed.
      */
-    fun isPreviewMode(): Boolean = !isManager && rootAvailable()
+    fun isPreviewMode(): Boolean = false
 
     /**
-     * 有 root 就算可用。原来的判断靠内核版本与 UAPI 对齐，这一版没有内核
-     * 模块，能拿到 root 就是全部的前提。
+     * 页面能不能用。
+     *
+     * 原来是「内核版本和 UAPI 对上了吗」——那是内核模块的事，这一版没有。
+     * 现在恒为 true：界面该显示的都显示，翻页、设置、主题都能进；有没有
+     * root 只影响读写 /metadata 这类具体操作，不影响能不能打开。
      */
-    fun isFullFeatured(): Boolean = rootAvailable()
+    fun isFullFeatured(): Boolean = true
 
     @Keep
     @Immutable

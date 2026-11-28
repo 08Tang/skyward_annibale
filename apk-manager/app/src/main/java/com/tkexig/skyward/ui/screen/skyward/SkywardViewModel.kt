@@ -102,8 +102,10 @@ class SkywardViewModel : ViewModel() {
     /** 导出成 JSON 文本，交给调用方去分享或存文件。 */
     suspend fun exportJson(): String = withContext(Dispatchers.IO) {
         val settings = _uiState.value.settings
-        if (settings != null) SkywardSettings.json.encodeToString(SkywardSettings.serializer(), settings)
-        else SkywardConfig.exportJson()
+        when {
+            settings != null -> SkywardSettings.json.encodeToString(SkywardSettings.serializer(), settings)
+            else -> SkywardConfig.exportJson().orEmpty()
+        }
     }
 
     /** 先解析，成功了才让用户确认写入——免得把一份读不懂的配置盖上去。 */
