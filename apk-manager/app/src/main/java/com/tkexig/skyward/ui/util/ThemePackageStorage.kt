@@ -203,7 +203,7 @@ object ThemePackageStorage {
      */
     const val CURRENT_VERSION = HOME_STATUS_VERSION
     const val MIN_SUPPORTED_VERSION = 1
-    const val THEME_MIME_TYPE = "application/x-sukisu-theme"
+    const val THEME_MIME_TYPE = "application/x-skyward-theme"
 
     
     const val ADAPTIVE_TAG = "adaptive"
@@ -239,7 +239,7 @@ object ThemePackageStorage {
 
     fun packageFileName(): String {
         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))
-        return "SukiSU-theme-$stamp.sukisu"
+        return "Skyward-theme-$stamp.skyward"
     }
 
     suspend fun export(

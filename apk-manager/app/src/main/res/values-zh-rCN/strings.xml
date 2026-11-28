@@ -138,11 +138,11 @@
     <string name="safe_mode_module_disabled">处于安全模式下，禁止安装模块</string>
     <string name="reboot_to_apply">重启生效</string>
     <string name="module_magisk_conflict">因与 Magisk 有冲突，所有模块不可用！</string>
-    <string name="home_learn_kernelsu">了解 SukiSU</string>
-    <string name="home_learn_kernelsu_url">https://sukisu.org/zh/guide/</string>
-    <string name="home_click_to_learn_kernelsu">了解如何安装 SukiSU 以及如何开发模块</string>
+    <string name="home_learn_kernelsu">了解 Skyward</string>
+    <string name="home_learn_kernelsu_url">https://github.com/08Tang/skyward_annibale</string>
+    <string name="home_click_to_learn_kernelsu">了解 Skyward 的用法</string>
     <string name="home_support_title">支持开发</string>
-    <string name="home_support_content">SukiSU 将保持免费开源，向开发者捐赠以表示支持</string>
+    <string name="home_support_content">Skyward 保持免费开源</string>
     <string name="about_source_code"><![CDATA[在 %1$s 查看源码<br/>加入我们的 %2$s 频道<br/><br/>图标以特别的形式授权，怡子曰曰绘制，版权明风OuO所有。矢量化图标由本项目提供。]]></string>
     <string name="profile_default">默认</string>
     <string name="profile_template">模板</string>

@@ -517,7 +517,7 @@ private fun SupportLinks(
                     tint = colorScheme.onBackground,
                 )
             },
-            onClick = { onOpenUrl("https://opencollective.com/SukiSU-Ultra") },
+            onClick = { onOpenUrl("https://github.com/08Tang/skyward_annibale") },
         )
         ArrowPreference(
             title = stringResource(R.string.home_learn_kernelsu),
