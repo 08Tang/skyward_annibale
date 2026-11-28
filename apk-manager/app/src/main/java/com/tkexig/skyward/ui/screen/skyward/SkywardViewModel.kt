@@ -55,8 +55,13 @@ class SkywardViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true, error = null) }
             // 机型不依赖 root，先认出来，读配置失败时也能显示是哪个机型。
-            val device = withContext(Dispatchers.IO) { SkywardDevices.current(appContext) }
+            // 用户选过就用他选的，没选过才按代号自动认。
+            val saved = withContext(Dispatchers.IO) { SkywardDevices.savedCodename(appContext) }
             val known = withContext(Dispatchers.IO) { SkywardDevices.all(appContext) }
+            val device = withContext(Dispatchers.IO) {
+                if (saved.isBlank()) SkywardDevices.current(appContext)
+                else known.firstOrNull { it.codename == saved }
+            }
             _uiState.update {
                 it.copy(
                     device = device,
@@ -113,6 +118,8 @@ class SkywardViewModel : ViewModel() {
      * 配置项是同一份，换机型只是换个视角。
      */
     fun selectDevice(device: SkywardDevice?) {
+        // 记住这次选择：下次打开还是这台机器。传 null 是「自动」，存空串。
+        SkywardDevices.saveCodename(appContext, device?.codename.orEmpty())
         _uiState.update { it.copy(device = device) }
     }
 

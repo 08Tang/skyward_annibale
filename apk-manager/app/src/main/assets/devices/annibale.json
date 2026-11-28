@@ -1,6 +1,9 @@
 {
   "name": "REDMI K90",
   "codename": "annibale",
+  "aliases": [
+    "annible"
+  ],
   "author": "TKexig",
   "skywardVersion": "0.3.1",
   "features": [

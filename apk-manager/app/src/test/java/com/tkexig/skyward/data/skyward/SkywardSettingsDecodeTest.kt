@@ -2,6 +2,7 @@ package com.tkexig.skyward.data.skyward
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -124,6 +125,28 @@ class SkywardSettingsDecodeTest {
      * Rust 那边整个结构体带 `#[serde(default)]`，缺的按 recovery 的默认值补，
      * 不是整份作废。
      */
+    /**
+     * 多行 JSON 读回来拼成一行一行的，拼得回去。
+     *
+     * 这正是之前读不到配置的原因：shell 返回的是每一行，拼错或者只取第一
+     * 行，解码就只会看到 "}"。
+     */
+    @Test
+    fun readsTheFileLineByLine() {
+        val lines = real.lines()
+        assertTrue(lines.size > 5)
+        val joined = lines.joinToString("\n")
+        assertEquals(15L, decode(joined).screenOff)
+    }
+
+    /** 只有一行 "}" 时解不出来——这就是之前界面显示默认值的样子。 */
+    @Test
+    fun aTruncatedFileDoesNotDecode() {
+        val truncated = real.lines().last()
+        assertEquals("}", truncated)
+        assertThrows(Exception::class.java) { decode(truncated) }
+    }
+
     @Test
     fun readsAFileMissingFields() {
         val s = decode("""{"dark": true}""")

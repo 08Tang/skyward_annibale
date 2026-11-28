@@ -106,7 +106,7 @@ fun SkywardScreenMaterial(
 
         val settings = state.settings ?: SkywardSettings()
 
-        fun has(feature: Feature): Boolean = state.device?.supports(feature) ?: true
+        fun has(feature: Feature): Boolean = state.device?.supports(feature) == true
 
         // ---- 充电 ----
         if (has(Feature.ChargeMode) || has(Feature.ThermalGuard)) SegmentedColumn(title = "充电") {
@@ -313,10 +313,12 @@ fun SkywardScreenMaterial(
         }
 
         Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = actions.onSave,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("保存到 Skyward") }
+        if (state.device != null) {
+            Button(
+                onClick = actions.onSave,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("保存到 Skyward") }
+        }
         Spacer(Modifier.height(bottomInnerPadding + 24.dp))
     }
 }

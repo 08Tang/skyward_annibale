@@ -83,8 +83,13 @@ object SkywardConfig {
      */
     fun read(): SkywardRead {
         if (!ensureMounted()) return SkywardRead.Failed("/metadata 挂不上，读不到配置")
+        // 用 exec().out 拿全部行再拼起来，不用 ShellUtils.fastCmd：那个只
+        // 给第一行，而这份 JSON 是多行的，读到的永远只有一个 "}"，解码必然
+        // 失败，界面就只能显示默认值。
         val text = runCatching {
-            ShellUtils.fastCmd(getRootShell(globalMnt = true), "cat ${FILE.shellQuote()}")
+            getRootShell(globalMnt = true)
+                .newJob().add("cat ${FILE.shellQuote()}").exec().out
+                .joinToString("\n")
         }.getOrElse {
             Log.w(TAG, "cat $FILE", it)
             return SkywardRead.Failed("读 $FILE 出错：${it.message}")

@@ -108,6 +108,16 @@ fun SkywardScreenMiuix(
                     color = colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
+                // 配置项是这份适配列的，没有适配就一项都不显示；说一句，免得
+                // 让人以为下面读失败了。
+                if (current == null) {
+                    Text(
+                        text = "这台机器还没有适配，配置项不显示。可以点上面的机型手动选一个。",
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
             }
 
             if (state.loading) {
@@ -137,9 +147,10 @@ fun SkywardScreenMiuix(
 
             val settings = state.settings ?: SkywardSettings()
 
-            // 认不出机型时全给：这台机器上的配置项本来就都在，藏起来反而让人
-            // 以为读不到。认出来了就只给这份适配支持的。
-            fun has(feature: Feature): Boolean = state.device?.supports(feature) ?: true
+            // 配置项是机型适配的一部分：没认出来就一项都不给。这些项本来
+            // 就是照着 K90 的适配列的，摆在别的机器上既不知道对不对，也容易
+            // 让人以为能改。
+            fun has(feature: Feature): Boolean = state.device?.supports(feature) == true
 
             // ---- 充电 ----
             if (has(Feature.ChargeMode) || has(Feature.ThermalGuard)) AppCard {
@@ -329,11 +340,13 @@ fun SkywardScreenMiuix(
             }
 
             Spacer(Modifier.height(8.dp))
-            TextButton(
-                text = "保存到 Skyward",
-                onClick = actions.onSave,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (state.device != null) {
+                TextButton(
+                    text = "保存到 Skyward",
+                    onClick = actions.onSave,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Spacer(Modifier.height(bottomInnerPadding + 24.dp))
         }
     }

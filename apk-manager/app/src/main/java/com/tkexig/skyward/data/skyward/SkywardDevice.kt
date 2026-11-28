@@ -21,6 +21,13 @@ data class SkywardDevice(
     val name: String,
     /** 代号，和 `ro.product.device` 对得上。 */
     val codename: String,
+    /**
+     * 这台机器还会报的别的代号。
+     *
+     * 有的机器 `ro.product.device` 和适配时用的代号不一样（改过、或者厂商
+     * 换过写法），列在这里就都能认出来。
+     */
+    val aliases: List<String> = emptyList(),
     /** 做这份适配的人。 */
     val author: String,
     /** 可以配哪些项，见 [Feature]。 */
@@ -32,6 +39,11 @@ data class SkywardDevice(
 ) {
     /** 这台机器支持某一项吗。 */
     fun supports(feature: Feature): Boolean = feature.key in features
+
+    /** 这个代号是这台机器吗。 */
+    fun answersTo(codename: String): Boolean =
+        this.codename.equals(codename, ignoreCase = true) ||
+            aliases.any { it.equals(codename, ignoreCase = true) }
 }
 
 /**
@@ -69,6 +81,8 @@ object SkywardDevices {
 
     private const val TAG = "SkywardDevices"
     private const val ASSET_DIR = "devices"
+    private const val PREFS = "skyward_device"
+    private const val KEY_SELECTED = "selected_codename"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -94,16 +108,33 @@ object SkywardDevices {
     /**
      * 当前这台机器。
      *
-     * 先按代号找；代号对不上再看机型名。两个都试是为了那些 `ro.product.device`
-     * 被改成通用值的机型。
+     * 只看代号（含别名），不看机型名：机型名是给人看的，各家会改，代号才是
+     * 机器的身份。按名字匹配还容易把「REDMI K90」这种名字相同的别的机器认成
+     * 这一台。
      */
     fun current(context: android.content.Context): SkywardDevice? {
-        val devices = all(context)
         val codename = deviceCodename()
-        devices.firstOrNull { it.codename.equals(codename, ignoreCase = true) }?.let { return it }
-        val model = Build.MODEL.orEmpty()
-        return devices.firstOrNull { it.name.equals(model, ignoreCase = true) }
+        if (codename.isBlank()) return null
+        return all(context).firstOrNull { it.answersTo(codename) }
     }
+
+    /**
+     * 用户手动指定的机型代号。
+     *
+     * 空串表示「自动」——按 `ro.product.device` 认。存的是代号而不是整份
+     * 机型信息：机型文件会更新（作者换了、支持项变了），存代号才能跟着用上
+     * 新的那份。
+     */
+    fun savedCodename(context: android.content.Context): String =
+        prefs(context).getString(KEY_SELECTED, "").orEmpty()
+
+    /** 记下用户选的机型；传空串回到自动。 */
+    fun saveCodename(context: android.content.Context, codename: String) {
+        prefs(context).edit().putString(KEY_SELECTED, codename).apply()
+    }
+
+    private fun prefs(context: android.content.Context) =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
 
     /**
      * `ro.product.device`。
